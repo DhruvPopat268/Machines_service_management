@@ -128,8 +128,9 @@ function InventorySection({ collapsed }: { collapsed: boolean }) {
     <SidebarMenu>
       {[
         { url: "/attributes", icon: SlidersHorizontal },
+        { url: "/machine-divisions", icon: Layers }, { url: "/machine-categories", icon: Tag },
         { url: "/machines", icon: HardDrive }, { url: "/machines/add", icon: HardDrive },
-        { url: "/inventory-logs", icon: FileText }, { url: "/machine-divisions", icon: Layers }, { url: "/machine-categories", icon: Tag },
+        { url: "/inventory-logs", icon: FileText },
       ].map((item) => (
         <SidebarMenuItem key={item.url}>
           <SidebarMenuButton asChild>
@@ -175,6 +176,14 @@ function InventorySection({ collapsed }: { collapsed: boolean }) {
             </NavLink>
           </SidebarMenuButton>
         </SidebarMenuItem>
+      </SidebarMenu>
+      <NestedCollapsible
+        label="Machines" icon={HardDrive}
+        urls={["/machines", "/machines/add"]}
+        items={[{ title: "Add Machine", url: "/machines/add", icon: HardDrive }, { title: "Machine List", url: "/machines", icon: HardDrive }]}
+        collapsed={false} depth={3}
+      />
+      <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
             <NavLink to="/inventory-logs" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
@@ -186,12 +195,6 @@ function InventorySection({ collapsed }: { collapsed: boolean }) {
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
-      <NestedCollapsible
-        label="Machines" icon={HardDrive}
-        urls={["/machines", "/machines/add"]}
-        items={[{ title: "Add Machine", url: "/machines/add", icon: HardDrive }, { title: "Machine List", url: "/machines", icon: HardDrive }]}
-        collapsed={false} depth={3}
-      />
     </div>
   );
 }
@@ -335,26 +338,6 @@ export function AppSidebar() {
         <SidebarGroup>
           {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
           <CollapsibleNavGroup group={callGroup} collapsed={collapsed} />
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={problemTypesItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <problemTypesItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to={problemTypesItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <problemTypesItem.icon className="h-3.5 w-3.5 shrink-0" />
-                        {problemTypesItem.title}
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
@@ -362,6 +345,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {[
+                { title: "Problem Types", url: "/problem-types", icon: FileText },
                 { title: "Customers", url: "/customers", icon: Users },
                 { title: "Purchases", url: "/purchases", icon: ShoppingCart },
               ].map((item) => (
