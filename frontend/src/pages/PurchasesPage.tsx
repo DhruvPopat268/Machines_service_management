@@ -3,7 +3,6 @@ import { purchases, customers } from "@/data/dummyData";
 import { DataTable, Column } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -28,6 +27,8 @@ const PurchasesPage = () => {
   const customerFilter = searchParams.get("customer");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -38,18 +39,26 @@ const PurchasesPage = () => {
 
   let filtered = [...purchases];
   if (customerFilter) filtered = filtered.filter((p) => p.customerId === customerFilter);
-  if (filters.warrantyStatus && filters.warrantyStatus !== "all") filtered = filtered.filter((p) => p.warrantyStatus === filters.warrantyStatus);
+  if (filters.problemType && filters.problemType !== "all") filtered = filtered.filter((p) => p.problemType === filters.problemType);
+  if (fromDate && toDate) filtered = filtered.filter((p) => p.purchasedAt.slice(0, 10) >= fromDate && p.purchasedAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((p) => p.customerName.toLowerCase().includes(s) || p.item.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<Purchase>[] = [
-    { key: "id", label: "ID", render: (p) => <span className="font-medium text-foreground">{p.id}</span> },
+    { key: "id", label: "No.", render: (_p, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "customerName", label: "Customer", render: (p) => <span className="font-medium">{p.customerName}</span> },
-    { key: "item", label: "Item" },
+    { key: "item", label: "Machine" },
+    { key: "problemType", label: "Problem Type", render: (p) => <span className="text-sm">{p.problemType}</span> },
     { key: "price", label: "Price", render: (p) => <span>₹{p.price.toLocaleString()}</span> },
-    { key: "warrantyStatus", label: "Warranty", render: (p) => <StatusBadge status={p.warrantyStatus} /> },
     {
       key: "purchasedAt", label: "Purchased At", render: (p) => {
         const { date, time } = formatDateTime(p.purchasedAt);
@@ -64,9 +73,17 @@ const PurchasesPage = () => {
         <>
           <PageHeader title="Customer Purchases" description="View and manage customer purchases" actionLabel="Add Purchase" actionIcon={Plus} onAction={() => setAddDialog(true)} />
           <FilterBar
-            searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search purchases..."
-            filters={[{ key: "warrantyStatus", label: "Warranty", options: [{ label: "Under Warranty", value: "Under Warranty" }, { label: "Expired", value: "Expired" }] }]}
+            searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by customer or machine name..."
+            filters={[
+              { key: "problemType", label: "Problem Type", options: [{ label: "Mechanical Failure", value: "Mechanical Failure" }, { label: "Electrical Fault", value: "Electrical Fault" }, { label: "Calibration", value: "Calibration" }, { label: "Coolant System", value: "Coolant System" }, { label: "Hydraulic System", value: "Hydraulic System" }, { label: "Noise / Vibration", value: "Noise / Vibration" }] },
+            ]}
             filterValues={filters} onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

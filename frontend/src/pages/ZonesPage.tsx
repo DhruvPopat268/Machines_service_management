@@ -27,6 +27,8 @@ const ZonesPage = () => {
   const [data, setData] = useState<Zone[]>(initialData);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -42,13 +44,21 @@ const ZonesPage = () => {
 
   let filtered = [...data];
   if (filters.status && filters.status !== "all") filtered = filtered.filter((z) => z.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((z) => z.createdAt.slice(0, 10) >= fromDate && z.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((z) => z.name.toLowerCase().includes(s) || z.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<Zone>[] = [
-    { key: "id", label: "ID", render: (z) => <span className="font-medium text-foreground">{z.id}</span> },
+    { key: "id", label: "No.", render: (_z, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Zone Name", render: (z) => <span className="font-medium">{z.name}</span> },
     { key: "description", label: "Description", render: (z) => <span className="max-w-[400px] truncate block">{z.description}</span> },
     {
@@ -94,12 +104,18 @@ const ZonesPage = () => {
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search zones..."
+            searchPlaceholder="Search by zone name or description..."
             filters={[
               { key: "status", label: "Status", options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

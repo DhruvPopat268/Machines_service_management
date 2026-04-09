@@ -26,6 +26,8 @@ const UsersPage = () => {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -44,13 +46,21 @@ const UsersPage = () => {
   let filtered = [...data];
   if (filters.role && filters.role !== "all") filtered = filtered.filter((u) => u.role === filters.role);
   if (filters.status && filters.status !== "all") filtered = filtered.filter((u) => u.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((u) => u.createdAt.slice(0, 10) >= fromDate && u.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((u) => u.name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<User>[] = [
-    { key: "id", label: "ID", render: (u) => <span className="font-medium text-foreground">{u.id}</span> },
+    { key: "id", label: "No.", render: (_u, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Name", render: (u) => <span className="font-medium">{u.name}</span> },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
@@ -95,6 +105,12 @@ const UsersPage = () => {
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

@@ -25,6 +25,8 @@ const MachinesPage = () => {
   const [data, setData] = useState<Machine[]>(initialMachines);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,16 +40,29 @@ const MachinesPage = () => {
   };
 
   let filtered = [...data];
+  if (filters.category && filters.category !== "all") filtered = filtered.filter((m) => m.category === filters.category);
+  if (filters.division && filters.division !== "all") filtered = filtered.filter((m) => m.division === filters.division);
   if (filters.stockStatus && filters.stockStatus !== "all") filtered = filtered.filter((m) => m.stockStatus === filters.stockStatus);
+  if (filters.status && filters.status !== "all") filtered = filtered.filter((m) => m.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((m) => m.createdAt.slice(0, 10) >= fromDate && m.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((m) => m.name.toLowerCase().includes(s) || m.model.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<Machine>[] = [
-    { key: "id", label: "ID", render: (m) => <span className="font-medium text-foreground">{m.id}</span> },
+    { key: "id", label: "No.", render: (_m, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Name", render: (m) => <span className="font-medium">{m.name}</span> },
     { key: "model", label: "Model" },
+    { key: "division", label: "Division", render: (m) => <span className="text-sm">{m.division}</span> },
+    { key: "category", label: "Category", render: (m) => <span className="text-sm">{m.category}</span> },
     { key: "price", label: "Price", render: (m) => <span>₹{m.price.toLocaleString()}</span> },
     { key: "quantity", label: "Qty", render: (m) => <span className="font-medium">{m.quantity}</span> },
     { key: "stockStatus", label: "Stock", render: (m) => <StatusBadge status={m.stockStatus} /> },
@@ -89,9 +104,20 @@ const MachinesPage = () => {
         <>
           <PageHeader title="Machines" description="Manage machine inventory" actionLabel="Add Machine" actionIcon={Plus} onAction={() => navigate("/machines/add")} />
           <FilterBar
-            searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search machines..."
-            filters={[{ key: "stockStatus", label: "Stock Status", options: [{ label: "In Stock", value: "In Stock" }, { label: "Low Stock", value: "Low Stock" }, { label: "Out of Stock", value: "Out of Stock" }] }]}
+            searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by machine name or model..."
+            filters={[
+              { key: "category", label: "Category", options: [{ label: "Heavy Machinery", value: "Heavy Machinery" }, { label: "Additive Manufacturing", value: "Additive Manufacturing" }, { label: "Cutting Machines", value: "Cutting Machines" }, { label: "Robotics", value: "Robotics" }, { label: "Sheet Metal", value: "Sheet Metal" }] },
+              { key: "division", label: "Division", options: [{ label: "CNC Division", value: "CNC Division" }, { label: "3D Printing Division", value: "3D Printing Division" }, { label: "Laser Division", value: "Laser Division" }, { label: "Welding Division", value: "Welding Division" }, { label: "Hydraulic Division", value: "Hydraulic Division" }] },
+              { key: "stockStatus", label: "Stock Status", options: [{ label: "In Stock", value: "In Stock" }, { label: "Low Stock", value: "Low Stock" }, { label: "Out of Stock", value: "Out of Stock" }] },
+              { key: "status", label: "Status", options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
+            ]}
             filterValues={filters} onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

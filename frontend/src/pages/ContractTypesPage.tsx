@@ -46,6 +46,8 @@ const ContractTypesPage = () => {
   const [data, setData] = useState<ContractType[]>(initialData);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "", code: "", description: "", isServiceFree: false, isPartsFree: false, isActive: true });
@@ -61,14 +63,24 @@ const ContractTypesPage = () => {
   };
 
   let filtered = [...data];
+  if (filters.service && filters.service !== "all") filtered = filtered.filter((c) => filters.service === "Free" ? c.isServiceFree : !c.isServiceFree);
+  if (filters.parts && filters.parts !== "all") filtered = filtered.filter((c) => filters.parts === "Free" ? c.isPartsFree : !c.isPartsFree);
   if (filters.status && filters.status !== "all") filtered = filtered.filter((c) => filters.status === "Active" ? c.isActive : !c.isActive);
+  if (fromDate && toDate) filtered = filtered.filter((c) => c.createdAt.slice(0, 10) >= fromDate && c.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((c) => c.name.toLowerCase().includes(s) || c.code.toLowerCase().includes(s) || c.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<ContractType>[] = [
-    { key: "id", label: "ID", render: (c) => <span className="font-medium text-foreground">{c.id}</span> },
+    { key: "id", label: "No.", render: (_c, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Contract Type", render: (c) => <span className="font-medium">{c.name}</span> },
     { key: "code", label: "Code", render: (c) => <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded">{c.code}</span> },
     { key: "description", label: "Description", render: (c) => <span className="max-w-[300px] truncate block">{c.description}</span> },
@@ -131,10 +143,18 @@ const ContractTypesPage = () => {
             onSearchChange={setSearch}
             searchPlaceholder="Search contract types..."
             filters={[
+              { key: "service", label: "Service", options: [{ label: "Free", value: "Free" }, { label: "Paid", value: "Paid" }] },
+              { key: "parts", label: "Parts", options: [{ label: "Free", value: "Free" }, { label: "Paid", value: "Paid" }] },
               { key: "status", label: "Status", options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

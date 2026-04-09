@@ -37,7 +37,6 @@ const CallDetailsPage = () => {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-foreground">{call.id}</h1>
             <StatusBadge status={call.status} />
-            <StatusBadge status={call.priority} />
           </div>
           <p className="text-muted-foreground text-sm">{call.issue}</p>
         </div>
@@ -64,6 +63,13 @@ const CallDetailsPage = () => {
                 <div><p className="text-muted-foreground">Machine</p><p className="font-medium">{call.machine}</p></div>
                 <div><p className="text-muted-foreground">Model</p><p className="font-medium">{call.machineModel}</p></div>
                 <div><p className="text-muted-foreground">Serial No.</p><p className="font-medium">{call.machineSerial}</p></div>
+                <div><p className="text-muted-foreground">Division</p><p className="font-medium">{call.machineDivision}</p></div>
+                <div><p className="text-muted-foreground">Category</p><p className="font-medium">{call.machineCategory}</p></div>
+                <div><p className="text-muted-foreground">Problem Type</p><p className="font-medium">{call.problemType}</p></div>
+                <div><p className="text-muted-foreground">Part Code</p><p className="font-medium">{call.partCode}</p></div>
+                <div><p className="text-muted-foreground">HSN Code</p><p className="font-medium">{call.hsnCode}</p></div>
+                <div><p className="text-muted-foreground">GST %</p><p className="font-medium">{call.gstPercentage}%</p></div>
+                <div><p className="text-muted-foreground">Contract Type</p><p className="font-medium">{call.contractType}</p></div>
               </div>
             </CardContent>
           </Card>
@@ -136,7 +142,10 @@ const CallDetailsPage = () => {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Call ID</span><span className="font-medium">{call.id}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium">{call.createdDate}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Priority</span><StatusBadge status={call.priority} /></div>
+              {call.assignedDate && <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span className="font-medium">{call.assignedDate}</span></div>}
+              {call.startedDate && <div className="flex justify-between"><span className="text-muted-foreground">Started</span><span className="font-medium">{call.startedDate}</span></div>}
+              {call.completedDate && <div className="flex justify-between"><span className="text-muted-foreground">Completed</span><span className="font-medium">{call.completedDate}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Problem Type</span><span className="font-medium">{call.problemType}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Engineer</span><span className="font-medium">{call.engineer}</span></div>
             </CardContent>
           </Card>

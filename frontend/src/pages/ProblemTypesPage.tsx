@@ -26,6 +26,8 @@ const ProblemTypesPage = () => {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [data, setData] = useState<ProblemType[]>(initialData);
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -42,13 +44,21 @@ const ProblemTypesPage = () => {
 
   let filtered = [...data];
   if (filters.status && filters.status !== "all") filtered = filtered.filter((p) => p.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((p) => p.createdAt.slice(0, 10) >= fromDate && p.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((p) => p.name.toLowerCase().includes(s) || p.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<ProblemType>[] = [
-    { key: "id", label: "ID", render: (p) => <span className="font-medium text-foreground">{p.id}</span> },
+    { key: "id", label: "No.", render: (_p, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Problem Type", render: (p) => <span className="font-medium">{p.name}</span> },
     { key: "description", label: "Description", render: (p) => <span className="max-w-[400px] truncate block">{p.description}</span> },
     {
@@ -103,6 +113,12 @@ const ProblemTypesPage = () => {
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

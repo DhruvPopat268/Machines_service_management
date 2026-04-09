@@ -27,6 +27,8 @@ const AttributesPage = () => {
   const [data, setData] = useState<Attribute[]>(initialData);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -42,13 +44,21 @@ const AttributesPage = () => {
 
   let filtered = [...data];
   if (filters.status && filters.status !== "all") filtered = filtered.filter((a) => a.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((a) => a.createdAt.slice(0, 10) >= fromDate && a.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((a) => a.name.toLowerCase().includes(s) || a.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<Attribute>[] = [
-    { key: "id", label: "ID", render: (a) => <span className="font-medium text-foreground">{a.id}</span> },
+    { key: "id", label: "No.", render: (_a, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Attribute Name", render: (a) => <span className="font-medium">{a.name}</span> },
     { key: "description", label: "Description", render: (a) => <span className="max-w-[400px] truncate block">{a.description}</span> },
     {
@@ -100,6 +110,12 @@ const AttributesPage = () => {
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

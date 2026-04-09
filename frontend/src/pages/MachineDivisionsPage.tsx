@@ -27,6 +27,8 @@ const MachineDivisionsPage = () => {
   const [data, setData] = useState<MachineDivision[]>(initialData);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -42,13 +44,21 @@ const MachineDivisionsPage = () => {
 
   let filtered = [...data];
   if (filters.status && filters.status !== "all") filtered = filtered.filter((d) => d.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((d) => d.createdAt.slice(0, 10) >= fromDate && d.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((d) => d.name.toLowerCase().includes(s) || d.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<MachineDivision>[] = [
-    { key: "id", label: "ID", render: (d) => <span className="font-medium text-foreground">{d.id}</span> },
+    { key: "id", label: "No.", render: (_d, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Division Name", render: (d) => <span className="font-medium">{d.name}</span> },
     { key: "description", label: "Description", render: (d) => <span className="max-w-[400px] truncate block">{d.description}</span> },
     {
@@ -100,6 +110,12 @@ const MachineDivisionsPage = () => {
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>

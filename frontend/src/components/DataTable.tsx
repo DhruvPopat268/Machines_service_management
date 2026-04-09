@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export interface Column<T> {
   key: string;
   label: string;
-  render?: (item: T) => React.ReactNode;
+  render?: (item: T, index: number) => React.ReactNode;
 }
 
 interface DataTableProps<T> {
@@ -54,7 +54,7 @@ export function DataTable<T extends Record<string, any>>({
                 >
                   {columns.map((col) => (
                     <TableCell key={col.key}>
-                      {col.render ? col.render(item) : item[col.key]}
+                      {col.render ? col.render(item, page * pageSize + i) : item[col.key]}
                     </TableCell>
                   ))}
                 </TableRow>

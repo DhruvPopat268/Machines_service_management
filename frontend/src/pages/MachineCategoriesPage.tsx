@@ -27,6 +27,8 @@ const MachineCategoriesPage = () => {
   const [data, setData] = useState<MachineCategory[]>(initialData);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -42,13 +44,21 @@ const MachineCategoriesPage = () => {
 
   let filtered = [...data];
   if (filters.status && filters.status !== "all") filtered = filtered.filter((c) => c.status === filters.status);
+  if (fromDate && toDate) filtered = filtered.filter((c) => c.createdAt.slice(0, 10) >= fromDate && c.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
     filtered = filtered.filter((c) => c.name.toLowerCase().includes(s) || c.description.toLowerCase().includes(s));
   }
 
+  const handleClear = () => {
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+  };
+
   const columns: Column<MachineCategory>[] = [
-    { key: "id", label: "ID", render: (c) => <span className="font-medium text-foreground">{c.id}</span> },
+    { key: "id", label: "No.", render: (_c, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Category Name", render: (c) => <span className="font-medium">{c.name}</span> },
     { key: "description", label: "Description", render: (c) => <span className="max-w-[400px] truncate block">{c.description}</span> },
     {
@@ -100,6 +110,12 @@ const MachineCategoriesPage = () => {
             ]}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={handleClear}
           />
           <DataTable columns={columns} data={filtered} />
         </>
