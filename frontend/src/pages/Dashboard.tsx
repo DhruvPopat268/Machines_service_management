@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PhoneCall, AlertCircle, UserCog, Package, IndianRupee } from "lucide-react";
-import { serviceCalls, purchases } from "@/data/dummyData";
+import { serviceCalls, purchases, users } from "@/data/dummyData";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -54,16 +54,27 @@ const Dashboard = () => {
 
   const recentCalls = filteredCalls.slice(0, 5);
 
+  const usersData = [
+    { name: "Active", value: users.filter((u) => u.status === "Active").length, fill: "hsl(142, 71%, 45%)" },
+    { name: "Inactive", value: users.filter((u) => u.status === "Inactive").length, fill: "hsl(0, 84%, 60%)" },
+  ];
+
+  const engineersData = [
+    { name: "Active", value: users.filter((u) => u.role === "Engineer" && u.status === "Active").length, fill: "hsl(142, 71%, 45%)" },
+    { name: "Inactive", value: users.filter((u) => u.role === "Engineer" && u.status === "Inactive").length, fill: "hsl(0, 84%, 60%)" },
+  ];
+  const totalEngineers = users.filter((u) => u.role === "Engineer").length;
+
   return (
     <div className="space-y-6">
       {loading && <Spinner />}
       {!loading && <>
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground text-sm">Overview of your service operations</p>
         </div>
-        <div className="flex flex-col items-end gap-3">
+        <div className="flex flex-col items-start sm:items-end gap-3">
           <div className="flex items-center bg-muted rounded-lg p-1">
             <button
               onClick={() => setDateMode("all")}
@@ -83,7 +94,7 @@ const Dashboard = () => {
             </button>
           </div>
           {dateMode === "custom" && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
                 <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-8 text-sm w-36" />
@@ -97,14 +108,14 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {stats.map((stat) => (
           <StatsCard key={stat.label} {...stat} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <Card className="border-0 shadow-sm lg:col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <Card className="border-0 shadow-sm md:col-span-2">
           <CardHeader><CardTitle className="text-lg">Calls by Status</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
@@ -153,37 +164,77 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      <Card className="border-0 shadow-sm">
-        <CardHeader><CardTitle className="text-lg">Recent Service Calls</CardTitle></CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-3 font-medium">Call ID</th>
-                  <th className="pb-3 font-medium">Customer</th>
-                  <th className="pb-3 font-medium">Machine</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Priority</th>
-                  <th className="pb-3 font-medium">Engineer</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentCalls.map((call) => (
-                  <tr key={call.id} className="border-b last:border-0">
-                    <td className="py-3 font-medium text-foreground">{call.id}</td>
-                    <td className="py-3">{call.customer}</td>
-                    <td className="py-3">{call.machine}</td>
-                    <td className="py-3"><StatusBadge status={call.status} /></td>
-                    <td className="py-3"><StatusBadge status={call.priority} /></td>
-                    <td className="py-3 text-muted-foreground">{call.engineer}</td>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Users Overview</CardTitle>
+              <span className="text-sm font-semibold text-foreground">Total Users: {users.length}</span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={usersData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                  {usersData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip />
+                <Legend align="right" verticalAlign="middle" layout="vertical" />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-0">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg">Engineers Overview</CardTitle>
+              <span className="text-sm font-semibold text-foreground">Total Engineers: {totalEngineers}</span>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={engineersData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                  {engineersData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip />
+                <Legend align="right" verticalAlign="middle" layout="vertical" />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader><CardTitle className="text-lg">Recent Service Calls</CardTitle></CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-3 font-medium">Call ID</th>
+                    <th className="pb-3 font-medium">Customer</th>
+                    <th className="pb-3 font-medium">Status</th>
+                    <th className="pb-3 font-medium">Priority</th>
+                    <th className="pb-3 font-medium">Engineer</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                </thead>
+                <tbody>
+                  {recentCalls.map((call) => (
+                    <tr key={call.id} className="border-b last:border-0">
+                      <td className="py-3 font-medium text-foreground">{call.id}</td>
+                      <td className="py-3">{call.customer}</td>
+                      <td className="py-3"><StatusBadge status={call.status} /></td>
+                      <td className="py-3"><StatusBadge status={call.priority} /></td>
+                      <td className="py-3 text-muted-foreground">{call.engineer}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       </>
       }
     </div>

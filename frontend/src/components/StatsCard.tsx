@@ -19,7 +19,7 @@ export function StatsCard({ label, value, icon: Icon, trend, trendUp, colorClass
           <Icon className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-2xl font-bold text-foreground">{value}</p>
+          <p className="text-xl font-bold text-foreground truncate">{value}</p>
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
         {trend && (
