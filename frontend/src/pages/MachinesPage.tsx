@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
 import type { Machine } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
 import { useToast } from "@/hooks/use-toast";
@@ -102,7 +102,10 @@ const MachinesPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Machines" description="Manage machine inventory" actionLabel="Add Machine" actionIcon={Plus} onAction={() => navigate("/machines/add")} />
+          <PageHeader title="Machines" description="Manage machine inventory" actionLabel="Add Machine" actionIcon={Plus} onAction={() => navigate("/machines/add")}>
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by machine name or model..."
             filters={[

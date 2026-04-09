@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, Eye, UserPlus, Edit } from "lucide-react";
+import { Plus, Eye, UserPlus, Edit, Upload, Download } from "lucide-react";
 import { engineers, type ServiceCall } from "@/data/dummyData";
 import { useToast } from "@/hooks/use-toast";
 import Spinner from "@/components/Spinner";
@@ -142,7 +142,10 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title={title} description={description} />
+          <PageHeader title={title} description={description}>
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}

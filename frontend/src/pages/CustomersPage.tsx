@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserPlus, Eye, ShoppingCart } from "lucide-react";
+import { UserPlus, Eye, ShoppingCart, Upload, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer } from "@/data/dummyData";
@@ -99,7 +99,10 @@ const CustomersPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Customers" description="Manage customer accounts" actionLabel="Add Customer" actionIcon={UserPlus} onAction={() => setAddDialog(true)} />
+          <PageHeader title="Customers" description="Manage customer accounts" actionLabel="Add Customer" actionIcon={UserPlus} onAction={() => setAddDialog(true)}>
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search customers..."
             filters={[

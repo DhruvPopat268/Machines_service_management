@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Plus, Upload, Download } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import type { Purchase } from "@/data/dummyData";
@@ -71,7 +71,10 @@ const PurchasesPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Customer Purchases" description="View and manage customer purchases" actionLabel="Add Purchase" actionIcon={Plus} onAction={() => setAddDialog(true)} />
+          <PageHeader title="Customer Purchases" description="View and manage customer purchases" actionLabel="Add Purchase" actionIcon={Plus} onAction={() => setAddDialog(true)}>
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by customer or machine name..."
             filters={[

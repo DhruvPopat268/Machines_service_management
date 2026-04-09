@@ -7,6 +7,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import type { User } from "@/data/dummyData";
+import { Upload, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Spinner from "@/components/Spinner";
 import { useToast } from "@/hooks/use-toast";
 
@@ -95,7 +97,10 @@ const EngineersPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Engineers" description="Manage and monitor field engineers" />
+          <PageHeader title="Engineers" description="Manage and monitor field engineers">
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by engineer name, phone or email..."
             filters={[

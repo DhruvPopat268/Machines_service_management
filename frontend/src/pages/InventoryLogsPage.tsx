@@ -5,6 +5,8 @@ import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { InventoryLog } from "@/data/dummyData";
+import { Upload, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Spinner from "@/components/Spinner";
 
 const formatDateTime = (iso: string) => {
@@ -69,7 +71,10 @@ const InventoryLogsPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Inventory Logs" description="Track all inventory changes" />
+          <PageHeader title="Inventory Logs" description="Track all inventory changes">
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search by machine name..."
             filters={[

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { UserPlus, Edit } from "lucide-react";
+import { UserPlus, Edit, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
@@ -96,7 +96,10 @@ const UsersPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Panel Users" description="Manage system users and roles" actionLabel="Add User" actionIcon={UserPlus} onAction={() => setAddDialog(true)} />
+          <PageHeader title="Panel Users" description="Manage system users and roles" actionLabel="Add User" actionIcon={UserPlus} onAction={() => setAddDialog(true)}>
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search} onSearchChange={setSearch} searchPlaceholder="Search users..."
             filters={[

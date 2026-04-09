@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit } from "lucide-react";
+import { Plus, Edit, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Zone } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
@@ -100,7 +100,14 @@ const ZonesPage = () => {
             actionLabel="Add Zone"
             actionIcon={Plus}
             onAction={() => setAddDialog(true)}
-          />
+          >
+            <Button variant="outline" className="gap-2" disabled>
+              <Upload className="h-4 w-4" /> Import
+            </Button>
+            <Button variant="outline" className="gap-2" disabled>
+              <Download className="h-4 w-4" /> Export
+            </Button>
+          </PageHeader>
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}

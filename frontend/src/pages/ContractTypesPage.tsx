@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit } from "lucide-react";
+import { Plus, Edit, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Spinner from "@/components/Spinner";
 
@@ -137,7 +137,10 @@ const ContractTypesPage = () => {
             actionLabel="Add Contract Type"
             actionIcon={Plus}
             onAction={() => setAddDialog(true)}
-          />
+          >
+            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
+            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+          </PageHeader>
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
