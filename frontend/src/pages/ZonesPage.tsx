@@ -5,12 +5,12 @@ import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Upload, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Zone } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
@@ -30,6 +30,8 @@ const ZonesPage = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
+  const [editDialog, setEditDialog] = useState<Zone | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<Zone | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ const ZonesPage = () => {
   if (fromDate && toDate) filtered = filtered.filter((z) => z.createdAt.slice(0, 10) >= fromDate && z.createdAt.slice(0, 10) <= toDate);
   if (search) {
     const s = search.toLowerCase();
-    filtered = filtered.filter((z) => z.name.toLowerCase().includes(s) || z.description.toLowerCase().includes(s));
+    filtered = filtered.filter((z) => z.name.toLowerCase().includes(s) || z.code.toLowerCase().includes(s));
   }
 
   const handleClear = () => {
@@ -60,6 +62,7 @@ const ZonesPage = () => {
   const columns: Column<Zone>[] = [
     { key: "id", label: "No.", render: (_z, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Zone Name", render: (z) => <span className="font-medium">{z.name}</span> },
+    { key: "code", label: "Zone Code", render: (z) => <span className="font-mono text-sm">{z.code}</span> },
     { key: "description", label: "Description", render: (z) => <span className="max-w-[400px] truncate block">{z.description}</span> },
     {
       key: "status", label: "Status", render: (z) => (
@@ -84,8 +87,11 @@ const ZonesPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: () => (
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
+      key: "actions", label: "Actions", render: (z) => (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditDialog(z)}><Edit className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(z)}><Trash2 className="h-4 w-4" /></Button>
+        </div>
       ),
     },
   ];
@@ -111,7 +117,7 @@ const ZonesPage = () => {
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search by zone name or description..."
+            searchPlaceholder="Search by zone name or code..."
             filters={[
               { key: "status", label: "Status", options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
             ]}
@@ -133,6 +139,7 @@ const ZonesPage = () => {
           <DialogHeader><DialogTitle>Add Zone</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label>Zone Name</Label><Input placeholder="e.g. North Zone" /></div>
+            <div className="space-y-2"><Label>Zone Code</Label><Input placeholder="e.g. NZ" /></div>
             <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Regions or areas covered by this zone" /></div>
             <div className="space-y-2">
               <Label>Status</Label>
@@ -148,6 +155,48 @@ const ZonesPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialog(false)}>Cancel</Button>
             <Button onClick={() => { toast({ title: "Zone Added" }); setAddDialog(false); }}>Add</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Zone</DialogTitle>
+            <DialogDescription>Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              setData((prev) => prev.filter((item) => item.id !== deleteDialog?.id));
+              toast({ title: "Zone deleted" });
+              setDeleteDialog(null);
+            }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Zone</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Zone Name</Label><Input defaultValue={editDialog?.name} /></div>
+            <div className="space-y-2"><Label>Zone Code</Label><Input defaultValue={editDialog?.code} /></div>
+            <div className="space-y-2"><Label>Description</Label><Textarea defaultValue={editDialog?.description} /></div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select defaultValue={editDialog?.status}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog(null)}>Cancel</Button>
+            <Button onClick={() => { toast({ title: "Zone Updated" }); setEditDialog(null); }}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -4,13 +4,13 @@ import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Upload, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Spinner from "@/components/Spinner";
 
@@ -49,6 +49,7 @@ const ContractTypesPage = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<ContractType | null>(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "", code: "", description: "", isServiceFree: false, isPartsFree: false, isActive: true });
 
@@ -121,8 +122,11 @@ const ContractTypesPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: () => (
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
+      key: "actions", label: "Actions", render: (c) => (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(c)}><Trash2 className="h-4 w-4" /></Button>
+        </div>
       ),
     },
   ];
@@ -144,7 +148,7 @@ const ContractTypesPage = () => {
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search contract types..."
+            searchPlaceholder="Search by contract name or code..."
             filters={[
               { key: "service", label: "Service", options: [{ label: "Free", value: "Free" }, { label: "Paid", value: "Paid" }] },
               { key: "parts", label: "Parts", options: [{ label: "Free", value: "Free" }, { label: "Paid", value: "Paid" }] },
@@ -162,6 +166,23 @@ const ContractTypesPage = () => {
           <DataTable columns={columns} data={filtered} />
         </>
       )}
+
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Contract Type</DialogTitle>
+            <DialogDescription>Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              setData((prev) => prev.filter((item) => item.id !== deleteDialog?.id));
+              toast({ title: "Contract type deleted" });
+              setDeleteDialog(null);
+            }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addDialog} onOpenChange={setAddDialog}>
         <DialogContent>

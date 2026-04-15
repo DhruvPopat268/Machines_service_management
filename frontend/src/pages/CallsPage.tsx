@@ -32,6 +32,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [assignDialog, setAssignDialog] = useState<ServiceCall | null>(null);
   const [selectedEngineer, setSelectedEngineer] = useState("");
   const [loading, setLoading] = useState(true);
@@ -44,10 +46,13 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const handleClear = () => {
     setSearch("");
     setFilters({});
+    setFromDate("");
+    setToDate("");
   };
 
   let filtered = serviceCalls;
   if (statusFilter) filtered = filtered.filter((c) => c.status === statusFilter);
+  if (fromDate && toDate) filtered = filtered.filter((c) => c.createdAt.slice(0, 10) >= fromDate && c.createdAt.slice(0, 10) <= toDate);
   if (filters.status && filters.status !== "all") filtered = filtered.filter((c) => c.status === filters.status);
   if (filters.problemType && filters.problemType !== "all") filtered = filtered.filter((c) => c.problemType === filters.problemType);
   if (filters.division && filters.division !== "all") filtered = filtered.filter((c) => c.machineDivision === filters.division);
@@ -88,9 +93,11 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); navigate(`/calls/${c.id}`); }}>
             <Eye className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setAssignDialog(c); setSelectedEngineer(c.engineer !== "Unassigned" ? c.engineer : ""); }}>
-            <UserPlus className="h-4 w-4" />
-          </Button>
+          {c.status === "Open" && (
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setAssignDialog(c); setSelectedEngineer(c.engineer !== "Unassigned" ? c.engineer : ""); }}>
+              <UserPlus className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       ),
     },
@@ -149,13 +156,18 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search by ID, customer, machine..."
+            searchPlaceholder="Search by call ID, customer, machine..."
             filters={statusFilter ? statusFilterConfigs : filterConfigs}
             filterValues={filters}
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
             onClear={handleClear}
           />
-          <DataTable columns={columns} data={filtered} onRowClick={(c) => navigate(`/calls/${c.id}`)} />
+          <DataTable columns={columns} data={filtered} />
 
           <Dialog open={!!assignDialog} onOpenChange={() => setAssignDialog(null)}>
             <DialogContent>

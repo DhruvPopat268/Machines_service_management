@@ -222,6 +222,7 @@ export const machineCategories: MachineCategory[] = [
 export interface Zone {
   id: string;
   name: string;
+  code: string;
   description: string;
   status: "Active" | "Inactive";
   createdAt: string;
@@ -229,11 +230,11 @@ export interface Zone {
 }
 
 export const zones: Zone[] = [
-  { id: "Z-001", name: "North Zone", description: "Covers northern region including Delhi, Punjab, Haryana", status: "Active", createdAt: "2026-01-10T09:30:00", updatedAt: "2026-03-15T14:20:00" },
-  { id: "Z-002", name: "South Zone", description: "Covers southern region including Bangalore, Chennai, Hyderabad", status: "Active", createdAt: "2026-01-12T11:00:00", updatedAt: "2026-04-01T10:45:00" },
-  { id: "Z-003", name: "East Zone", description: "Covers eastern region including Kolkata, Bhubaneswar", status: "Active", createdAt: "2026-01-15T08:15:00", updatedAt: "2026-02-20T16:30:00" },
-  { id: "Z-004", name: "West Zone", description: "Covers western region including Mumbai, Pune, Ahmedabad", status: "Active", createdAt: "2026-01-18T13:45:00", updatedAt: "2026-04-05T09:10:00" },
-  { id: "Z-005", name: "Central Zone", description: "Covers central region including Nagpur, Bhopal, Indore", status: "Inactive", createdAt: "2026-02-01T10:00:00", updatedAt: "2026-03-28T11:55:00" },
+  { id: "Z-001", name: "North Zone", code: "NZ", description: "Covers northern region including Delhi, Punjab, Haryana", status: "Active", createdAt: "2026-01-10T09:30:00", updatedAt: "2026-03-15T14:20:00" },
+  { id: "Z-002", name: "South Zone", code: "SZ", description: "Covers southern region including Bangalore, Chennai, Hyderabad", status: "Active", createdAt: "2026-01-12T11:00:00", updatedAt: "2026-04-01T10:45:00" },
+  { id: "Z-003", name: "East Zone", code: "EZ", description: "Covers eastern region including Kolkata, Bhubaneswar", status: "Active", createdAt: "2026-01-15T08:15:00", updatedAt: "2026-02-20T16:30:00" },
+  { id: "Z-004", name: "West Zone", code: "WZ", description: "Covers western region including Mumbai, Pune, Ahmedabad", status: "Active", createdAt: "2026-01-18T13:45:00", updatedAt: "2026-04-05T09:10:00" },
+  { id: "Z-005", name: "Central Zone", code: "CZ", description: "Covers central region including Nagpur, Bhopal, Indore", status: "Inactive", createdAt: "2026-02-01T10:00:00", updatedAt: "2026-03-28T11:55:00" },
 ];
 
 export interface ProblemType {
