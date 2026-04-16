@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 
 const allMonthlyData = [
-  { month: "Jan", calls: 18, resolved: 15, profit: 320000 },
-  { month: "Feb", calls: 24, resolved: 20, profit: 510000 },
-  { month: "Mar", calls: 30, resolved: 28, profit: 780000 },
-  { month: "Apr", calls: 12, resolved: 4, profit: 210000 },
+  { month: "Jan", calls: 18, completed: 15, profit: 320000 },
+  { month: "Feb", calls: 24, completed: 20, profit: 510000 },
+  { month: "Mar", calls: 30, completed: 28, profit: 780000 },
+  { month: "Apr", calls: 12, completed: 4, profit: 210000 },
 ];
 
 const Dashboard = () => {
@@ -170,10 +170,10 @@ const Dashboard = () => {
                     name="Total Calls"
                   />
                   <Bar
-                    dataKey="resolved"
+                    dataKey="completed"
                     fill="hsl(142, 71%, 45%)"
                     radius={[4, 4, 0, 0]}
-                    name="Resolved"
+                    name="Completed"
                   />
                 </BarChart>
               </ResponsiveContainer>
