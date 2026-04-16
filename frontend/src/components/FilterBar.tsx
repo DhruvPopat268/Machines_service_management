@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Search, X } from "lucide-react";
+import { SearchableSelect } from "@/components/SearchableSelect";
 
 interface FilterOption {
   label: string;
@@ -15,11 +16,19 @@ interface FilterConfig {
   options: FilterOption[];
 }
 
+interface SearchableFilterConfig {
+  key: string;
+  placeholder: string;
+  searchPlaceholder?: string;
+  options: FilterOption[];
+}
+
 interface FilterBarProps {
   searchValue: string;
   onSearchChange: (val: string) => void;
   searchPlaceholder?: string;
   filters?: FilterConfig[];
+  searchableFilters?: SearchableFilterConfig[];
   filterValues?: Record<string, string>;
   onFilterChange?: (key: string, val: string) => void;
   showDateRange?: boolean;
@@ -32,7 +41,7 @@ interface FilterBarProps {
 
 export function FilterBar({
   searchValue, onSearchChange, searchPlaceholder = "Search...",
-  filters = [], filterValues = {}, onFilterChange,
+  filters = [], searchableFilters = [], filterValues = {}, onFilterChange,
   showDateRange = false, fromDate = "", toDate = "",
   onFromDateChange, onToDateChange, onClear,
 }: FilterBarProps) {
@@ -54,6 +63,17 @@ export function FilterBar({
           />
         </div>
         <div className="flex flex-wrap gap-3 items-center">
+          {searchableFilters.map((f) => (
+            <SearchableSelect
+              key={f.key}
+              options={[{ label: `All ${f.placeholder}`, value: "" }, ...f.options]}
+              value={filterValues[f.key] ?? ""}
+              onChange={(v) => onFilterChange?.(f.key, v)}
+              placeholder={f.placeholder}
+              searchPlaceholder={f.searchPlaceholder ?? `Search ${f.placeholder.toLowerCase()}...`}
+              className="w-[180px] h-9 text-sm"
+            />
+          ))}
           {filters.map((f) => (
             <Select key={f.key} value={filterValues[f.key] || "all"} onValueChange={(v) => onFilterChange?.(f.key, v)}>
               <SelectTrigger className="w-[160px]">

@@ -108,4 +108,13 @@
   .scrollbar-none::-webkit-scrollbar {
     display: none;
   }
+
+  [data-sidebar="content"] {
+    overflow-y: auto !important;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  [data-sidebar="content"]::-webkit-scrollbar {
+    display: none;
+  }
 }

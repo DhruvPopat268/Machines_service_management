@@ -18,10 +18,12 @@ import AttributesPage from "./pages/AttributesPage";
 import MachineDivisionsPage from "./pages/MachineDivisionsPage";
 import MachineCategoriesPage from "./pages/MachineCategoriesPage";
 import CustomersPage from "./pages/CustomersPage";
-import PurchasesPage from "./pages/PurchasesPage";
 import ProblemTypesPage from "./pages/ProblemTypesPage";
+import PurchaseMachinesPage from "./pages/PurchaseMachinesPage";
+import SellMachinesPage from "./pages/SellMachinesPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
 import ZonesPage from "./pages/ZonesPage";
+import VendorsPage from "./pages/VendorsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -49,15 +51,18 @@ const App = () => (
             <Route path="/engineers" element={<EngineersPage />} />
             <Route path="/machines" element={<MachinesPage />} />
             <Route path="/machines/add" element={<AddItemForm type="Machine" />} />
+            <Route path="/machines/:id" element={<AddItemForm type="Machine" mode="view" />} />
             <Route path="/inventory-logs" element={<InventoryLogsPage />} />
+            <Route path="/purchase-machines" element={<PurchaseMachinesPage />} />
+            <Route path="/sell-machines" element={<SellMachinesPage />} />
             <Route path="/attributes" element={<AttributesPage />} />
             <Route path="/machine-divisions" element={<MachineDivisionsPage />} />
             <Route path="/machine-categories" element={<MachineCategoriesPage />} />
             <Route path="/customers" element={<CustomersPage />} />
-            <Route path="/purchases" element={<PurchasesPage />} />
             <Route path="/problem-types" element={<ProblemTypesPage />} />
             <Route path="/contract-types" element={<ContractTypesPage />} />
             <Route path="/zones" element={<ZonesPage />} />
+            <Route path="/vendors" element={<VendorsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

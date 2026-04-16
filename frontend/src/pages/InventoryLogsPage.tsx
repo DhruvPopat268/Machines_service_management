@@ -51,10 +51,11 @@ const InventoryLogsPage = () => {
   const columns: Column<InventoryLog>[] = [
     { key: "id", label: "No.", render: (_l, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "itemName", label: "Name", render: (l) => <span className="font-medium">{l.itemName}</span> },
+    { key: "attribute", label: "Attribute", render: (l) => l.attribute ? <span className="bg-muted px-1.5 py-0.5 rounded text-xs text-muted-foreground">{l.attribute}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "model", label: "Model", render: (l) => l.model ? <span className="text-sm">{l.model}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "division", label: "Division", render: (l) => l.division ? <span className="text-sm">{l.division}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "category", label: "Category", render: (l) => l.category ? <span className="text-sm">{l.category}</span> : <span className="text-muted-foreground text-sm">—</span> },
-    { key: "action", label: "Action", render: (l) => <StatusBadge status={l.action} /> },
+    { key: "action", label: "Action", render: (l) => <StatusBadge status={l.action === "Added" ? "Purchased" : l.action} /> },
     { key: "quantityChange", label: "Qty Change", render: (l) => <span className={l.quantityChange > 0 ? "text-success font-medium" : l.quantityChange < 0 ? "text-destructive font-medium" : "text-muted-foreground"}>
       {l.quantityChange > 0 ? `+${l.quantityChange}` : l.quantityChange}
     </span> },
@@ -80,7 +81,7 @@ const InventoryLogsPage = () => {
             filters={[
               { key: "division", label: "Division", options: [{ label: "CNC Division", value: "CNC Division" }, { label: "3D Printing Division", value: "3D Printing Division" }, { label: "Laser Division", value: "Laser Division" }, { label: "Welding Division", value: "Welding Division" }, { label: "Hydraulic Division", value: "Hydraulic Division" }] },
               { key: "category", label: "Category", options: [{ label: "Heavy Machinery", value: "Heavy Machinery" }, { label: "Additive Manufacturing", value: "Additive Manufacturing" }, { label: "Cutting Machines", value: "Cutting Machines" }, { label: "Robotics", value: "Robotics" }, { label: "Sheet Metal", value: "Sheet Metal" }] },
-              { key: "action", label: "Action", options: [{ label: "Added", value: "Added" }, { label: "Removed", value: "Removed" }, { label: "Sold", value: "Sold" }, { label: "Updated", value: "Updated" }] },
+              { key: "action", label: "Action", options: [{ label: "Purchased", value: "Added" }, { label: "Removed", value: "Removed" }, { label: "Sold", value: "Sold" }, { label: "Updated", value: "Updated" }] },
               { key: "performedBy", label: "Performed By", options: performedByOptions },
             ]}
             filterValues={filters} onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}

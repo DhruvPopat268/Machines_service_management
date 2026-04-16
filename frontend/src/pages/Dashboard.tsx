@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PhoneCall, AlertCircle, UserCog, Package, IndianRupee, Users } from "lucide-react";
-import { serviceCalls, purchases, users, customers, machines } from "@/data/dummyData";
+import { serviceCalls, users, customers, machines } from "@/data/dummyData";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -42,9 +42,7 @@ const Dashboard = () => {
 
   const monthlyData = allMonthlyData;
 
-  const totalProfit = dateMode === "custom" && fromDate && toDate
-    ? purchases.filter((p) => p.purchaseDate >= fromDate && p.purchaseDate <= toDate).reduce((sum, p) => sum + p.price, 0)
-    : purchases.reduce((sum, p) => sum + p.price, 0);
+  const totalProfit = allMonthlyData.reduce((sum, m) => sum + m.profit, 0);
 
   const stats = [
     { label: "Total Revenue", value: `₹${totalProfit.toLocaleString()}`, icon: IndianRupee, colorClass: "text-success bg-success/10" },

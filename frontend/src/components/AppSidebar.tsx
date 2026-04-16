@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
-  ChevronDown, Package, ClipboardList, ShoppingCart, FileText, HardHat, MapPin, Layers, Tag, FileSignature, SlidersHorizontal,
+  ChevronDown, ClipboardList, FileText, HardHat, MapPin, Layers, Tag, FileSignature, SlidersHorizontal, Truck, ShoppingBag, ShoppingCart,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -44,27 +44,6 @@ const callGroup: NavGroup = {
     { title: "On Hold", url: "/calls/on-hold", icon: ClipboardList },
     { title: "Completed", url: "/calls/completed", icon: ClipboardList },
     { title: "Cancelled", url: "/calls/cancelled", icon: ClipboardList },
-  ],
-};
-
-const problemTypesItem: NavItem = { title: "Problem Types", url: "/problem-types", icon: FileText };
-
-const inventoryGroup: NavGroup = {
-  label: "Inventory",
-  icon: Package,
-  items: [
-    { title: "Machines", url: "/machines", icon: HardDrive },
-    { title: "Add Machine", url: "/machines/add", icon: HardDrive },
-    { title: "Inventory Logs", url: "/inventory-logs", icon: FileText },
-  ],
-};
-
-const customerGroup: NavGroup = {
-  label: "Customers",
-  icon: ShoppingCart,
-  items: [
-    { title: "All Customers", url: "/customers", icon: Users },
-    { title: "Purchases", url: "/purchases", icon: ShoppingCart },
   ],
 };
 
@@ -264,7 +243,7 @@ export function AppSidebar() {
           </div>
         )}
       </div>
-      <SidebarContent className="pt-2 overflow-y-auto scrollbar-none">
+      <SidebarContent className="pt-2 overflow-y-auto scrollbar-none" style={{ overflowY: "auto" }}>
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -331,8 +310,80 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Vendor Management</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to="/vendors" end className={linkClass} activeClassName={activeClass}>
+                      <Truck className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to="/vendors" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <Truck className="h-3.5 w-3.5 shrink-0" />
+                        Vendors
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Inventory Management</SidebarGroupLabel>}
           <InventorySection collapsed={collapsed} />
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase Management</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to="/purchase-machines" end className={linkClass} activeClassName={activeClass}>
+                      <ShoppingBag className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to="/purchase-machines" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
+                        Purchase Machines
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Sells Management</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to="/sell-machines" end className={linkClass} activeClassName={activeClass}>
+                      <ShoppingCart className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to="/sell-machines" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
+                        Sell Machines
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
@@ -347,7 +398,6 @@ export function AppSidebar() {
               {[
                 { title: "Problem Types", url: "/problem-types", icon: FileText },
                 { title: "Customers", url: "/customers", icon: Users },
-                { title: "Purchases", url: "/purchases", icon: ShoppingCart },
               ].map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>

@@ -38,6 +38,11 @@ export interface User {
   updatedAt: string;
 }
 
+export interface MachineVariant {
+  attribute: string;
+  lowStockThreshold: number;
+}
+
 export interface Machine {
   id: string;
   name: string;
@@ -50,6 +55,8 @@ export interface Machine {
   category: string;
   stockStatus: "In Stock" | "Low Stock" | "Out of Stock";
   status: "Active" | "Inactive";
+  variants: MachineVariant[];
+  images: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +75,7 @@ export interface Accessory {
 export interface InventoryLog {
   id: string;
   itemName: string;
+  attribute?: string;
   model?: string;
   division?: string;
   category?: string;
@@ -84,23 +92,12 @@ export interface Customer {
   contact: string;
   email: string;
   address: string;
+  zone?: string;
+  gstNumber?: string;
   totalPurchases: number;
   status: "Active" | "Inactive";
   joinedAt: string;
   lastPurchasedAt: string;
-}
-
-export interface Purchase {
-  id: string;
-  customerId: string;
-  customerName: string;
-  item: string;
-  issue: string;
-  problemType: string;
-  status: "Open" | "Resolved" | "Pending";
-  purchasedAt: string;
-  price: number;
-  warrantyStatus: "Under Warranty" | "Expired";
 }
 
 export const serviceCalls: ServiceCall[] = [
@@ -130,12 +127,12 @@ export const users: User[] = [
 ];
 
 export const machines: Machine[] = [
-  { id: "M-001", name: "CNC Lathe X200", model: "X200", serialNumber: "CLX200-0045", price: 2500000, quantity: 5, description: "High-precision CNC lathe for industrial manufacturing", division: "CNC Division", category: "Heavy Machinery", stockStatus: "In Stock", status: "Active", createdAt: "2026-01-10T08:00:00", updatedAt: "2026-03-15T10:30:00" },
-  { id: "M-002", name: "3D Printer Pro", model: "PP-500", serialNumber: "3DP500-0102", price: 850000, quantity: 12, description: "Industrial grade 3D printer with multi-material support", division: "3D Printing Division", category: "Additive Manufacturing", stockStatus: "In Stock", status: "Active", createdAt: "2026-01-12T09:30:00", updatedAt: "2026-03-20T14:00:00" },
-  { id: "M-003", name: "Laser Cutter Z5", model: "Z5", serialNumber: "LCZ5-0078", price: 3200000, quantity: 2, description: "High-power fiber laser cutting machine", division: "Laser Division", category: "Cutting Machines", stockStatus: "Low Stock", status: "Active", createdAt: "2026-01-15T11:00:00", updatedAt: "2026-04-01T09:15:00" },
-  { id: "M-004", name: "CNC Mill M400", model: "M400", serialNumber: "CNM400-0231", price: 4500000, quantity: 3, description: "5-axis CNC milling machine", division: "CNC Division", category: "Heavy Machinery", stockStatus: "In Stock", status: "Active", createdAt: "2026-01-18T13:45:00", updatedAt: "2026-04-03T11:20:00" },
-  { id: "M-005", name: "Welding Robot W1", model: "W1", serialNumber: "WRW1-0019", price: 6000000, quantity: 0, description: "Automated welding robot with AI guidance", division: "Welding Division", category: "Robotics", stockStatus: "Out of Stock", status: "Inactive", createdAt: "2026-02-01T10:00:00", updatedAt: "2026-04-05T16:45:00" },
-  { id: "M-006", name: "Press Brake B200", model: "B200", serialNumber: "PBB200-0088", price: 1800000, quantity: 7, description: "Hydraulic press brake for sheet metal bending", division: "Hydraulic Division", category: "Sheet Metal", stockStatus: "In Stock", status: "Active", createdAt: "2026-02-05T14:30:00", updatedAt: "2026-03-28T12:00:00" },
+  { id: "M-001", name: "CNC Lathe X200", model: "X200", serialNumber: "CLX200-0045", price: 2500000, quantity: 5, description: "High-precision CNC lathe for industrial manufacturing", division: "CNC Division", category: "Heavy Machinery", stockStatus: "In Stock", status: "Active", variants: [{ attribute: "Color", lowStockThreshold: 2 }, { attribute: "Voltage", lowStockThreshold: 1 }], images: ["https://images.unsplash.com/photo-1565043589221-1a6fd9ae45c7?w=400&q=80", "https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=400&q=80"], createdAt: "2026-01-10T08:00:00", updatedAt: "2026-03-15T10:30:00" },
+  { id: "M-002", name: "3D Printer Pro", model: "PP-500", serialNumber: "3DP500-0102", price: 850000, quantity: 12, description: "Industrial grade 3D printer with multi-material support", division: "3D Printing Division", category: "Additive Manufacturing", stockStatus: "In Stock", status: "Active", variants: [{ attribute: "Color", lowStockThreshold: 5 }], images: ["https://images.unsplash.com/photo-1631544822344-5b5e5e5e5e5e?w=400&q=80", "https://images.unsplash.com/photo-1612815154858-60aa4c59eaa6?w=400&q=80"], createdAt: "2026-01-12T09:30:00", updatedAt: "2026-03-20T14:00:00" },
+  { id: "M-003", name: "Laser Cutter Z5", model: "Z5", serialNumber: "LCZ5-0078", price: 3200000, quantity: 2, description: "High-power fiber laser cutting machine", division: "Laser Division", category: "Cutting Machines", stockStatus: "Low Stock", status: "Active", variants: [{ attribute: "Spindle Speed", lowStockThreshold: 3 }], images: ["https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80"], createdAt: "2026-01-15T11:00:00", updatedAt: "2026-04-01T09:15:00" },
+  { id: "M-004", name: "CNC Mill M400", model: "M400", serialNumber: "CNM400-0231", price: 4500000, quantity: 3, description: "5-axis CNC milling machine", division: "CNC Division", category: "Heavy Machinery", stockStatus: "In Stock", status: "Active", variants: [{ attribute: "Power (kW)", lowStockThreshold: 2 }, { attribute: "Voltage", lowStockThreshold: 1 }], images: ["https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=400&q=80", "https://images.unsplash.com/photo-1565043589221-1a6fd9ae45c7?w=400&q=80"], createdAt: "2026-01-18T13:45:00", updatedAt: "2026-04-03T11:20:00" },
+  { id: "M-005", name: "Welding Robot W1", model: "W1", serialNumber: "WRW1-0019", price: 6000000, quantity: 0, description: "Automated welding robot with AI guidance", division: "Welding Division", category: "Robotics", stockStatus: "Out of Stock", status: "Inactive", variants: [{ attribute: "Power (kW)", lowStockThreshold: -1 }], images: ["https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=400&q=80"], createdAt: "2026-02-01T10:00:00", updatedAt: "2026-04-05T16:45:00" },
+  { id: "M-006", name: "Press Brake B200", model: "B200", serialNumber: "PBB200-0088", price: 1800000, quantity: 7, description: "Hydraulic press brake for sheet metal bending", division: "Hydraulic Division", category: "Sheet Metal", stockStatus: "In Stock", status: "Active", variants: [{ attribute: "Color", lowStockThreshold: 3 }, { attribute: "Voltage", lowStockThreshold: 2 }], images: ["https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=400&q=80"], createdAt: "2026-02-05T14:30:00", updatedAt: "2026-03-28T12:00:00" },
 ];
 
 export const accessories: Accessory[] = [
@@ -149,6 +146,7 @@ export const accessories: Accessory[] = [
 const machineLogEntries: InventoryLog[] = machines.map((m, i) => ({
   id: `IL-${String(i + 1).padStart(3, "0")}`,
   itemName: m.name,
+  attribute: m.variants?.[i % (m.variants?.length || 1)]?.attribute,
   model: m.model,
   division: m.division,
   category: m.category,
@@ -165,25 +163,91 @@ export const inventoryLogs: InventoryLog[] = [
 ];
 
 export const customers: Customer[] = [
-  { id: "C-001", name: "Acme Corp", contact: "+91 9876543210", email: "contact@acme.com", address: "123 Industrial Area, Mumbai", totalPurchases: 5, status: "Active", joinedAt: "2024-11-10T09:00:00", lastPurchasedAt: "2025-07-20T14:30:00" },
-  { id: "C-002", name: "Beta Industries", contact: "+91 9876543211", email: "info@beta.com", address: "456 Tech Park, Delhi", totalPurchases: 3, status: "Active", joinedAt: "2024-12-05T10:30:00", lastPurchasedAt: "2025-03-10T11:00:00" },
-  { id: "C-003", name: "Gamma Ltd", contact: "+91 9876543212", email: "support@gamma.com", address: "789 Sector 5, Bangalore", totalPurchases: 7, status: "Active", joinedAt: "2023-08-20T08:15:00", lastPurchasedAt: "2024-06-12T16:45:00" },
-  { id: "C-004", name: "Delta Mfg", contact: "+91 9876543213", email: "ops@delta.com", address: "321 MIDC, Pune", totalPurchases: 2, status: "Active", joinedAt: "2025-01-15T11:00:00", lastPurchasedAt: "2025-09-01T09:30:00" },
-  { id: "C-005", name: "Echo Systems", contact: "+91 9876543214", email: "help@echo.com", address: "654 IT Hub, Hyderabad", totalPurchases: 4, status: "Inactive", joinedAt: "2025-03-22T13:45:00", lastPurchasedAt: "2025-11-20T10:15:00" },
-  { id: "C-006", name: "Foxtrot Inc", contact: "+91 9876543215", email: "admin@foxtrot.com", address: "987 Phase 2, Chennai", totalPurchases: 1, status: "Active", joinedAt: "2025-06-01T14:00:00", lastPurchasedAt: "2025-08-14T12:00:00" },
-];
-
-export const purchases: Purchase[] = [
-  { id: "P-001", customerId: "C-001", customerName: "Acme Corp", item: "CNC Lathe X200", issue: "Spindle motor overheating", problemType: "Mechanical Failure", status: "Open", purchasedAt: "2025-06-15T10:30:00", price: 2500000, warrantyStatus: "Under Warranty" },
-  { id: "P-002", customerId: "C-001", customerName: "Acme Corp", item: "Drill Bit Set", issue: "Bits worn out prematurely", problemType: "Mechanical Failure", status: "Resolved", purchasedAt: "2025-07-20T14:30:00", price: 15000, warrantyStatus: "Under Warranty" },
-  { id: "P-003", customerId: "C-002", customerName: "Beta Industries", item: "3D Printer Pro", issue: "Print bed not leveling", problemType: "Calibration", status: "Pending", purchasedAt: "2025-03-10T11:00:00", price: 850000, warrantyStatus: "Under Warranty" },
-  { id: "P-004", customerId: "C-003", customerName: "Gamma Ltd", item: "Laser Cutter Z5", issue: "Laser beam misalignment", problemType: "Calibration", status: "Resolved", purchasedAt: "2024-01-05T09:15:00", price: 3200000, warrantyStatus: "Expired" },
-  { id: "P-005", customerId: "C-003", customerName: "Gamma Ltd", item: "Laser Lens", issue: "Lens cracked after use", problemType: "Mechanical Failure", status: "Resolved", purchasedAt: "2024-06-12T16:45:00", price: 35000, warrantyStatus: "Expired" },
-  { id: "P-006", customerId: "C-004", customerName: "Delta Mfg", item: "CNC Mill M400", issue: "Coolant system leak", problemType: "Coolant System", status: "Open", purchasedAt: "2025-09-01T09:30:00", price: 4500000, warrantyStatus: "Under Warranty" },
-  { id: "P-007", customerId: "C-005", customerName: "Echo Systems", item: "Welding Robot W1", issue: "Robotic arm unresponsive", problemType: "Electrical Fault", status: "Pending", purchasedAt: "2025-11-20T10:15:00", price: 6000000, warrantyStatus: "Under Warranty" },
+  { id: "C-001", name: "Acme Corp", contact: "+91 9876543210", email: "contact@acme.com", address: "123 Industrial Area, Mumbai", zone: "West Zone", gstNumber: "27AABCA1234A1Z5", totalPurchases: 5, status: "Active", joinedAt: "2024-11-10T09:00:00", lastPurchasedAt: "2025-07-20T14:30:00" },
+  { id: "C-002", name: "Beta Industries", contact: "+91 9876543211", email: "info@beta.com", address: "456 Tech Park, Delhi", zone: "North Zone", gstNumber: "07AABCB5678B2Z6", totalPurchases: 3, status: "Active", joinedAt: "2024-12-05T10:30:00", lastPurchasedAt: "2025-03-10T11:00:00" },
+  { id: "C-003", name: "Gamma Ltd", contact: "+91 9876543212", email: "support@gamma.com", address: "789 Sector 5, Bangalore", zone: "South Zone", gstNumber: "29AABCG9012C3Z7", totalPurchases: 7, status: "Active", joinedAt: "2023-08-20T08:15:00", lastPurchasedAt: "2024-06-12T16:45:00" },
+  { id: "C-004", name: "Delta Mfg", contact: "+91 9876543213", email: "ops@delta.com", address: "321 MIDC, Pune", zone: "West Zone", gstNumber: "27AABCD3456D4Z8", totalPurchases: 2, status: "Active", joinedAt: "2025-01-15T11:00:00", lastPurchasedAt: "2025-09-01T09:30:00" },
+  { id: "C-005", name: "Echo Systems", contact: "+91 9876543214", email: "help@echo.com", address: "654 IT Hub, Hyderabad", zone: "South Zone", gstNumber: "36AABCE7890E5Z9", totalPurchases: 4, status: "Inactive", joinedAt: "2025-03-22T13:45:00", lastPurchasedAt: "2025-11-20T10:15:00" },
+  { id: "C-006", name: "Foxtrot Inc", contact: "+91 9876543215", email: "admin@foxtrot.com", address: "987 Phase 2, Chennai", zone: "South Zone", gstNumber: "33AABCF2345F6Z1", totalPurchases: 1, status: "Active", joinedAt: "2025-06-01T14:00:00", lastPurchasedAt: "2025-08-14T12:00:00" },
 ];
 
 export const engineers = users.filter((u) => u.role === "Engineer" && u.status === "Active");
+
+export interface MachinePurchaseVariant {
+  attribute: string;
+  price: number;
+  discountedPrice: number;
+  quantity: number;
+}
+
+export interface MachinePurchase {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  machineId: string;
+  machineName: string;
+  machineModel: string;
+  machineCategory: string;
+  variants: MachinePurchaseVariant[];
+  addToInventory: boolean;
+  createdAt: string;
+}
+
+export const machinePurchases: MachinePurchase[] = [
+  { id: "MP-001", vendorId: "VN-001", vendorName: "Gupta Machinery Pvt Ltd", machineId: "M-001", machineName: "CNC Lathe X200", machineModel: "X200", machineCategory: "Heavy Machinery", variants: [{ attribute: "Color", price: 2500000, discountedPrice: 2300000, quantity: 2 }, { attribute: "Voltage", price: 2550000, discountedPrice: 2350000, quantity: 3 }], addToInventory: true, createdAt: "2026-02-10T10:00:00" },
+  { id: "MP-002", vendorId: "VN-003", vendorName: "Sharma CNC Solutions", machineId: "M-004", machineName: "CNC Mill M400", machineModel: "M400", machineCategory: "Heavy Machinery", variants: [{ attribute: "Power (kW)", price: 4500000, discountedPrice: 4200000, quantity: 1 }], addToInventory: true, createdAt: "2026-02-18T14:30:00" },
+  { id: "MP-003", vendorId: "VN-002", vendorName: "Mehta Tools & Equipments", machineId: "M-003", machineName: "Laser Cutter Z5", machineModel: "Z5", machineCategory: "Cutting Machines", variants: [{ attribute: "Spindle Speed", price: 3200000, discountedPrice: 3000000, quantity: 2 }], addToInventory: false, createdAt: "2026-03-05T09:15:00" },
+  { id: "MP-004", vendorId: "VN-005", vendorName: "Verma Hydraulics Ltd", machineId: "M-006", machineName: "Press Brake B200", machineModel: "B200", machineCategory: "Sheet Metal", variants: [{ attribute: "Color", price: 1800000, discountedPrice: 1700000, quantity: 4 }, { attribute: "Voltage", price: 1850000, discountedPrice: 1750000, quantity: 3 }], addToInventory: true, createdAt: "2026-03-20T11:45:00" },
+  { id: "MP-005", vendorId: "VN-006", vendorName: "Nair Robotics & Automation", machineId: "M-005", machineName: "Welding Robot W1", machineModel: "W1", machineCategory: "Robotics", variants: [{ attribute: "Power (kW)", price: 6000000, discountedPrice: 5800000, quantity: 1 }], addToInventory: false, createdAt: "2026-04-01T08:00:00" },
+];
+
+export interface Vendor {
+  id: string;
+  name: string;
+  companyName: string;
+  phone: string;
+  email: string;
+  address: string;
+  gstNumber: string;
+  status: "Active" | "Inactive";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const vendors: Vendor[] = [
+  { id: "VN-001", name: "Ramesh Gupta", companyName: "Gupta Machinery Pvt Ltd", phone: "+91 9812345670", email: "ramesh@guptamachinery.com", address: "12 Industrial Estate, Mumbai", gstNumber: "27AABCG1234A1Z5", status: "Active", createdAt: "2026-01-10T09:00:00", updatedAt: "2026-03-15T11:00:00" },
+  { id: "VN-002", name: "Suresh Mehta", companyName: "Mehta Tools & Equipments", phone: "+91 9823456781", email: "suresh@mehtatools.com", address: "45 MIDC Phase 2, Pune", gstNumber: "27AABCM5678B2Z6", status: "Active", createdAt: "2026-01-15T10:30:00", updatedAt: "2026-03-20T14:00:00" },
+  { id: "VN-003", name: "Kavita Sharma", companyName: "Sharma CNC Solutions", phone: "+91 9834567892", email: "kavita@sharmacnc.com", address: "78 Tech Park, Bangalore", gstNumber: "29AABCS9012C3Z7", status: "Active", createdAt: "2026-01-20T08:15:00", updatedAt: "2026-04-01T09:30:00" },
+  { id: "VN-004", name: "Deepak Joshi", companyName: "Joshi Laser Systems", phone: "+91 9845678903", email: "deepak@joshilaser.com", address: "23 Sector 5, Delhi", gstNumber: "07AABCJ3456D4Z8", status: "Inactive", createdAt: "2026-02-01T11:00:00", updatedAt: "2026-03-28T16:00:00" },
+  { id: "VN-005", name: "Anita Verma", companyName: "Verma Hydraulics Ltd", phone: "+91 9856789014", email: "anita@vermahydraulics.com", address: "56 GIDC, Ahmedabad", gstNumber: "24AABCV7890E5Z9", status: "Active", createdAt: "2026-02-10T13:45:00", updatedAt: "2026-04-05T10:15:00" },
+  { id: "VN-006", name: "Prakash Nair", companyName: "Nair Robotics & Automation", phone: "+91 9867890125", email: "prakash@nairrobotics.com", address: "89 IT Hub, Chennai", gstNumber: "33AABCN2345F6Z1", status: "Active", createdAt: "2026-02-18T09:00:00", updatedAt: "2026-04-03T12:30:00" },
+];
+
+export interface MachineSaleVariant {
+  attribute: string;
+  price: number;
+  discountedPrice: number;
+  quantity: number;
+}
+
+export interface MachineSale {
+  id: string;
+  customerId: string;
+  customerName: string;
+  machineId: string;
+  machineName: string;
+  machineModel: string;
+  machineCategory: string;
+  variants: MachineSaleVariant[];
+  createdAt: string;
+}
+
+export const machineSales: MachineSale[] = [
+  { id: "MS-001", customerId: "C-001", customerName: "Acme Corp", machineId: "M-001", machineName: "CNC Lathe X200", machineModel: "X200", machineCategory: "Heavy Machinery", variants: [{ attribute: "Color", price: 2500000, discountedPrice: 2300000, quantity: 1 }], createdAt: "2026-02-15T11:00:00" },
+  { id: "MS-002", customerId: "C-002", customerName: "Beta Industries", machineId: "M-003", machineName: "Laser Cutter Z5", machineModel: "Z5", machineCategory: "Cutting Machines", variants: [{ attribute: "Spindle Speed", price: 3200000, discountedPrice: 3000000, quantity: 1 }], createdAt: "2026-03-10T09:30:00" },
+  { id: "MS-003", customerId: "C-003", customerName: "Gamma Ltd", machineId: "M-004", machineName: "CNC Mill M400", machineModel: "M400", machineCategory: "Heavy Machinery", variants: [{ attribute: "Power (kW)", price: 4500000, discountedPrice: 4200000, quantity: 2 }, { attribute: "Voltage", price: 4550000, discountedPrice: 4250000, quantity: 1 }], createdAt: "2026-03-22T14:00:00" },
+  { id: "MS-004", customerId: "C-004", customerName: "Delta Mfg", machineId: "M-006", machineName: "Press Brake B200", machineModel: "B200", machineCategory: "Sheet Metal", variants: [{ attribute: "Color", price: 1800000, discountedPrice: 1700000, quantity: 3 }], createdAt: "2026-04-02T10:15:00" },
+];
 
 export interface MachineDivision {
   id: string;

@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useNavigate } from "react-router-dom";
-import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
+import { Plus, Edit, Trash2, Upload, Download, Eye } from "lucide-react";
 import type { Machine } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
 import { useToast } from "@/hooks/use-toast";
@@ -59,10 +59,29 @@ const MachinesPage = () => {
 
   const columns: Column<Machine>[] = [
     { key: "id", label: "No.", render: (_m, i) => <span className="font-medium text-foreground">{i + 1}</span> },
+    {
+      key: "images", label: "Image", render: (m) => m.images?.[0]
+        ? <img src={m.images[0]} alt={m.name} className="h-10 w-14 object-cover rounded-md border" />
+        : <div className="h-10 w-14 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">No img</div>,
+    },
     { key: "name", label: "Name", render: (m) => <span className="font-medium">{m.name}</span> },
     { key: "model", label: "Model" },
     { key: "division", label: "Division", render: (m) => <span className="text-sm">{m.division}</span> },
     { key: "category", label: "Category", render: (m) => <span className="text-sm">{m.category}</span> },
+    {
+      key: "lowStockThreshold", label: "Low Stock Alerts", render: (m) => (
+        <div className="space-y-1">
+          {m.variants?.length > 0 ? m.variants.map((v, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{v.attribute}</span>
+              {v.lowStockThreshold === -1
+                ? <span className="text-muted-foreground">Disabled</span>
+                : <span className="font-medium">{v.lowStockThreshold}</span>}
+            </div>
+          )) : <span className="text-muted-foreground text-xs">—</span>}
+        </div>
+      ),
+    },
     { key: "price", label: "Price", render: (m) => <span>₹{m.price.toLocaleString()}</span> },
     { key: "quantity", label: "Qty", render: (m) => <span className="font-medium">{m.quantity}</span> },
     { key: "stockStatus", label: "Stock", render: (m) => <StatusBadge status={m.stockStatus} /> },
@@ -89,8 +108,9 @@ const MachinesPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: () => (
+      key: "actions", label: "Actions", render: (m) => (
         <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m.id}`)} title="View" disabled><Eye className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="h-4 w-4" /></Button>
         </div>
