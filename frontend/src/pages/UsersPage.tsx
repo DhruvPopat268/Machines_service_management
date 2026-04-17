@@ -5,12 +5,12 @@ import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { UserPlus, Edit, Upload, Download } from "lucide-react";
+import { UserPlus, Edit, Trash2, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { User } from "@/data/dummyData";
 import Spinner from "@/components/Spinner";
@@ -29,6 +29,7 @@ const UsersPage = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [addDialog, setAddDialog] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -86,8 +87,11 @@ const UsersPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: () => (
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
+      key: "actions", label: "Actions", render: (u) => (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8"><Edit className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(u)}><Trash2 className="h-4 w-4" /></Button>
+        </div>
       ),
     },
   ];
@@ -118,6 +122,23 @@ const UsersPage = () => {
           <DataTable columns={columns} data={filtered} />
         </>
       )}
+
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              setData((prev) => prev.filter((item) => item.id !== deleteDialog?.id));
+              toast({ title: "User deleted" });
+              setDeleteDialog(null);
+            }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addDialog} onOpenChange={setAddDialog}>
         <DialogContent>
