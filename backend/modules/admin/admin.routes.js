@@ -1,6 +1,5 @@
 const router = require("express").Router();
 
-// admin feature routes
-// router.use("/auth", require("./auth/auth.routes"));
+router.use("/users", require("./auth/admin.user.routes"));
 
 module.exports = router;
