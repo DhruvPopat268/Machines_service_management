@@ -137,7 +137,7 @@ const ZonesPage = () => {
     {
       key: "status", label: "Status", render: (z) => (
         <div className="flex items-center gap-2">
-          <Switch checked={z.status === "Active"} onCheckedChange={() => toggleStatus(z)} />
+          <Switch checked={z.status === "Active"} onCheckedChange={() => toggleStatus(z)} aria-label={`Toggle status for ${z.name}`} />
           <span className={z.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{z.status}</span>
         </div>
       ),
@@ -157,10 +157,10 @@ const ZonesPage = () => {
     {
       key: "actions", label: "Actions", render: (z) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditDialog(z); setEditForm({ name: z.name, code: z.code, description: z.description, status: z.status }); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${z.name}`} onClick={() => { setEditDialog(z); setEditForm({ name: z.name, code: z.code, description: z.description, status: z.status }); }}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(z)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${z.name}`} onClick={() => setDeleteDialog(z)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -205,13 +205,13 @@ const ZonesPage = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Add Zone</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2"><Label>Zone Name</Label><Input placeholder="e.g. North Zone" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Zone Code</Label><Input placeholder="e.g. NZ" value={addForm.code} onChange={(e) => setAddForm((p) => ({ ...p, code: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Regions or areas covered by this zone" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="add-zone-name">Zone Name</Label><Input id="add-zone-name" placeholder="e.g. North Zone" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="add-zone-code">Zone Code</Label><Input id="add-zone-code" placeholder="e.g. NZ" value={addForm.code} onChange={(e) => setAddForm((p) => ({ ...p, code: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="add-zone-description">Description</Label><Textarea id="add-zone-description" placeholder="Regions or areas covered by this zone" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} /></div>
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label htmlFor="add-zone-status">Status</Label>
               <Select value={addForm.status} onValueChange={(v) => setAddForm((p) => ({ ...p, status: v as Zone["status"] }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="add-zone-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Inactive">Inactive</SelectItem>
@@ -231,13 +231,13 @@ const ZonesPage = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Zone</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2"><Label>Zone Name</Label><Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Zone Code</Label><Input value={editForm.code} onChange={(e) => setEditForm((p) => ({ ...p, code: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Description</Label><Textarea value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="edit-zone-name">Zone Name</Label><Input id="edit-zone-name" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="edit-zone-code">Zone Code</Label><Input id="edit-zone-code" value={editForm.code} onChange={(e) => setEditForm((p) => ({ ...p, code: e.target.value }))} /></div>
+            <div className="space-y-2"><Label htmlFor="edit-zone-description">Description</Label><Textarea id="edit-zone-description" value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} /></div>
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label htmlFor="edit-zone-status">Status</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm((p) => ({ ...p, status: v as Zone["status"] }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-zone-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Active">Active</SelectItem>
                   <SelectItem value="Inactive">Inactive</SelectItem>
