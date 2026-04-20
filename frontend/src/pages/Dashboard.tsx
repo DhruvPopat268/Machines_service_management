@@ -21,6 +21,7 @@ const Dashboard = () => {
   const [dateMode, setDateMode] = useState<"all" | "custom">("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [viewMode, setViewMode] = useState<"both" | "service" | "account">("both");
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
@@ -44,13 +45,18 @@ const Dashboard = () => {
 
   const totalProfit = allMonthlyData.reduce((sum, m) => sum + m.profit, 0);
 
-  const stats = [
+  const accountStats = [
     { label: "Total Revenue", value: `₹${totalProfit.toLocaleString()}`, icon: IndianRupee, colorClass: "text-success bg-success/10" },
+  ];
+
+  const serviceStats = [
     { label: "Total Calls", value: filteredCalls.length, icon: PhoneCall, colorClass: "text-primary bg-accent" },
     { label: "Completed Calls", value: filteredCalls.filter((c) => c.status === "Completed").length, icon: PhoneCall, colorClass: "text-success bg-success/10" },
     { label: "Active Engineers", value: users.filter((u) => u.role === "Engineer" && u.status === "Active").length, icon: UserCog, colorClass: "text-primary bg-accent" },
     { label: "Low Stock Machines", value: machines.filter((m) => m.stockStatus === "Low Stock" || m.stockStatus === "Out of Stock").length, icon: Package, colorClass: "text-destructive bg-destructive/10" },
   ];
+
+  const stats = viewMode === "account" ? accountStats : viewMode === "service" ? serviceStats : [...accountStats, ...serviceStats];
 
   const callStats = [
     { label: "Open Calls", value: filteredCalls.filter((c) => c.status === "Open").length, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
@@ -77,6 +83,22 @@ const Dashboard = () => {
     <div className="space-y-6">
       {loading && <Spinner />}
       {!loading && <>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center bg-muted rounded-lg p-1 w-fit">
+            {(["both", "service", "account"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
+                  viewMode === mode ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mode === "both" ? "Both" : mode === "service" ? "Service" : "Account"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
@@ -120,13 +142,17 @@ const Dashboard = () => {
           ))}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {callStats.map((stat) => (
-            <StatsCard key={stat.label} {...stat} />
-          ))}
-        </div>
+        {(viewMode === "both" || viewMode === "service") && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {callStats.map((stat) => (
+              <StatsCard key={stat.label} {...stat} />
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:[grid-template-columns:30%_1fr_1fr]">
+          {/* Calls by Status - service */}
+          {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm md:col-span-2 xl:col-span-1">
             <CardHeader><CardTitle className="text-lg">Calls by Status</CardTitle></CardHeader>
             <CardContent className="pr-0">
@@ -141,17 +167,17 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
-            {/* Reduce bottom padding of header */}
             <CardHeader className="pb-2">
               <CardTitle className="text-lg mb-0">
                 Monthly Service Trends
               </CardTitle>
             </CardHeader>
 
-            {/* Remove unnecessary padding */}
-            <CardContent className="pt-0 pb-0">
+              <CardContent className="pt-0 pb-0">
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart
                   data={allMonthlyData}
@@ -179,17 +205,17 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {(viewMode === "both" || viewMode === "account") && (
           <Card className="border-0 shadow-sm">
-            {/* Reduce header spacing */}
             <CardHeader className="pb-2">
               <CardTitle className="text-lg mb-0">
                 Monthly Profit
               </CardTitle>
             </CardHeader>
 
-            {/* Remove top padding */}
-            <CardContent className="pt-0 pb-0">
+              <CardContent className="pt-0 pb-0">
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart
                   data={allMonthlyData}
@@ -221,9 +247,11 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-0">
               <div className="flex items-center justify-between">
@@ -243,7 +271,9 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-0">
               <div className="flex items-center justify-between">
@@ -263,7 +293,9 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          )}
 
+          {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
             <CardHeader><CardTitle className="text-lg">Recent Service Calls</CardTitle></CardHeader>
             <CardContent>
@@ -293,6 +325,7 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
+          )}
         </div>
       </>
       }
