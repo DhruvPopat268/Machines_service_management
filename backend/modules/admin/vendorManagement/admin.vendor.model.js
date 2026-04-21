@@ -7,7 +7,7 @@ const vendorSchema = new mongoose.Schema(
     phone:       { type: String, required: true, trim: true },
     email:       { type: String, required: true, trim: true, lowercase: true },
     address:     { type: String, trim: true, default: "" },
-    gstNumber:   { type: String, trim: true, default: "", unique: true, sparse: true },
+    gstNumber:   { type: String, trim: true, unique: true, sparse: true, set: (v) => (v && v.trim() ? v.trim().toUpperCase() : undefined) },
     status:      { type: String, enum: ["Active", "Inactive"], default: "Active" },
   },
   { timestamps: true }
