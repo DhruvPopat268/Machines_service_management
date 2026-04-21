@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DataTable, Column } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
+import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
 interface Zone {
@@ -29,16 +30,25 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
+// Convert HTML date input value (yyyy-mm-dd) to dd/mm/yy for the API
+const toISTDateParam = (htmlDate: string) => {
+  const [yyyy, mm, dd] = htmlDate.split("-");
+  return `${dd}/${mm}/${String(yyyy).slice(2)}`;
+};
+
 const emptyForm = { name: "", code: "", status: "Active" as Zone["status"] };
+const LIMIT = 10;
 
 const ZonesPage = () => {
   const [data, setData] = useState<Zone[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
 
   const [addDialog, setAddDialog] = useState(false);
   const [addForm, setAddForm] = useState(emptyForm);
@@ -48,7 +58,6 @@ const ZonesPage = () => {
 
   const [deleteDialog, setDeleteDialog] = useState<Zone | null>(null);
 
-  // Import flow: step "menu" | "confirm" | "upload"
   const [importDialog, setImportDialog] = useState(false);
   const [importStep, setImportStep] = useState<"menu" | "confirm" | "upload">("menu");
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -65,31 +74,48 @@ const ZonesPage = () => {
     setImportFile(file);
   };
 
-  // Export confirm
   const [exportDialog, setExportDialog] = useState(false);
 
-  const fetchZones = async () => {
+  // Debounce search 500ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const fetchZones = useCallback(async (page = 1) => {
+    setLoading(true);
     try {
-      const res = await api.get("/admin/zones");
+      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filters.status && filters.status !== "all") params.status = filters.status;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/zones", { params });
       setData(res.data.data);
+      setPagination({
+        page: res.data.pagination.page,
+        totalPages: res.data.pagination.totalPages,
+        total: res.data.pagination.total,
+      });
     } catch {
       toast.error("Failed to fetch zones");
     } finally {
       setLoading(false);
     }
-  };
+  }, [debouncedSearch, filters, fromDate, toDate]);
 
-  useEffect(() => { fetchZones(); }, []);
+  // Reset to page 1 when search/filters change
+  useEffect(() => { fetchZones(1); }, [fetchZones]);
 
   const handleAdd = async () => {
     if (!addForm.name || !addForm.code) return toast.error("Name and code are required");
     setSubmitting(true);
     try {
-      const res = await api.post("/admin/zones", addForm);
-      setData((prev) => [res.data.data, ...prev]);
+      await api.post("/admin/zones", addForm);
       toast.success("Zone added successfully");
       setAddDialog(false);
       setAddForm(emptyForm);
+      fetchZones(1);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to add zone");
     } finally {
@@ -102,10 +128,10 @@ const ZonesPage = () => {
     if (!editForm.name || !editForm.code) return toast.error("Name and code are required");
     setSubmitting(true);
     try {
-      const res = await api.patch(`/admin/zones/${editDialog._id}`, editForm);
-      setData((prev) => prev.map((z) => z._id === editDialog._id ? res.data.data : z));
+      await api.patch(`/admin/zones/${editDialog._id}`, editForm);
       toast.success("Zone updated successfully");
       setEditDialog(null);
+      fetchZones(pagination.page);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update zone");
     } finally {
@@ -118,9 +144,10 @@ const ZonesPage = () => {
     setSubmitting(true);
     try {
       await api.delete(`/admin/zones/${deleteDialog._id}`);
-      setData((prev) => prev.filter((z) => z._id !== deleteDialog._id));
       toast.success("Zone deleted successfully");
       setDeleteDialog(null);
+      const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
+      fetchZones(newPage);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete zone");
     } finally {
@@ -131,9 +158,9 @@ const ZonesPage = () => {
   const toggleStatus = async (zone: Zone) => {
     const newStatus = zone.status === "Active" ? "Inactive" : "Active";
     try {
-      const res = await api.patch(`/admin/zones/${zone._id}`, { status: newStatus });
-      setData((prev) => prev.map((z) => z._id === zone._id ? res.data.data : z));
+      await api.patch(`/admin/zones/${zone._id}`, { status: newStatus });
       toast.success(`Status updated to ${newStatus}`);
+      fetchZones(pagination.page);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update status");
     }
@@ -165,7 +192,7 @@ const ZonesPage = () => {
       setImportDialog(false);
       setImportStep("menu");
       setImportFile(null);
-      fetchZones();
+      fetchZones(1);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Import failed");
     } finally {
@@ -189,16 +216,8 @@ const ZonesPage = () => {
     }
   };
 
-  let filtered = [...data];
-  if (filters.status && filters.status !== "all") filtered = filtered.filter((z) => z.status === filters.status);
-  if (fromDate && toDate) filtered = filtered.filter((z) => z.createdAt.slice(0, 10) >= fromDate && z.createdAt.slice(0, 10) <= toDate);
-  if (search) {
-    const s = search.toLowerCase();
-    filtered = filtered.filter((z) => z.name.toLowerCase().includes(s) || z.code.toLowerCase().includes(s));
-  }
-
   const columns: Column<Zone>[] = [
-    { key: "_id", label: "No.", render: (_z, i) => <span className="font-medium text-foreground">{i + 1}</span> },
+    { key: "_id", label: "No.", render: (_z, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     { key: "name", label: "Zone Name", render: (z) => <span className="font-medium">{z.name}</span> },
     { key: "code", label: "Zone Code", render: (z) => <span className="font-mono text-sm">{z.code}</span> },
     {
@@ -267,7 +286,14 @@ const ZonesPage = () => {
             onToDateChange={setToDate}
             onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
           />
-          <DataTable columns={columns} data={filtered} />
+          <DataTable columns={columns} data={data} />
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={LIMIT}
+            onPageChange={fetchZones}
+          />
         </>
       )}
 

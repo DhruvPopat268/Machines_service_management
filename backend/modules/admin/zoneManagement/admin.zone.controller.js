@@ -4,8 +4,52 @@ const Zone = require("./admin.zone.model");
 
 const getAllZones = async (req, res) => {
   try {
-    const zones = await Zone.find();
-    res.status(200).json({ success: true, data: zones });
+    const { search, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
+
+    const query = {};
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      query.$or = [
+        { name: { $regex: s, $options: "i" } },
+        { code: { $regex: s, $options: "i" } },
+      ];
+    }
+
+    if (status && ["Active", "Inactive"].includes(status)) {
+      query.status = status;
+    }
+
+    // fromDate / toDate arrive as dd/mm/yy IST — convert to UTC range for MongoDB
+    if (fromDate || toDate) {
+      const parseIST = (ddmmyy, endOfDay = false) => {
+        const [dd, mm, yy] = ddmmyy.split("/");
+        const year = 2000 + Number(yy);
+        // IST midnight = UTC 18:30 previous day; IST 23:59:59 = UTC 18:29:59 same day
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const base = Date.UTC(year, Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return new Date(base - istOffsetMs);
+      };
+
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
+      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+    }
+
+    const pageNum  = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip     = (pageNum - 1) * limitNum;
+
+    const [zones, total] = await Promise.all([
+      Zone.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      Zone.countDocuments(query),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: zones,
+      pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
