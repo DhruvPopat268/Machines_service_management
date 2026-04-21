@@ -8,12 +8,15 @@ const getAllZones = async (req, res) => {
 
     const query = {};
 
-    if (search && search.trim()) {
-      const s = search.trim();
-      query.$or = [
-        { name: { $regex: s, $options: "i" } },
-        { code: { $regex: s, $options: "i" } },
-      ];
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) {
+        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        query.$or = [
+          { name: { $regex: escaped, $options: "i" } },
+          { code: { $regex: escaped, $options: "i" } },
+        ];
+      }
     }
 
     if (status && ["Active", "Inactive"].includes(status)) {

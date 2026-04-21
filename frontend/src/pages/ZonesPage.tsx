@@ -82,7 +82,14 @@ const ZonesPage = () => {
     return () => clearTimeout(t);
   }, [search]);
 
+  const abortRef = useRef<AbortController | null>(null);
+
   const fetchZones = useCallback(async (page = 1) => {
+    // Cancel any in-flight request before starting a new one
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
@@ -90,17 +97,19 @@ const ZonesPage = () => {
       if (filters.status && filters.status !== "all") params.status = filters.status;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
-      const res = await api.get("/admin/zones", { params });
+      const res = await api.get("/admin/zones", { params, signal: controller.signal });
       setData(res.data.data);
       setPagination({
         page: res.data.pagination.page,
         totalPages: res.data.pagination.totalPages,
         total: res.data.pagination.total,
       });
-    } catch {
-      toast.error("Failed to fetch zones");
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        toast.error("Failed to fetch zones");
+      }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [debouncedSearch, filters, fromDate, toDate]);
 
