@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
-const AdminUser = require("../auth/admin.user.model");
-const AdminUserSession = require("../auth/admin.user.session.model");
+const AdminUser = require("../modules/admin/auth/admin.user.model");
+const AdminUserSession = require("../modules/admin/auth/admin.user.session.model");
 
 const adminAuthMiddleware = async (req, res, next) => {
   try {
