@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const multer = require("multer");
 const { getAllZones, createZone, updateZone, deleteZone, importZones, exportZones, downloadSample } = require("./admin.zone.controller");
-const adminAuthMiddleware = require("../middleware/admin.auth.middleware");
+const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 

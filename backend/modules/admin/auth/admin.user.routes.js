@@ -1,11 +1,12 @@
 const router = require("express").Router();
 const { getAllUsers, createUser, updateUser, deleteUser, login, logout } = require("./admin.user.controller");
-const adminAuthMiddleware = require("../middleware/admin.auth.middleware");
+const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 router.post("/login", login);
-router.post("/logout", adminAuthMiddleware, logout);
 
-// router.use(adminAuthMiddleware);
+router.use(adminAuthMiddleware);
+
+router.post("/logout", logout);
 router.get("/", getAllUsers);
 router.post("/", createUser);
 router.patch("/:id", updateUser);
