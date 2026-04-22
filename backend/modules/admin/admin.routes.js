@@ -6,5 +6,6 @@ router.use("/contract-types", require("./contractTypesManagement/admin.contractT
 router.use("/vendors", require("./vendorManagement/admin.vendor.routes"));
 router.use("/attributes", require("./attributeManagement/admin.attribute.routes"));
 router.use("/machine-categories", require("./machineCategoryManagement/admin.machineCategory.routes"));
+router.use("/machine-divisions", require("./machineDivisionManagement/admin.machineDivision.routes"));
 
 module.exports = router;
