@@ -58,6 +58,7 @@ const MachineCategoriesPage = () => {
   const [editForm, setEditForm] = useState(emptyForm);
 
   const [deleteDialog, setDeleteDialog] = useState<MachineCategory | null>(null);
+  const [deleteAttributeCount, setDeleteAttributeCount] = useState<number | null>(null);
 
   const [importDialog, setImportDialog] = useState(false);
   const [importStep, setImportStep] = useState<"menu" | "confirm" | "upload">("menu");
@@ -146,6 +147,17 @@ const MachineCategoriesPage = () => {
     }
   };
 
+  const openDeleteDialog = async (c: MachineCategory) => {
+    setDeleteAttributeCount(null);
+    setDeleteDialog(c);
+    try {
+      const res = await api.get(`/admin/machine-categories/${c._id}/attribute-count`);
+      setDeleteAttributeCount(res.data.count);
+    } catch {
+      setDeleteAttributeCount(0);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteDialog) return;
     setSubmitting(true);
@@ -153,6 +165,7 @@ const MachineCategoriesPage = () => {
       await api.delete(`/admin/machine-categories/${deleteDialog._id}`);
       toast.success("Category deleted successfully");
       setDeleteDialog(null);
+      setDeleteAttributeCount(null);
       const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
       fetchCategories(newPage);
     } catch (err: any) {
@@ -254,7 +267,7 @@ const MachineCategoriesPage = () => {
           <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${c.name}`} onClick={() => { setEditDialog(c); setEditForm({ name: c.name, description: c.description, status: c.status }); }}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${c.name}`} onClick={() => setDeleteDialog(c)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${c.name}`} onClick={() => openDeleteDialog(c)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -355,15 +368,27 @@ const MachineCategoriesPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => { if (!open) { setDeleteDialog(null); setDeleteAttributeCount(null); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Machine Category</DialogTitle>
-            <DialogDescription>Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.</DialogDescription>
+            <DialogDescription>
+              Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.
+            </DialogDescription>
           </DialogHeader>
+          {deleteAttributeCount === null && (
+            <p className="text-sm text-muted-foreground">Checking affected attributes...</p>
+          )}
+          {deleteAttributeCount !== null && deleteAttributeCount > 0 && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+              <span className="text-destructive text-sm">⚠ <span className="font-semibold">{deleteAttributeCount} attribute{deleteAttributeCount !== 1 ? "s" : ""}</span> linked to this category will also be affected.</span>
+            </div>
+          )}
+          {deleteAttributeCount === 0 && (
+            <p className="text-sm text-muted-foreground">No attributes are linked to this category.</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setDeleteDialog(null); setDeleteAttributeCount(null); }}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={submitting}>{submitting ? "Deleting..." : "Delete"}</Button>
           </DialogFooter>
         </DialogContent>

@@ -3,6 +3,8 @@ const xlsx = require("xlsx");
 const Zone = require("./admin.zone.model");
 const { validateCreateZone, validateUpdateZone, validateImportZoneRow, caseInsensitiveNameRegex } = require("./admin.zone.validator");
 
+const Customer = require("../customerManagement/admin.customer.model");
+
 const getAllZones = async (req, res) => {
   try {
     const { search, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -149,6 +151,18 @@ const deleteZone = async (req, res) => {
   }
 };
 
+const getCustomerCount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid zone ID" });
+    const count = await Customer.countDocuments({ zone: id });
+    res.status(200).json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([["name", "code", "status"], ["North Zone", "NZ", "Active"]]);
   const wb = xlsx.utils.book_new();
@@ -258,4 +272,4 @@ const exportZones = async (req, res) => {
   }
 };
 
-module.exports = { getAllZones, createZone, updateZone, deleteZone, importZones, exportZones, downloadSample };
+module.exports = { getAllZones, createZone, updateZone, deleteZone, getCustomerCount, importZones, exportZones, downloadSample };
