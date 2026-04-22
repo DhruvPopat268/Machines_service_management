@@ -8,6 +8,7 @@ const contractTypeSchema = new mongoose.Schema(
     freeService: { type: Boolean, default: false },
     freeParts:   { type: Boolean, default: false },
     status:      { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    source:      { type: String, enum: ["manual", "imported"], default: "manual" },
   },
   { timestamps: true }
 );

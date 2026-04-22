@@ -61,7 +61,7 @@ const create = async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: "Problem type name already exists" });
 
-    const problemType = await ProblemType.create({ name: name.trim(), description, status });
+    const problemType = await ProblemType.create({ name: name.trim(), description, status, source: "manual" });
     res.status(201).json({ success: true, data: problemType });
   } catch (err) {
     if (err.code === 11000)
@@ -173,7 +173,7 @@ const importProblemTypes = async (req, res) => {
       try {
         const existing = await ProblemType.findOne({ name: caseInsensitiveNameRegex(doc.name) });
         if (existing) { skipped++; continue; }
-        await ProblemType.create(doc);
+        await ProblemType.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

@@ -32,6 +32,7 @@ interface Customer {
   gstNumber: string;
   totalPurchases: number;
   status: "Active" | "Inactive";
+  source: "manual" | "imported";
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +51,36 @@ const toISTDateParam = (htmlDate: string) => {
 
 const emptyForm = { name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", status: "Active" as Customer["status"] };
 const LIMIT = 10;
+
+interface CustomerFormProps {
+  form: typeof emptyForm;
+  setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
+  zoneOptions: { label: string; value: string }[];
+}
+
+const CustomerForm = ({ form, setForm, zoneOptions }: CustomerFormProps) => (
+  <div className="space-y-4 py-4">
+    <div className="space-y-2"><Label htmlFor="cust-name">Name</Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+    <div className="space-y-2"><Label htmlFor="cust-phone">Phone</Label><Input id="cust-phone" placeholder="+91 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+    <div className="space-y-2"><Label htmlFor="cust-email">Email</Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
+    <div className="space-y-2"><Label htmlFor="cust-address">Address</Label><Input id="cust-address" placeholder="Full address" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /></div>
+    <div className="space-y-2">
+      <Label>Zone</Label>
+      <SearchableSelect options={zoneOptions} value={form.zone} onChange={(v) => setForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
+    </div>
+    <div className="space-y-2"><Label htmlFor="cust-gst">GST Number</Label><Input id="cust-gst" placeholder="e.g. 27AABCA1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
+    <div className="space-y-2">
+      <Label htmlFor="cust-status">Status</Label>
+      <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Customer["status"] }))}>
+        <SelectTrigger id="cust-status"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="Active">Active</SelectItem>
+          <SelectItem value="Inactive">Inactive</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  </div>
+);
 
 const CustomersPage = () => {
   const navigate = useNavigate();
@@ -263,6 +294,13 @@ const CustomersPage = () => {
     { key: "gstNumber", label: "GST Number", render: (c) => c.gstNumber ? <span className="font-mono text-sm">{c.gstNumber}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "totalPurchases", label: "Purchases", render: (c) => <span className="font-medium text-sm">{c.totalPurchases}</span> },
     {
+      key: "source", label: "Source", render: (c) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          c.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+        }`}>{c.source === "imported" ? "Imported" : "Manual"}</span>
+      ),
+    },
+    {
       key: "status", label: "Status", render: (c) => (
         <div className="flex items-center gap-2">
           <Switch checked={c.status === "Active"} onCheckedChange={() => toggleStatus(c)} aria-label={`Toggle status for ${c.name}`} />
@@ -297,30 +335,6 @@ const CustomersPage = () => {
     },
   ];
 
-  const CustomerForm = ({ form, setForm }: { form: typeof emptyForm; setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>> }) => (
-    <div className="space-y-4 py-4">
-      <div className="space-y-2"><Label htmlFor="cust-name">Name</Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
-      <div className="space-y-2"><Label htmlFor="cust-phone">Phone</Label><Input id="cust-phone" placeholder="+91 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
-      <div className="space-y-2"><Label htmlFor="cust-email">Email</Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
-      <div className="space-y-2"><Label htmlFor="cust-address">Address</Label><Input id="cust-address" placeholder="Full address" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /></div>
-      <div className="space-y-2">
-        <Label>Zone</Label>
-        <SearchableSelect options={zoneOptions} value={form.zone} onChange={(v) => setForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
-      </div>
-      <div className="space-y-2"><Label htmlFor="cust-gst">GST Number</Label><Input id="cust-gst" placeholder="e.g. 27AABCA1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
-      <div className="space-y-2">
-        <Label htmlFor="cust-status">Status</Label>
-        <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Customer["status"] }))}>
-          <SelectTrigger id="cust-status"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Active">Active</SelectItem>
-            <SelectItem value="Inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       {loading ? <Spinner /> : (
@@ -351,7 +365,7 @@ const CustomersPage = () => {
       <Dialog open={addDialog} onOpenChange={(open) => { if (!open) { setAddDialog(false); setAddForm(emptyForm); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Add New Customer</DialogTitle></DialogHeader>
-          <CustomerForm form={addForm} setForm={setAddForm} />
+          <CustomerForm form={addForm} setForm={setAddForm} zoneOptions={zoneOptions} />
           <DialogFooter>
             <Button variant="outline" onClick={() => { setAddDialog(false); setAddForm(emptyForm); }}>Cancel</Button>
             <Button onClick={handleAdd} disabled={submitting}>{submitting ? "Adding..." : "Add Customer"}</Button>
@@ -363,7 +377,7 @@ const CustomersPage = () => {
       <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Customer</DialogTitle></DialogHeader>
-          <CustomerForm form={editForm} setForm={setEditForm} />
+          <CustomerForm form={editForm} setForm={setEditForm} zoneOptions={zoneOptions} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialog(null)}>Cancel</Button>
             <Button onClick={handleEdit} disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>

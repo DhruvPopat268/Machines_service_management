@@ -20,6 +20,7 @@ interface MachineCategory {
   name: string;
   description: string;
   status: "Active" | "Inactive";
+  source: "manual" | "imported";
   createdAt: string;
   updatedAt: string;
 }
@@ -226,6 +227,13 @@ const MachineCategoriesPage = () => {
           <Switch checked={c.status === "Active"} onCheckedChange={() => toggleStatus(c)} aria-label={`Toggle status for ${c.name}`} />
           <span className={c.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{c.status}</span>
         </div>
+      ),
+    },
+    {
+      key: "source", label: "Source", render: (c) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          c.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+        }`}>{c.source === "imported" ? "Imported" : "Manual"}</span>
       ),
     },
     {

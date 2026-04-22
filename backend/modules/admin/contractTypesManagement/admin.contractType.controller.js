@@ -76,7 +76,7 @@ const create = async (req, res) => {
 
     const contractType = await ContractType.create({
       name: name.trim(), code, description,
-      freeService: !!freeService, freeParts: !!freeParts, status,
+      freeService: !!freeService, freeParts: !!freeParts, status, source: "manual",
     });
     res.status(201).json({ success: true, data: contractType });
   } catch (err) {
@@ -210,7 +210,7 @@ const importContractTypes = async (req, res) => {
           ],
         });
         if (existing) { skipped++; continue; }
-        await ContractType.create(doc);
+        await ContractType.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Plus, Edit, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
@@ -26,6 +27,7 @@ interface Attribute {
   machineCategory: MachineCategory;
   description: string;
   status: "Active" | "Inactive";
+  source: "manual" | "imported";
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +90,8 @@ const AttributesPage = () => {
       .then((res) => setCategories(res.data.data))
       .catch(() => toast.error("Failed to fetch machine categories"));
   }, []);
+
+  const categoryOptions = categories.map((c) => ({ label: c.name, value: c._id }));
 
   // Debounce search 500ms
   useEffect(() => {
@@ -234,13 +238,8 @@ const AttributesPage = () => {
     }
   };
 
-  const CategorySelect = ({ value, onChange, id }: { value: string; onChange: (v: string) => void; id: string }) => (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger id={id}><SelectValue placeholder="Select category" /></SelectTrigger>
-      <SelectContent>
-        {categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
-      </SelectContent>
-    </Select>
+  const CategorySelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <SearchableSelect options={categoryOptions} value={value} onChange={onChange} placeholder="Select category" searchPlaceholder="Search categories..." />
   );
 
   const columns: Column<Attribute>[] = [
@@ -254,6 +253,13 @@ const AttributesPage = () => {
           <Switch checked={a.status === "Active"} onCheckedChange={() => toggleStatus(a)} aria-label={`Toggle status for ${a.name}`} />
           <span className={a.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{a.status}</span>
         </div>
+      ),
+    },
+    {
+      key: "source", label: "Source", render: (a) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          a.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+        }`}>{a.source === "imported" ? "Imported" : "Manual"}</span>
       ),
     },
     {
@@ -338,7 +344,7 @@ const AttributesPage = () => {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="add-attr-cat">Machine Category</Label>
-              <CategorySelect id="add-attr-cat" value={addForm.machineCategory} onChange={(v) => setAddForm((p) => ({ ...p, machineCategory: v }))} />
+              <CategorySelect value={addForm.machineCategory} onChange={(v) => setAddForm((p) => ({ ...p, machineCategory: v }))} />
             </div>
             <div className="space-y-2"><Label htmlFor="add-attr-name">Attribute Name</Label><Input id="add-attr-name" placeholder="e.g. Color, Voltage, Power (kW)" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label htmlFor="add-attr-desc">Description</Label><Textarea id="add-attr-desc" placeholder="Brief description of this attribute" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} /></div>
@@ -367,7 +373,7 @@ const AttributesPage = () => {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="edit-attr-cat">Machine Category</Label>
-              <CategorySelect id="edit-attr-cat" value={editForm.machineCategory} onChange={(v) => setEditForm((p) => ({ ...p, machineCategory: v }))} />
+              <CategorySelect value={editForm.machineCategory} onChange={(v) => setEditForm((p) => ({ ...p, machineCategory: v }))} />
             </div>
             <div className="space-y-2"><Label htmlFor="edit-attr-name">Attribute Name</Label><Input id="edit-attr-name" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label htmlFor="edit-attr-desc">Description</Label><Textarea id="edit-attr-desc" value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} /></div>

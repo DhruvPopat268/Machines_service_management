@@ -61,7 +61,7 @@ const create = async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: "Division name already exists" });
 
-    const division = await MachineDivision.create({ name: name.trim(), description, status });
+    const division = await MachineDivision.create({ name: name.trim(), description, status, source: "manual" });
     res.status(201).json({ success: true, data: division });
   } catch (err) {
     if (err.code === 11000)
@@ -173,7 +173,7 @@ const importDivisions = async (req, res) => {
       try {
         const existing = await MachineDivision.findOne({ name: caseInsensitiveNameRegex(doc.name) });
         if (existing) { skipped++; continue; }
-        await MachineDivision.create(doc);
+        await MachineDivision.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

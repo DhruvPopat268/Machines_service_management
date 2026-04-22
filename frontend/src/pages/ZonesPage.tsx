@@ -19,6 +19,7 @@ interface Zone {
   name: string;
   code: string;
   status: "Active" | "Inactive";
+  source: "manual" | "imported";
   createdAt: string;
   updatedAt: string;
 }
@@ -235,6 +236,13 @@ const ZonesPage = () => {
           <Switch checked={z.status === "Active"} onCheckedChange={() => toggleStatus(z)} aria-label={`Toggle status for ${z.name}`} />
           <span className={z.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{z.status}</span>
         </div>
+      ),
+    },
+    {
+      key: "source", label: "Source", render: (z) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          z.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+        }`}>{z.source === "imported" ? "Imported" : "Manual"}</span>
       ),
     },
     {
