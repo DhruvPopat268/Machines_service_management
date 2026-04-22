@@ -185,15 +185,16 @@ const importContractTypes = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const error = validateImportContractTypeRow(row, i + 2);
+      const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      const error = validateImportContractTypeRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
-        name:        String(row.name        || "").trim(),
-        code:        String(row.code        || "").trim().toUpperCase(),
-        status:      String(row.status      || "").trim(),
-        freeService: String(row.freeService || "").trim().toLowerCase() === "true",
-        freeParts:   String(row.freeParts   || "").trim().toLowerCase() === "true",
-        description: String(row.description || "").trim(),
+        name:        String(normalized.name        || "").trim(),
+        code:        String(normalized.code        || "").trim().toUpperCase(),
+        status:      String(normalized.status      || "").trim(),
+        freeService: String(normalized.freeservice || "").trim().toLowerCase() === "true",
+        freeParts:   String(normalized.freeparts   || "").trim().toLowerCase() === "true",
+        description: String(normalized.description || "").trim(),
       });
     });
 

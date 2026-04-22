@@ -167,16 +167,17 @@ const importVendors = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const error = validateImportVendorRow(row, i + 2);
+      const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      const error = validateImportVendorRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
-        name:        String(row.name        || "").trim(),
-        companyName: String(row.companyName || row.companyname || "").trim(),
-        phone:       String(row.phone       || "").trim(),
-        email:       String(row.email       || "").trim().toLowerCase(),
-        address:     String(row.address     || "").trim(),
-        gstNumber:   String(row.gstNumber   || row.gstnumber || "").trim().toUpperCase(),
-        status:      String(row.status      || "").trim(),
+        name:        String(normalized.name        || "").trim(),
+        companyName: String(normalized.companyname || "").trim(),
+        phone:       String(normalized.phone       || "").trim(),
+        email:       String(normalized.email       || "").trim().toLowerCase(),
+        address:     String(normalized.address     || "").trim(),
+        gstNumber:   String(normalized.gstnumber   || "").trim().toUpperCase(),
+        status:      String(normalized.status      || "").trim(),
       });
     });
 

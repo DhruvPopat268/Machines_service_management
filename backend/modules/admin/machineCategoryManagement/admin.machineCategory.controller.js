@@ -157,12 +157,13 @@ const importCategories = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const error = validateImportCategoryRow(row, i + 2);
+      const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      const error = validateImportCategoryRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
-        name:        String(row.name        || "").trim(),
-        description: String(row.description || "").trim(),
-        status:      String(row.status      || "").trim(),
+        name:        String(normalized.name        || "").trim(),
+        description: String(normalized.description || "").trim(),
+        status:      String(normalized.status      || "").trim(),
       });
     });
 
