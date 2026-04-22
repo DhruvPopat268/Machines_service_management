@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
-const Vendor = require("./admin.vendor.model");
-const { validateCreateVendor, validateUpdateVendor, validateImportVendorRow } = require("./admin.vendor.validator");
+const MachineCategory = require("./admin.machineCategory.model");
+const { validateCreateCategory, validateUpdateCategory, validateImportCategoryRow, caseInsensitiveNameRegex } = require("./admin.machineCategory.validator");
 
 const getAll = async (req, res) => {
   try {
@@ -13,12 +13,7 @@ const getAll = async (req, res) => {
       const s = search.trim().slice(0, 100);
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        query.$or = [
-          { name:        { $regex: escaped, $options: "i" } },
-          { companyName: { $regex: escaped, $options: "i" } },
-          { phone:       { $regex: escaped, $options: "i" } },
-          { email:       { $regex: escaped, $options: "i" } },
-        ];
+        query.name = { $regex: escaped, $options: "i" };
       }
     }
 
@@ -40,14 +35,14 @@ const getAll = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip     = (pageNum - 1) * limitNum;
 
-    const [vendors, total] = await Promise.all([
-      Vendor.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
-      Vendor.countDocuments(query),
+    const [categories, total] = await Promise.all([
+      MachineCategory.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      MachineCategory.countDocuments(query),
     ]);
 
     res.status(200).json({
       success: true,
-      data: vendors,
+      data: categories,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     });
   } catch (err) {
@@ -57,27 +52,20 @@ const getAll = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, companyName, phone, email, address, gstNumber, status } = req.body;
+    const { name, description, status } = req.body;
 
-    const error = validateCreateVendor({ name, companyName, phone, email, status });
+    const error = validateCreateCategory({ name, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
-    const trimmedGst = gstNumber ? String(gstNumber).trim().toUpperCase() : "";
-    if (trimmedGst) {
-      const gstExists = await Vendor.findOne({ gstNumber: trimmedGst });
-      if (gstExists)
-        return res.status(409).json({ success: false, message: "GST number already exists" });
-    }
+    const existing = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(name.trim()) });
+    if (existing)
+      return res.status(409).json({ success: false, message: "Category name already exists" });
 
-    const vendor = await Vendor.create({
-      name: name.trim(), companyName: companyName.trim(),
-      phone: phone.trim(), email: email.trim().toLowerCase(),
-      address, gstNumber: trimmedGst, status,
-    });
-    res.status(201).json({ success: true, data: vendor });
+    const category = await MachineCategory.create({ name: name.trim(), description, status });
+    res.status(201).json({ success: true, data: category });
   } catch (err) {
     if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+      return res.status(409).json({ success: false, message: "Category name already exists" });
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -86,34 +74,36 @@ const update = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid vendor ID" });
+      return res.status(400).json({ success: false, message: "Invalid category ID" });
 
-    const { name, companyName, phone, email, address, gstNumber, status } = req.body;
+    const { name, description, status } = req.body;
 
-    const error = validateUpdateVendor({ status });
+    const error = validateUpdateCategory({ status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};
 
     if (name !== undefined)        updateData.name        = typeof name === "string" ? name.trim() : name;
-    if (companyName !== undefined) updateData.companyName = typeof companyName === "string" ? companyName.trim() : companyName;
-    if (phone !== undefined)       updateData.phone       = typeof phone === "string" ? phone.trim() : phone;
-    if (email !== undefined)       updateData.email       = typeof email === "string" ? email.trim().toLowerCase() : email;
-    if (address !== undefined)     updateData.address     = address;
-    if (gstNumber !== undefined)   updateData.gstNumber   = typeof gstNumber === "string" ? gstNumber.trim().toUpperCase() : gstNumber;
-    if (status !== undefined) updateData.status = status;
+    if (description !== undefined) updateData.description = description;
+    if (status !== undefined)      updateData.status      = status;
 
     if (Object.keys(updateData).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
-    const vendor = await Vendor.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
-    if (!vendor)
-      return res.status(404).json({ success: false, message: "Vendor not found" });
+    if (updateData.name) {
+      const conflict = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(updateData.name), _id: { $ne: id } });
+      if (conflict)
+        return res.status(409).json({ success: false, message: "Category name already exists" });
+    }
 
-    res.status(200).json({ success: true, data: vendor });
+    const category = await MachineCategory.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
+    if (!category)
+      return res.status(404).json({ success: false, message: "Category not found" });
+
+    res.status(200).json({ success: true, data: category });
   } catch (err) {
     if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+      return res.status(409).json({ success: false, message: "Category name already exists" });
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -122,13 +112,13 @@ const remove = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid vendor ID" });
+      return res.status(400).json({ success: false, message: "Invalid category ID" });
 
-    const vendor = await Vendor.findByIdAndDelete(id);
-    if (!vendor)
-      return res.status(404).json({ success: false, message: "Vendor not found" });
+    const category = await MachineCategory.findByIdAndDelete(id);
+    if (!category)
+      return res.status(404).json({ success: false, message: "Category not found" });
 
-    res.status(200).json({ success: true, message: "Vendor deleted successfully" });
+    res.status(200).json({ success: true, message: "Category deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -136,18 +126,18 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "companyName", "phone", "email", "address", "gstNumber", "status"],
-    ["John Doe", "Acme Supplies", "+91 9800000000", "john@acme.com", "123 Main St, Mumbai", "27AABCG1234A1Z5", "Active"],
+    ["name", "description", "status"],
+    ["Heavy Machinery", "Large industrial machines", "Active"],
   ]);
   const wb = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(wb, ws, "Vendors");
+  xlsx.utils.book_append_sheet(wb, ws, "MachineCategories");
   const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-  res.setHeader("Content-Disposition", "attachment; filename=vendors_sample.xlsx");
+  res.setHeader("Content-Disposition", "attachment; filename=machine_categories_sample.xlsx");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.send(buf);
 };
 
-const importVendors = async (req, res) => {
+const importCategories = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
     if (!req.file.originalname.match(/\.xlsx$/i))
@@ -158,7 +148,7 @@ const importVendors = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "companyname", "phone", "email", "status"];
+    const required = ["name", "status"];
     const headers = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing = required.filter((h) => !headers.includes(h));
     if (missing.length)
@@ -167,15 +157,11 @@ const importVendors = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const error = validateImportVendorRow(row, i + 2);
+      const error = validateImportCategoryRow(row, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
         name:        String(row.name        || "").trim(),
-        companyName: String(row.companyName || row.companyname || "").trim(),
-        phone:       String(row.phone       || "").trim(),
-        email:       String(row.email       || "").trim().toLowerCase(),
-        address:     String(row.address     || "").trim(),
-        gstNumber:   String(row.gstNumber   || row.gstnumber || "").trim().toUpperCase(),
+        description: String(row.description || "").trim(),
         status:      String(row.status      || "").trim(),
       });
     });
@@ -185,24 +171,17 @@ const importVendors = async (req, res) => {
     let imported = 0, skipped = 0;
     for (const doc of docs) {
       try {
-        if (doc.gstNumber) {
-          const existing = await Vendor.findOneAndUpdate(
-            { gstNumber: doc.gstNumber },
-            { $setOnInsert: doc },
-            { upsert: true, returnDocument: "before", setDefaultsOnInsert: true }
-          );
-          existing ? skipped++ : imported++;
-        } else {
-          await Vendor.create(doc);
-          imported++;
-        }
+        const existing = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(doc.name) });
+        if (existing) { skipped++; continue; }
+        await MachineCategory.create(doc);
+        imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
       }
     }
 
-    const parts = [`${imported} vendor${imported !== 1 ? "s" : ""} imported successfully`];
-    if (skipped) parts.push(`${skipped} skipped (duplicate)`);
+    const parts = [`${imported} categor${imported !== 1 ? "ies" : "y"} imported successfully`];
+    if (skipped) parts.push(`${skipped} skipped (duplicate name)`);
     res.status(200).json({ success: true, message: parts.join(", ") });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -221,24 +200,23 @@ const formatIST = (date) => {
   return { date: `${dd}/${mm}/${yy}`, time: `${h12}:${min} ${ampm}` };
 };
 
-const exportVendors = async (req, res) => {
+const exportCategories = async (req, res) => {
   try {
-    const vendors = await Vendor.find().lean();
-    const rows = vendors.map((v) => {
-      const created = formatIST(v.createdAt);
-      const updated = formatIST(v.updatedAt);
+    const categories = await MachineCategory.find().lean();
+    const rows = categories.map((c) => {
+      const created = formatIST(c.createdAt);
+      const updated = formatIST(c.updatedAt);
       return {
-        name: v.name, companyName: v.companyName, phone: v.phone,
-        email: v.email, address: v.address, gstNumber: v.gstNumber, status: v.status,
+        name: c.name, description: c.description, status: c.status,
         "Created Date": created.date, "Created Time": created.time,
         "Updated Date": updated.date, "Updated Time": updated.time,
       };
     });
     const ws = xlsx.utils.json_to_sheet(rows);
     const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, "Vendors");
+    xlsx.utils.book_append_sheet(wb, ws, "MachineCategories");
     const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-    res.setHeader("Content-Disposition", "attachment; filename=vendors.xlsx");
+    res.setHeader("Content-Disposition", "attachment; filename=machine_categories.xlsx");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buf);
   } catch (err) {
@@ -246,4 +224,4 @@ const exportVendors = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, update, remove, downloadSample, importVendors, exportVendors };
+module.exports = { getAll, create, update, remove, downloadSample, importCategories, exportCategories };

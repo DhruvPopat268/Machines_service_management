@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const Zone = require("./admin.zone.model");
+const { validateCreateZone, validateUpdateZone, validateImportZoneRow, caseInsensitiveNameRegex } = require("./admin.zone.validator");
 
 const getAllZones = async (req, res) => {
   try {
@@ -63,20 +64,16 @@ const createZone = async (req, res) => {
     const { name, description, status } = req.body;
     const rawCode = req.body.code;
 
-    if (!name || typeof name !== "string" || !name.trim())
-      return res.status(400).json({ success: false, message: "Name is required" });
-    if (!rawCode || typeof rawCode !== "string" || !rawCode.trim())
-      return res.status(400).json({ success: false, message: "Code is required" });
-    if (status !== undefined && !["Active", "Inactive"].includes(status))
-      return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
+    const error = validateCreateZone({ name, code: rawCode, status });
+    if (error) return res.status(400).json({ success: false, message: error });
 
     const code = rawCode.trim().toUpperCase();
 
-    const existing = await Zone.findOne({ $or: [{ code }, { name: name.trim() }] });
+    const existing = await Zone.findOne({ $or: [{ name: caseInsensitiveNameRegex(name.trim()) }, { code }] });
     if (existing) {
-      if (existing.code === code)
-        return res.status(409).json({ success: false, message: "Zone code already exists" });
-      return res.status(409).json({ success: false, message: "Zone name already exists" });
+      if (existing.name.toLowerCase() === name.trim().toLowerCase())
+        return res.status(409).json({ success: false, message: "Zone name already exists" });
+      return res.status(409).json({ success: false, message: "Zone code already exists" });
     }
 
     const zone = await Zone.create({ name: name.trim(), code, description, status });
@@ -98,19 +95,30 @@ const updateZone = async (req, res) => {
 
     const { name, code, description, status } = req.body;
 
+    const error = validateUpdateZone({ status });
+    if (error) return res.status(400).json({ success: false, message: error });
+
     const update = {};
     if (name !== undefined) update.name = typeof name === "string" ? name.trim() : name;
     if (code !== undefined) update.code = typeof code === "string" ? code.trim().toUpperCase() : code;
     if (description !== undefined) update.description = description;
-    if (status !== undefined) {
-      if (!["Active", "Inactive"].includes(status))
-        return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
-      update.status = status;
-    }
+    if (status !== undefined) update.status = status;
 
     if (Object.keys(update).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
+    // Case-insensitive duplicate check for name and code (excluding current doc)
+    if (update.name || update.code) {
+      const orConditions = [];
+      if (update.name) orConditions.push({ name: caseInsensitiveNameRegex(update.name) });
+      if (update.code) orConditions.push({ code: update.code });
+      const conflict = await Zone.findOne({ $or: orConditions, _id: { $ne: id } });
+      if (conflict) {
+        if (update.name && conflict.name.toLowerCase() === update.name.toLowerCase())
+          return res.status(409).json({ success: false, message: "Zone name already exists" });
+        return res.status(409).json({ success: false, message: "Zone code already exists" });
+      }
+    }
     const zone = await Zone.findByIdAndUpdate(id, update, { new: true, runValidators: true, context: "query" });
     if (!zone)
       return res.status(404).json({ success: false, message: "Zone not found" });
@@ -172,13 +180,13 @@ const importZones = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const name = String(row.name || "").trim();
-      const code = String(row.code || "").trim().toUpperCase();
-      const status = String(row.status || "").trim();
-      if (!name) { errors.push(`Row ${i + 2}: name is required`); return; }
-      if (!code) { errors.push(`Row ${i + 2}: code is required`); return; }
-      if (!["Active", "Inactive"].includes(status)) { errors.push(`Row ${i + 2}: status must be Active or Inactive`); return; }
-      docs.push({ name, code, status });
+      const error = validateImportZoneRow(row, i + 2);
+      if (error) { errors.push(error); return; }
+      docs.push({
+        name:   String(row.name  || "").trim(),
+        code:   String(row.code  || "").trim().toUpperCase(),
+        status: String(row.status || "").trim(),
+      });
     });
 
     if (errors.length) return res.status(400).json({ success: false, message: errors[0], errors });
@@ -187,12 +195,15 @@ const importZones = async (req, res) => {
     let skipped = 0;
     for (const doc of docs) {
       try {
-        const existing = await Zone.findOneAndUpdate(
-          { code: doc.code },
-          { $setOnInsert: doc },
-          { upsert: true, returnDocument: "before", setDefaultsOnInsert: true }
-        );
-        if (existing) { skipped++; } else { imported++; }
+        const existing = await Zone.findOne({
+          $or: [
+            { name: caseInsensitiveNameRegex(doc.name) },
+            { code: doc.code },
+          ],
+        });
+        if (existing) { skipped++; continue; }
+        await Zone.create(doc);
+        imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
       }
