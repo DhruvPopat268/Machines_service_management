@@ -179,13 +179,14 @@ const importAttributes = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const error = validateImportAttributeRow(row, i + 2);
+      const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      const error = validateImportAttributeRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
-        name:            String(row.name            || "").trim(),
-        machineCategory: String(row.machineCategory || row.machinecategory || "").trim(),
-        description:     String(row.description     || "").trim(),
-        status:          String(row.status          || "").trim(),
+        name:            String(normalized.name            || "").trim(),
+        machineCategory: String(normalized.machinecategory || "").trim(),
+        description:     String(normalized.description     || "").trim(),
+        status:          String(normalized.status          || "").trim(),
       });
     });
 

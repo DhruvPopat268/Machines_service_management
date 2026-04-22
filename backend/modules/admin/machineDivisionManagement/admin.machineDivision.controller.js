@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
-const MachineCategory = require("./admin.machineCategory.model");
-const { validateCreateCategory, validateUpdateCategory, validateImportCategoryRow, caseInsensitiveNameRegex } = require("./admin.machineCategory.validator");
+const MachineDivision = require("./admin.machineDivision.model");
+const { validateCreateDivision, validateUpdateDivision, validateImportDivisionRow, caseInsensitiveNameRegex } = require("./admin.machineDivision.validator");
 
 const getAll = async (req, res) => {
   try {
@@ -35,14 +35,14 @@ const getAll = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip     = (pageNum - 1) * limitNum;
 
-    const [categories, total] = await Promise.all([
-      MachineCategory.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
-      MachineCategory.countDocuments(query),
+    const [divisions, total] = await Promise.all([
+      MachineDivision.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      MachineDivision.countDocuments(query),
     ]);
 
     res.status(200).json({
       success: true,
-      data: categories,
+      data: divisions,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     });
   } catch (err) {
@@ -54,18 +54,18 @@ const create = async (req, res) => {
   try {
     const { name, description, status } = req.body;
 
-    const error = validateCreateCategory({ name, status });
+    const error = validateCreateDivision({ name, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
-    const existing = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(name.trim()) });
+    const existing = await MachineDivision.findOne({ name: caseInsensitiveNameRegex(name.trim()) });
     if (existing)
-      return res.status(409).json({ success: false, message: "Category name already exists" });
+      return res.status(409).json({ success: false, message: "Division name already exists" });
 
-    const category = await MachineCategory.create({ name: name.trim(), description, status });
-    res.status(201).json({ success: true, data: category });
+    const division = await MachineDivision.create({ name: name.trim(), description, status });
+    res.status(201).json({ success: true, data: division });
   } catch (err) {
     if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "Category name already exists" });
+      return res.status(409).json({ success: false, message: "Division name already exists" });
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -74,15 +74,14 @@ const update = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid category ID" });
+      return res.status(400).json({ success: false, message: "Invalid division ID" });
 
     const { name, description, status } = req.body;
 
-    const error = validateUpdateCategory({ name, status });
+    const error = validateUpdateDivision({ name, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};
-
     if (name !== undefined)        updateData.name        = typeof name === "string" ? name.trim() : name;
     if (description !== undefined) updateData.description = description;
     if (status !== undefined)      updateData.status      = status;
@@ -91,19 +90,19 @@ const update = async (req, res) => {
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
     if (updateData.name) {
-      const conflict = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(updateData.name), _id: { $ne: id } });
+      const conflict = await MachineDivision.findOne({ name: caseInsensitiveNameRegex(updateData.name), _id: { $ne: id } });
       if (conflict)
-        return res.status(409).json({ success: false, message: "Category name already exists" });
+        return res.status(409).json({ success: false, message: "Division name already exists" });
     }
 
-    const category = await MachineCategory.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
-    if (!category)
-      return res.status(404).json({ success: false, message: "Category not found" });
+    const division = await MachineDivision.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
+    if (!division)
+      return res.status(404).json({ success: false, message: "Division not found" });
 
-    res.status(200).json({ success: true, data: category });
+    res.status(200).json({ success: true, data: division });
   } catch (err) {
     if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "Category name already exists" });
+      return res.status(409).json({ success: false, message: "Division name already exists" });
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -112,13 +111,13 @@ const remove = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid category ID" });
+      return res.status(400).json({ success: false, message: "Invalid division ID" });
 
-    const category = await MachineCategory.findByIdAndDelete(id);
-    if (!category)
-      return res.status(404).json({ success: false, message: "Category not found" });
+    const division = await MachineDivision.findByIdAndDelete(id);
+    if (!division)
+      return res.status(404).json({ success: false, message: "Division not found" });
 
-    res.status(200).json({ success: true, message: "Category deleted successfully" });
+    res.status(200).json({ success: true, message: "Division deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -127,38 +126,38 @@ const remove = async (req, res) => {
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
     ["name", "description", "status"],
-    ["Heavy Machinery", "Large industrial machines", "Active"],
+    ["CNC Division", "Machines used for CNC operations", "Active"],
   ]);
   const wb = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(wb, ws, "MachineCategories");
+  xlsx.utils.book_append_sheet(wb, ws, "MachineDivisions");
   const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-  res.setHeader("Content-Disposition", "attachment; filename=machine_categories_sample.xlsx");
+  res.setHeader("Content-Disposition", "attachment; filename=machine_divisions_sample.xlsx");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.send(buf);
 };
 
-const importCategories = async (req, res) => {
+const importDivisions = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
     if (!req.file.originalname.match(/\.xlsx$/i))
       return res.status(400).json({ success: false, message: "Only .xlsx files are allowed" });
 
-    const wb = xlsx.read(req.file.buffer, { type: "buffer" });
+    const wb   = xlsx.read(req.file.buffer, { type: "buffer" });
     const rows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
     const required = ["name", "status"];
-    const headers = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
-    const missing = required.filter((h) => !headers.includes(h));
+    const headers  = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
+    const missing  = required.filter((h) => !headers.includes(h));
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
     const errors = [];
-    const docs = [];
+    const docs   = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
-      const error = validateImportCategoryRow(normalized, i + 2);
+      const error = validateImportDivisionRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
         name:        String(normalized.name        || "").trim(),
@@ -172,16 +171,16 @@ const importCategories = async (req, res) => {
     let imported = 0, skipped = 0;
     for (const doc of docs) {
       try {
-        const existing = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(doc.name) });
+        const existing = await MachineDivision.findOne({ name: caseInsensitiveNameRegex(doc.name) });
         if (existing) { skipped++; continue; }
-        await MachineCategory.create(doc);
+        await MachineDivision.create(doc);
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
       }
     }
 
-    const parts = [`${imported} categor${imported !== 1 ? "ies" : "y"} imported successfully`];
+    const parts = [`${imported} division${imported !== 1 ? "s" : ""} imported successfully`];
     if (skipped) parts.push(`${skipped} skipped (duplicate name)`);
     res.status(200).json({ success: true, message: parts.join(", ") });
   } catch (err) {
@@ -190,34 +189,34 @@ const importCategories = async (req, res) => {
 };
 
 const formatIST = (date) => {
-  const d = new Date(new Date(date).getTime() + 5.5 * 60 * 60 * 1000);
-  const dd  = String(d.getUTCDate()).padStart(2, "0");
-  const mm  = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yy  = String(d.getUTCFullYear()).slice(2);
-  const h   = d.getUTCHours();
-  const min = String(d.getUTCMinutes()).padStart(2, "0");
+  const d    = new Date(new Date(date).getTime() + 5.5 * 60 * 60 * 1000);
+  const dd   = String(d.getUTCDate()).padStart(2, "0");
+  const mm   = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yy   = String(d.getUTCFullYear()).slice(2);
+  const h    = d.getUTCHours();
+  const min  = String(d.getUTCMinutes()).padStart(2, "0");
   const ampm = h >= 12 ? "PM" : "AM";
   const h12  = String(h % 12 || 12).padStart(2, "0");
   return { date: `${dd}/${mm}/${yy}`, time: `${h12}:${min} ${ampm}` };
 };
 
-const exportCategories = async (req, res) => {
+const exportDivisions = async (req, res) => {
   try {
-    const categories = await MachineCategory.find().lean();
-    const rows = categories.map((c) => {
-      const created = formatIST(c.createdAt);
-      const updated = formatIST(c.updatedAt);
+    const divisions = await MachineDivision.find().lean();
+    const rows = divisions.map((d) => {
+      const created = formatIST(d.createdAt);
+      const updated = formatIST(d.updatedAt);
       return {
-        name: c.name, description: c.description, status: c.status,
+        name: d.name, description: d.description, status: d.status,
         "Created Date": created.date, "Created Time": created.time,
         "Updated Date": updated.date, "Updated Time": updated.time,
       };
     });
     const ws = xlsx.utils.json_to_sheet(rows);
     const wb = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(wb, ws, "MachineCategories");
+    xlsx.utils.book_append_sheet(wb, ws, "MachineDivisions");
     const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-    res.setHeader("Content-Disposition", "attachment; filename=machine_categories.xlsx");
+    res.setHeader("Content-Disposition", "attachment; filename=machine_divisions.xlsx");
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buf);
   } catch (err) {
@@ -225,4 +224,4 @@ const exportCategories = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, update, remove, downloadSample, importCategories, exportCategories };
+module.exports = { getAll, create, update, remove, downloadSample, importDivisions, exportDivisions };
