@@ -61,7 +61,7 @@ const create = async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: "Category name already exists" });
 
-    const category = await MachineCategory.create({ name: name.trim(), description, status });
+    const category = await MachineCategory.create({ name: name.trim(), description, status, source: "manual" });
     res.status(201).json({ success: true, data: category });
   } catch (err) {
     if (err.code === 11000)
@@ -174,7 +174,7 @@ const importCategories = async (req, res) => {
       try {
         const existing = await MachineCategory.findOne({ name: caseInsensitiveNameRegex(doc.name) });
         if (existing) { skipped++; continue; }
-        await MachineCategory.create(doc);
+        await MachineCategory.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

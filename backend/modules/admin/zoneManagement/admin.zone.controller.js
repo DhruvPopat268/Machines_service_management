@@ -76,7 +76,7 @@ const createZone = async (req, res) => {
       return res.status(409).json({ success: false, message: "Zone code already exists" });
     }
 
-    const zone = await Zone.create({ name: name.trim(), code, description, status });
+    const zone = await Zone.create({ name: name.trim(), code, description, status, source: "manual" });
     res.status(201).json({ success: true, data: zone });
   } catch (err) {
     if (err.code === 11000) {
@@ -203,7 +203,7 @@ const importZones = async (req, res) => {
           ],
         });
         if (existing) { skipped++; continue; }
-        await Zone.create(doc);
+        await Zone.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

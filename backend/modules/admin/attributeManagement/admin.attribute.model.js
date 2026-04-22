@@ -6,6 +6,7 @@ const attributeSchema = new mongoose.Schema(
     machineCategory: { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory", required: true },
     description:     { type: String, trim: true, default: "" },
     status:          { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    source:          { type: String, enum: ["manual", "imported"], default: "manual" },
   },
   { timestamps: true }
 );

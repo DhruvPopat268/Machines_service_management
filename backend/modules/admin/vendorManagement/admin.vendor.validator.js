@@ -1,3 +1,12 @@
+const GST_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+const validateGST = (gst) => {
+  if (!gst) return null;
+  if (gst.length !== 15 || !GST_REGEX.test(gst))
+    return "Invalid GST number format";
+  return null;
+};
+
 const validateCreateVendor = ({ name, companyName, phone, email, status }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
@@ -40,4 +49,4 @@ const validateImportVendorRow = (row, rowNum) => {
   return null;
 };
 
-module.exports = { validateCreateVendor, validateUpdateVendor, validateImportVendorRow };
+module.exports = { validateCreateVendor, validateUpdateVendor, validateImportVendorRow, validateGST };

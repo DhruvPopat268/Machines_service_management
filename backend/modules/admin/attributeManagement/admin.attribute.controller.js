@@ -70,7 +70,7 @@ const create = async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: "Attribute name already exists in this category" });
 
-    const attribute = await Attribute.create({ name: name.trim(), machineCategory, description, status });
+    const attribute = await Attribute.create({ name: name.trim(), machineCategory, description, status, source: "manual" });
     res.status(201).json({ success: true, data: attribute });
   } catch (err) {
     if (err.code === 11000)
@@ -203,7 +203,7 @@ const importAttributes = async (req, res) => {
         const existing = await Attribute.findOne({ name: caseInsensitiveNameRegex(doc.name), machineCategory: category._id });
         if (existing) { skipped++; continue; }
 
-        await Attribute.create({ name: doc.name, machineCategory: category._id, description: doc.description, status: doc.status });
+        await Attribute.create({ name: doc.name, machineCategory: category._id, description: doc.description, status: doc.status, source: "imported" });
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

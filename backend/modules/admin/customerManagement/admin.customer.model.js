@@ -10,6 +10,7 @@ const customerSchema = new mongoose.Schema(
     gstNumber:      { type: String, trim: true, uppercase: true, default: "" },
     totalPurchases: { type: Number, default: 0 },
     status:         { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    source:         { type: String, enum: ["manual", "imported"], default: "manual" },
   },
   { timestamps: true }
 );

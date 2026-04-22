@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const Customer = require("./admin.customer.model");
 const Zone = require("../zoneManagement/admin.zone.model");
-const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRow } = require("./admin.customer.validator");
+const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRow, validateGST } = require("./admin.customer.validator");
 
 const getAll = async (req, res) => {
   try {
@@ -64,6 +64,8 @@ const create = async (req, res) => {
     if (error) return res.status(400).json({ success: false, message: error });
 
     if (gstNumber) {
+      const gstError = validateGST(gstNumber);
+      if (gstError) return res.status(400).json({ success: false, message: gstError });
       const gstExists = await Customer.findOne({ gstNumber });
       if (gstExists)
         return res.status(409).json({ success: false, message: "GST number already exists" });
@@ -80,13 +82,9 @@ const create = async (req, res) => {
     }
 
     const customer = await Customer.create({
-      name: name.trim(),
-      phone: phone.trim(),
-      email: email.trim().toLowerCase(),
+      name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
       address: address ? String(address).trim() : "",
-      zone: zoneId,
-      gstNumber,
-      status,
+      zone: zoneId, gstNumber, status, source: "manual",
     });
 
     const populated = await customer.populate("zone", "name code");
@@ -119,6 +117,11 @@ const update = async (req, res) => {
     if (address !== undefined) updateData.address = String(address).trim();
     if (status !== undefined)  updateData.status  = status;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
+
+    if (updateData.gstNumber) {
+      const gstError = validateGST(updateData.gstNumber);
+      if (gstError) return res.status(400).json({ success: false, message: gstError });
+    }
 
     if (zone !== undefined) {
       if (zone === null || zone === "") {
@@ -224,6 +227,8 @@ const importCustomers = async (req, res) => {
     for (const doc of docs) {
       try {
         if (doc.gstNumber) {
+          const gstError = validateGST(doc.gstNumber);
+          if (gstError) { skipped++; continue; }
           const gstExists = await Customer.findOne({ gstNumber: doc.gstNumber });
           if (gstExists) { skipped++; continue; }
         }
@@ -237,7 +242,7 @@ const importCustomers = async (req, res) => {
         await Customer.create({
           name: doc.name, phone: doc.phone, email: doc.email,
           address: doc.address, zone: zoneId,
-          gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status,
+          gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status, source: "imported",
         });
         imported++;
       } catch (rowErr) {

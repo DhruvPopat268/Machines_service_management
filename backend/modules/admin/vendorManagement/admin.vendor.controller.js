@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const Vendor = require("./admin.vendor.model");
-const { validateCreateVendor, validateUpdateVendor, validateImportVendorRow } = require("./admin.vendor.validator");
+const { validateCreateVendor, validateUpdateVendor, validateImportVendorRow, validateGST } = require("./admin.vendor.validator");
 
 const getAll = async (req, res) => {
   try {
@@ -64,6 +64,8 @@ const create = async (req, res) => {
 
     const trimmedGst = gstNumber ? String(gstNumber).trim().toUpperCase() : "";
     if (trimmedGst) {
+      const gstError = validateGST(trimmedGst);
+      if (gstError) return res.status(400).json({ success: false, message: gstError });
       const gstExists = await Vendor.findOne({ gstNumber: trimmedGst });
       if (gstExists)
         return res.status(409).json({ success: false, message: "GST number already exists" });
@@ -72,7 +74,7 @@ const create = async (req, res) => {
     const vendor = await Vendor.create({
       name: name.trim(), companyName: companyName.trim(),
       phone: phone.trim(), email: email.trim().toLowerCase(),
-      address, gstNumber: trimmedGst, status,
+      address, gstNumber: trimmedGst, status, source: "manual",
     });
     res.status(201).json({ success: true, data: vendor });
   } catch (err) {
@@ -101,6 +103,11 @@ const update = async (req, res) => {
     if (email !== undefined)       updateData.email       = typeof email === "string" ? email.trim().toLowerCase() : email;
     if (address !== undefined)     updateData.address     = address;
     if (gstNumber !== undefined)   updateData.gstNumber   = typeof gstNumber === "string" ? gstNumber.trim().toUpperCase() : gstNumber;
+
+    if (updateData.gstNumber) {
+      const gstError = validateGST(updateData.gstNumber);
+      if (gstError) return res.status(400).json({ success: false, message: gstError });
+    }
     if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length === 0)
@@ -187,14 +194,16 @@ const importVendors = async (req, res) => {
     for (const doc of docs) {
       try {
         if (doc.gstNumber) {
+          const gstError = validateGST(doc.gstNumber);
+          if (gstError) { skipped++; continue; }
           const existing = await Vendor.findOneAndUpdate(
             { gstNumber: doc.gstNumber },
-            { $setOnInsert: doc },
+            { $setOnInsert: { ...doc, source: "imported" } },
             { upsert: true, returnDocument: "before", setDefaultsOnInsert: true }
           );
           existing ? skipped++ : imported++;
         } else {
-          await Vendor.create(doc);
+          await Vendor.create({ ...doc, source: "imported" });
           imported++;
         }
       } catch (rowErr) {

@@ -20,6 +20,7 @@ interface MachineDivision {
   name: string;
   description: string;
   status: "Active" | "Inactive";
+  source: "manual" | "imported";
   createdAt: string;
   updatedAt: string;
 }
@@ -226,6 +227,13 @@ const MachineDivisionsPage = () => {
           <Switch checked={d.status === "Active"} onCheckedChange={() => toggleStatus(d)} aria-label={`Toggle status for ${d.name}`} />
           <span className={d.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{d.status}</span>
         </div>
+      ),
+    },
+    {
+      key: "source", label: "Source", render: (d) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          d.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+        }`}>{d.source === "imported" ? "Imported" : "Manual"}</span>
       ),
     },
     {
