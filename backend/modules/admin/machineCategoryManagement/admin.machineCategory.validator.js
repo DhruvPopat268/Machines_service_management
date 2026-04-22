@@ -13,7 +13,9 @@ const validateCreateCategory = ({ name, status }) => {
   return null;
 };
 
-const validateUpdateCategory = ({ status }) => {
+const validateUpdateCategory = ({ name, status }) => {
+  if (name !== undefined && (typeof name !== "string" || !name.trim()))
+    return "Name must be a non-empty string";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;

@@ -96,7 +96,7 @@ const update = async (req, res) => {
 
     const { name, code, description, freeService, freeParts, status } = req.body;
 
-    const error = validateUpdateContractType({ status });
+    const error = validateUpdateContractType({ name, code, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};

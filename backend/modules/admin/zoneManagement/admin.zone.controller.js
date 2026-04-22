@@ -95,7 +95,7 @@ const updateZone = async (req, res) => {
 
     const { name, code, description, status } = req.body;
 
-    const error = validateUpdateZone({ status });
+    const error = validateUpdateZone({ name, code, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const update = {};

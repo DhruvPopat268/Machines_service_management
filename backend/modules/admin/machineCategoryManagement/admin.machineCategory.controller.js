@@ -78,7 +78,7 @@ const update = async (req, res) => {
 
     const { name, description, status } = req.body;
 
-    const error = validateUpdateCategory({ status });
+    const error = validateUpdateCategory({ name, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};

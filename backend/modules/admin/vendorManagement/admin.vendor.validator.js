@@ -12,7 +12,15 @@ const validateCreateVendor = ({ name, companyName, phone, email, status }) => {
   return null;
 };
 
-const validateUpdateVendor = ({ status }) => {
+const validateUpdateVendor = ({ name, companyName, phone, email, status }) => {
+  if (name !== undefined && (typeof name !== "string" || !name.trim()))
+    return "Name must be a non-empty string";
+  if (companyName !== undefined && (typeof companyName !== "string" || !companyName.trim()))
+    return "Company name must be a non-empty string";
+  if (phone !== undefined && (typeof phone !== "string" || !phone.trim()))
+    return "Phone must be a non-empty string";
+  if (email !== undefined && (typeof email !== "string" || !email.trim()))
+    return "Email must be a non-empty string";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;

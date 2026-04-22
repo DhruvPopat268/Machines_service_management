@@ -90,7 +90,7 @@ const update = async (req, res) => {
 
     const { name, companyName, phone, email, address, gstNumber, status } = req.body;
 
-    const error = validateUpdateVendor({ status });
+    const error = validateUpdateVendor({ name, companyName, phone, email, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};

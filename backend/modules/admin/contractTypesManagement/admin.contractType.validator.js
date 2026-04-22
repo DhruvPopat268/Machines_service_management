@@ -15,7 +15,11 @@ const validateCreateContractType = ({ name, code, status }) => {
   return null;
 };
 
-const validateUpdateContractType = ({ status }) => {
+const validateUpdateContractType = ({ name, code, status }) => {
+  if (name !== undefined && (typeof name !== "string" || !name.trim()))
+    return "Name must be a non-empty string";
+  if (code !== undefined && (typeof code !== "string" || !code.trim()))
+    return "Code must be a non-empty string";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;

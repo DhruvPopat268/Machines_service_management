@@ -107,14 +107,15 @@ const update = async (req, res) => {
     if (Object.keys(updateData).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
-    if (updateData.name) {
+    if (updateData.name || updateData.machineCategory) {
       const current = await Attribute.findById(id);
-      const catId = updateData.machineCategory || current?.machineCategory;
-      if (catId) {
-        const conflict = await Attribute.findOne({ name: caseInsensitiveNameRegex(updateData.name), machineCategory: catId, _id: { $ne: id } });
-        if (conflict)
-          return res.status(409).json({ success: false, message: "Attribute name already exists in this category" });
-      }
+      if (!current)
+        return res.status(404).json({ success: false, message: "Attribute not found" });
+      const effectiveName     = updateData.name            || current.name;
+      const effectiveCategory = updateData.machineCategory || current.machineCategory;
+      const conflict = await Attribute.findOne({ name: caseInsensitiveNameRegex(effectiveName), machineCategory: effectiveCategory, _id: { $ne: id } });
+      if (conflict)
+        return res.status(409).json({ success: false, message: "Attribute name already exists in this category" });
     }
 
     const attribute = await Attribute.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
