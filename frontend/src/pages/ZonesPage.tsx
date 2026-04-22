@@ -58,6 +58,7 @@ const ZonesPage = () => {
   const [editForm, setEditForm] = useState(emptyForm);
 
   const [deleteDialog, setDeleteDialog] = useState<Zone | null>(null);
+  const [deleteCustomerCount, setDeleteCustomerCount] = useState<number | null>(null);
 
   const [importDialog, setImportDialog] = useState(false);
   const [importStep, setImportStep] = useState<"menu" | "confirm" | "upload">("menu");
@@ -149,6 +150,17 @@ const ZonesPage = () => {
     }
   };
 
+  const openDeleteDialog = async (z: Zone) => {
+    setDeleteCustomerCount(null);
+    setDeleteDialog(z);
+    try {
+      const res = await api.get(`/admin/zones/${z._id}/customer-count`);
+      setDeleteCustomerCount(res.data.count);
+    } catch {
+      setDeleteCustomerCount(0);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteDialog) return;
     setSubmitting(true);
@@ -156,6 +168,7 @@ const ZonesPage = () => {
       await api.delete(`/admin/zones/${deleteDialog._id}`);
       toast.success("Zone deleted successfully");
       setDeleteDialog(null);
+      setDeleteCustomerCount(null);
       const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
       fetchZones(newPage);
     } catch (err: any) {
@@ -263,7 +276,7 @@ const ZonesPage = () => {
           <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${z.name}`} onClick={() => { setEditDialog(z); setEditForm({ name: z.name, code: z.code, status: z.status }); }}>
             <Edit className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${z.name}`} onClick={() => setDeleteDialog(z)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${z.name}`} onClick={() => openDeleteDialog(z)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
@@ -365,14 +378,25 @@ const ZonesPage = () => {
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog open={!!deleteDialog} onOpenChange={(open) => !open && setDeleteDialog(null)}>
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => { if (!open) { setDeleteDialog(null); setDeleteCustomerCount(null); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Zone</DialogTitle>
             <DialogDescription>Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.</DialogDescription>
           </DialogHeader>
+          {deleteCustomerCount === null && (
+            <p className="text-sm text-muted-foreground">Checking affected customers...</p>
+          )}
+          {deleteCustomerCount !== null && deleteCustomerCount > 0 && (
+            <div className="flex items-start gap-2 rounded-md bg-destructive/10 border border-destructive/30 px-3 py-2">
+              <span className="text-destructive text-sm">⚠ <span className="font-semibold">{deleteCustomerCount} customer{deleteCustomerCount !== 1 ? "s" : ""}</span> linked to this zone will lose their zone assignment.</span>
+            </div>
+          )}
+          {deleteCustomerCount === 0 && (
+            <p className="text-sm text-muted-foreground">No customers are linked to this zone.</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setDeleteDialog(null); setDeleteCustomerCount(null); }}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={submitting}>{submitting ? "Deleting..." : "Delete"}</Button>
           </DialogFooter>
         </DialogContent>
