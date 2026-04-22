@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const ContractType = require("./admin.contractType.model");
+const { validateCreateContractType, validateUpdateContractType, validateImportContractTypeRow, caseInsensitiveNameRegex } = require("./admin.contractType.validator");
 
 const getAll = async (req, res) => {
   try {
@@ -61,18 +62,14 @@ const create = async (req, res) => {
     const { name, description, freeService, freeParts, status } = req.body;
     const rawCode = req.body.code;
 
-    if (!name || typeof name !== "string" || !name.trim())
-      return res.status(400).json({ success: false, message: "Name is required" });
-    if (!rawCode || typeof rawCode !== "string" || !rawCode.trim())
-      return res.status(400).json({ success: false, message: "Code is required" });
-    if (status !== undefined && !["Active", "Inactive"].includes(status))
-      return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
+    const error = validateCreateContractType({ name, code: rawCode, status });
+    if (error) return res.status(400).json({ success: false, message: error });
 
     const code = rawCode.trim().toUpperCase();
 
-    const existing = await ContractType.findOne({ $or: [{ name: name.trim() }, { code }] });
+    const existing = await ContractType.findOne({ $or: [{ name: caseInsensitiveNameRegex(name.trim()) }, { code }] });
     if (existing) {
-      if (existing.name === name.trim())
+      if (existing.name.toLowerCase() === name.trim().toLowerCase())
         return res.status(409).json({ success: false, message: "Contract type name already exists" });
       return res.status(409).json({ success: false, message: "Contract type code already exists" });
     }
@@ -98,6 +95,10 @@ const update = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid contract type ID" });
 
     const { name, code, description, freeService, freeParts, status } = req.body;
+
+    const error = validateUpdateContractType({ name, code, status });
+    if (error) return res.status(400).json({ success: false, message: error });
+
     const updateData = {};
 
     if (name !== undefined)        updateData.name        = typeof name === "string" ? name.trim() : name;
@@ -105,15 +106,22 @@ const update = async (req, res) => {
     if (description !== undefined) updateData.description = description;
     if (freeService !== undefined) updateData.freeService = !!freeService;
     if (freeParts !== undefined)   updateData.freeParts   = !!freeParts;
-    if (status !== undefined) {
-      if (!["Active", "Inactive"].includes(status))
-        return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
-      updateData.status = status;
-    }
+    if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
+    if (updateData.name || updateData.code) {
+      const orConditions = [];
+      if (updateData.name) orConditions.push({ name: caseInsensitiveNameRegex(updateData.name) });
+      if (updateData.code) orConditions.push({ code: updateData.code });
+      const conflict = await ContractType.findOne({ $or: orConditions, _id: { $ne: id } });
+      if (conflict) {
+        if (updateData.name && conflict.name.toLowerCase() === updateData.name.toLowerCase())
+          return res.status(409).json({ success: false, message: "Contract type name already exists" });
+        return res.status(409).json({ success: false, message: "Contract type code already exists" });
+      }
+    }
     const contractType = await ContractType.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
     if (!contractType)
       return res.status(404).json({ success: false, message: "Contract type not found" });
@@ -177,16 +185,16 @@ const importContractTypes = async (req, res) => {
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
-      const name        = String(row.name || "").trim();
-      const code        = String(row.code || "").trim().toUpperCase();
-      const status      = String(row.status || "").trim();
-      const freeService = String(row.freeService || "").trim().toLowerCase() === "true";
-      const freeParts   = String(row.freeParts || "").trim().toLowerCase() === "true";
-      const description = String(row.description || "").trim();
-      if (!name)  { errors.push(`Row ${i + 2}: name is required`); return; }
-      if (!code)  { errors.push(`Row ${i + 2}: code is required`); return; }
-      if (!["Active", "Inactive"].includes(status)) { errors.push(`Row ${i + 2}: status must be Active or Inactive`); return; }
-      docs.push({ name, code, description, freeService, freeParts, status });
+      const error = validateImportContractTypeRow(row, i + 2);
+      if (error) { errors.push(error); return; }
+      docs.push({
+        name:        String(row.name        || "").trim(),
+        code:        String(row.code        || "").trim().toUpperCase(),
+        status:      String(row.status      || "").trim(),
+        freeService: String(row.freeService || "").trim().toLowerCase() === "true",
+        freeParts:   String(row.freeParts   || "").trim().toLowerCase() === "true",
+        description: String(row.description || "").trim(),
+      });
     });
 
     if (errors.length) return res.status(400).json({ success: false, message: errors[0], errors });
@@ -194,12 +202,15 @@ const importContractTypes = async (req, res) => {
     let imported = 0, skipped = 0;
     for (const doc of docs) {
       try {
-        const existing = await ContractType.findOneAndUpdate(
-          { code: doc.code },
-          { $setOnInsert: doc },
-          { upsert: true, returnDocument: "before", setDefaultsOnInsert: true }
-        );
-        existing ? skipped++ : imported++;
+        const existing = await ContractType.findOne({
+          $or: [
+            { name: caseInsensitiveNameRegex(doc.name) },
+            { code: doc.code },
+          ],
+        });
+        if (existing) { skipped++; continue; }
+        await ContractType.create(doc);
+        imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
       }
