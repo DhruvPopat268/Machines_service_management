@@ -232,7 +232,19 @@ const formatIST = (date) => {
 
 const exportAttributes = async (req, res) => {
   try {
-    const attributes = await Attribute.find().populate("machineCategory", "name").lean();
+    const { search, status, machineCategory, fromDate, toDate } = req.query;
+    const query = {};
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) { const e = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); query.name = { $regex: e, $options: "i" }; }
+    }
+    if (status && ["Active", "Inactive"].includes(status)) query.status = status;
+    if (machineCategory && mongoose.isValidObjectId(machineCategory)) query.machineCategory = machineCategory;
+    if (fromDate || toDate) {
+      const p = (ddmmyy, end) => { const [dd,mm,yy]=ddmmyy.split("/"); return new Date(Date.UTC(2000+Number(yy),Number(mm)-1,Number(dd),end?23:0,end?59:0,end?59:0,end?999:0)-(5.5*60*60*1000)); };
+      query.createdAt={}; if(fromDate) query.createdAt.$gte=p(fromDate,false); if(toDate) query.createdAt.$lte=p(toDate,true);
+    }
+    const attributes = await Attribute.find(query).populate("machineCategory", "name").lean();
     const rows = attributes.map((a) => {
       const created = formatIST(a.createdAt);
       const updated = formatIST(a.updatedAt);

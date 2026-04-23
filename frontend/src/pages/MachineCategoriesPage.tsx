@@ -220,7 +220,12 @@ const MachineCategoriesPage = () => {
     setExportDialog(false);
     toast.success("Download starting...");
     try {
-      const res = await api.get("/admin/machine-categories/export", { responseType: "blob" });
+      const params: Record<string, string> = {};
+      if (debouncedSearch)                                 params.search = debouncedSearch;
+      if (filters.status && filters.status !== "all")     params.status = filters.status;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/machine-categories/export", { params, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = "machine_categories.xlsx"; a.click();
