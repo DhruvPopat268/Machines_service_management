@@ -205,8 +205,8 @@ const MachinesPage = () => {
     { key: "_id", label: "No.", render: (_m, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     {
       key: "images", label: "Image", render: (m) => m.images?.[0]
-        ? <img src={m.images[0]} alt={m.name} className="h-10 w-14 object-cover rounded-md border" />
-        : <div className="h-10 w-14 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">No img</div>,
+        ? <img src={m.images[0]} alt={m.name} className="h-14 w-14 object-cover rounded-md border" />
+        : <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">No img</div>,
     },
     { key: "name",        label: "Name",     render: (m) => <span className="font-medium">{m.name}</span> },
     { key: "modelNumber", label: "Model",    render: (m) => <span className="text-sm">{m.modelNumber || "—"}</span> },
@@ -216,9 +216,9 @@ const MachinesPage = () => {
       key: "variants", label: "Variants", className: "text-center", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs flex justify-center">
-              <span className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{v.attribute?.name}</span>
-              {" "}<span className="font-medium">{v.value}</span>
+            <div key={i} className="text-xs flex items-center justify-center gap-1 py-0.5">
+              <span className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground leading-none">{v.attribute?.name}</span>
+              <span className="font-medium leading-none">{v.value}</span>
             </div>
           )) : <span className="text-muted-foreground text-xs">—</span>}
         </div>
@@ -228,7 +228,7 @@ const MachinesPage = () => {
       key: "currentStock", label: "Current Stock", className: "text-center", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs font-medium h-[22px] flex items-center justify-center">{v.currentStock}</div>
+            <div key={i} className="text-xs font-medium py-0.5 flex items-center justify-center">{v.currentStock}</div>
           )) : <span className="text-muted-foreground text-xs">—</span>}
         </div>
       ),
@@ -237,7 +237,7 @@ const MachinesPage = () => {
       key: "stockStatus", label: "Stock Status", className: "text-center", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="h-[22px] flex items-center justify-center">
+            <div key={i} className="py-0.5 flex items-center justify-center">
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
                 v.stockStatus === "In Stock"  ? "bg-green-100 text-green-700"  :
                 v.stockStatus === "Low Stock" ? "bg-yellow-100 text-yellow-700" :
@@ -252,7 +252,7 @@ const MachinesPage = () => {
       key: "lowStockThreshold", label: "Low Stock Alert", className: "text-center", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs h-[22px] flex items-center justify-center">
+            <div key={i} className="text-xs py-0.5 flex items-center justify-center">
               {v.lowStockThreshold === -1
                 ? <span className="text-muted-foreground">Disabled</span>
                 : <span className="font-medium">{v.lowStockThreshold}</span>}
