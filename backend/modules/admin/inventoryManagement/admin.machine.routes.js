@@ -21,6 +21,8 @@ const uploadXlsx = multer({
 });
 
 
+router.use(adminAuthMiddleware);
+
 router.get("/sample",  downloadSample);
 router.get("/export",  exportMachines);
 router.post("/import", uploadXlsx.single("file"), importMachines);

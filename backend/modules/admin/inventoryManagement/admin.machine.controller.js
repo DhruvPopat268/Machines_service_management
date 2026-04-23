@@ -63,7 +63,18 @@ const isMachineDuplicate = async (name, category, division, modelNumber, exclude
   return !!(await Machine.findOne(query));
 };
 
-const getAll = async (req, res) => {
+const applyImageOrder = (imageOrder, uploadedUrls, keptImages = []) => {
+  if (!imageOrder || !imageOrder.length) return [...keptImages, ...uploadedUrls];
+  return imageOrder.map((token) => {
+    if (token.startsWith("new:")) {
+      const idx = parseInt(token.split(":")[1]);
+      return uploadedUrls[idx] ?? null;
+    }
+    return token;
+  }).filter(Boolean);
+};
+
+
   try {
     const { search, status, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
@@ -142,7 +153,7 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status } = req.body;
+    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, imageOrder } = req.body;
 
     const error = validateCreateMachine({ name, category, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -164,6 +175,9 @@ const create = async (req, res) => {
       }
     }
 
+    const parsedOrder = imageOrder ? (typeof imageOrder === "string" ? JSON.parse(imageOrder) : imageOrder) : null;
+    const orderedImages = applyImageOrder(parsedOrder, imageUrls);
+
     let parsedVariants = [];
     if (variants) {
       try {
@@ -180,7 +194,7 @@ const create = async (req, res) => {
       category,
       division: division || null,
       variants: parsedVariants,
-      images: imageUrls,
+      images: orderedImages,
       notes,
       status,
     });
@@ -201,7 +215,7 @@ const update = async (req, res) => {
     if (!machine)
       return res.status(404).json({ success: false, message: "Machine not found" });
 
-    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, existingImages } = req.body;
+    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, existingImages, imageOrder } = req.body;
 
     const error = validateUpdateMachine({ name, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -219,24 +233,24 @@ const update = async (req, res) => {
       ? (typeof existingImages === "string" ? JSON.parse(existingImages) : existingImages)
       : [...machine.images];
 
-    // delete files removed by user
-    const removedUrls = machine.images.filter((url) => !keptImages.includes(url));
-    for (const url of removedUrls) await deleteFromServer(url);
-
-    // upload new files and append after kept images
+    // validate count before any disk operations
     const files = req.files || [];
     if (keptImages.length + files.length > MAX_IMAGES)
       return res.status(400).json({ success: false, message: `Maximum ${MAX_IMAGES} images allowed` });
 
-    let currentImages = [...keptImages];
+    // upload new files
+    let uploadedUrls = [];
     if (files.length) {
       try {
-        const newUrls = await processImages(files);
-        currentImages = [...currentImages, ...newUrls];
+        uploadedUrls = await processImages(files);
       } catch (imgErr) {
         return res.status(400).json({ success: false, message: imgErr.message });
       }
     }
+
+    // apply imageOrder manifest to reconstruct full ordered array
+    const parsedOrder = imageOrder ? (typeof imageOrder === "string" ? JSON.parse(imageOrder) : imageOrder) : null;
+    const currentImages = applyImageOrder(parsedOrder, uploadedUrls, keptImages);
 
     const updateData = { images: currentImages };
     if (name !== undefined)          updateData.name          = name.trim();
@@ -261,6 +275,10 @@ const update = async (req, res) => {
       .populate("category", "name")
       .populate("division", "name")
       .populate("variants.attribute", "name");
+
+    // delete removed files from disk only after DB update succeeds
+    const removedUrls = machine.images.filter((url) => !keptImages.includes(url));
+    for (const url of removedUrls) await deleteFromServer(url);
 
     res.status(200).json({ success: true, data: updated });
   } catch (err) {

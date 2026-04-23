@@ -151,6 +151,9 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error("Name is required");
     if (!form.category)    return toast.error("Category is required");
+    if (!form.division)    return toast.error("Division is required");
+    const validVariants = variants.filter((v) => v.attribute && v.value.trim());
+    if (validVariants.length === 0) return toast.error("At least one variant with attribute and value is required");
 
     setSubmitting(true);
     try {
@@ -166,7 +169,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       fd.append("status",        form.status);
       fd.append("notes",         form.notes);
 
-      const validVariants = variants.filter((v) => v.attribute && v.value.trim());
       fd.append("variants", JSON.stringify(
         validVariants.map((v) => ({ attribute: v.attribute, value: v.value.trim(), lowStockThreshold: v.lowStockThreshold !== "" ? Number(v.lowStockThreshold) : -1 }))
       ));
@@ -175,7 +177,12 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       const existingImages = allImages.filter((img) => !img.file).map((img) => img.preview);
       const newFiles       = allImages.filter((img) => !!img.file).map((img) => img.file!);
 
+      // imageOrder preserves full drag-drop order: existing URLs or "new:N" tokens for new files
+      let newIdx = 0;
+      const imageOrder = allImages.map((img) => img.file ? `new:${newIdx++}` : img.preview);
+
       newFiles.forEach((file) => fd.append("images", file));
+      fd.append("imageOrder", JSON.stringify(imageOrder));
 
       if (isEdit) {
         fd.append("existingImages", JSON.stringify(existingImages));
