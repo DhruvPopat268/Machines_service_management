@@ -74,7 +74,7 @@ const applyImageOrder = (imageOrder, uploadedUrls, keptImages = []) => {
   }).filter(Boolean);
 };
 
-
+const getAll = async (req, res) => {
   try {
     const { search, status, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
