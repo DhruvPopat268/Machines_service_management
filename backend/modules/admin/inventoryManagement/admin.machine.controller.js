@@ -410,7 +410,37 @@ const importMachines = async (req, res) => {
 
 const exportMachines = async (req, res) => {
   try {
-    const machines = await Machine.find()
+    const { search, status, category, division, fromDate, toDate } = req.query;
+    const query = {};
+
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) {
+        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        query.$or = [
+          { name:        { $regex: escaped, $options: "i" } },
+          { modelNumber: { $regex: escaped, $options: "i" } },
+        ];
+      }
+    }
+
+    if (status && ["Active", "Inactive"].includes(status)) query.status = status;
+    if (category && mongoose.isValidObjectId(category)) query.category = category;
+    if (division && mongoose.isValidObjectId(division)) query.division = division;
+
+    if (fromDate || toDate) {
+      const parseIST = (ddmmyy, endOfDay = false) => {
+        const [dd, mm, yy] = ddmmyy.split("/");
+        const istOffsetMs = 5.5 * 60 * 60 * 1000;
+        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return new Date(base - istOffsetMs);
+      };
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
+      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+    }
+
+    const machines = await Machine.find(query)
       .populate("category", "name")
       .populate("division", "name")
       .populate("variants.attribute", "name")

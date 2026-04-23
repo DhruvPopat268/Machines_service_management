@@ -214,7 +214,14 @@ const ContractTypesPage = () => {
     setExportDialog(false);
     toast.success("Download starting...");
     try {
-      const res = await api.get("/admin/contract-types/export", { responseType: "blob" });
+      const params: Record<string, string> = {};
+      if (debouncedSearch)                                       params.search      = debouncedSearch;
+      if (filters.status  && filters.status  !== "all")         params.status      = filters.status;
+      if (filters.service && filters.service !== "all")         params.freeService = filters.service === "Free" ? "true" : "false";
+      if (filters.parts   && filters.parts   !== "all")         params.freeParts   = filters.parts   === "Free" ? "true" : "false";
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/contract-types/export", { params, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = "contract_types.xlsx"; a.click();

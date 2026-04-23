@@ -166,7 +166,15 @@ const MachinesPage = () => {
     setExportDialog(false);
     toast.success("Download starting...");
     try {
-      const res = await api.get("/admin/machines/export", { responseType: "blob" });
+      const params: Record<string, string> = {};
+      if (debouncedSearch)                                 params.search   = debouncedSearch;
+      if (filters.status   && filters.status   !== "all") params.status   = filters.status;
+      if (filters.category && filters.category !== "all") params.category = filters.category;
+      if (filters.division && filters.division !== "all") params.division = filters.division;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+
+      const res = await api.get("/admin/machines/export", { params, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = "machines.xlsx"; a.click();

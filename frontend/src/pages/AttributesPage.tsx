@@ -228,7 +228,13 @@ const AttributesPage = () => {
     setExportDialog(false);
     toast.success("Download starting...");
     try {
-      const res = await api.get("/admin/attributes/export", { responseType: "blob" });
+      const params: Record<string, string> = {};
+      if (debouncedSearch)                                          params.search          = debouncedSearch;
+      if (filters.status          && filters.status          !== "all") params.status      = filters.status;
+      if (filters.machineCategory && filters.machineCategory !== "all") params.machineCategory = filters.machineCategory;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/attributes/export", { params, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url; a.download = "attributes.xlsx"; a.click();
