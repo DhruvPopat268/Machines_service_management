@@ -12,7 +12,7 @@ import EngineersPage from "./pages/EngineersPage";
 import CallsPage from "./pages/CallsPage";
 import CallDetailsPage from "./pages/CallDetailsPage";
 import MachinesPage from "./pages/MachinesPage";
-import AddItemForm from "./pages/AddItemForm";
+import AddMachineForm from "./pages/AddMachineForm";
 import InventoryLogsPage from "./pages/InventoryLogsPage";
 import AttributesPage from "./pages/AttributesPage";
 import MachineDivisionsPage from "./pages/MachineDivisionsPage";
@@ -50,8 +50,9 @@ const App = () => (
             <Route path="/users" element={<UsersPage />} />
             <Route path="/engineers" element={<EngineersPage />} />
             <Route path="/machines" element={<MachinesPage />} />
-            <Route path="/machines/add" element={<AddItemForm type="Machine" />} />
-            <Route path="/machines/:id" element={<AddItemForm type="Machine" mode="view" />} />
+            <Route path="/machines/add" element={<AddMachineForm type="Machine" />} />
+            <Route path="/machines/:id" element={<AddMachineForm type="Machine" mode="view" />} />
+            <Route path="/machines/:id/edit" element={<AddMachineForm type="Machine" mode="edit" />} />
             <Route path="/inventory-logs" element={<InventoryLogsPage />} />
             <Route path="/purchase-machines" element={<PurchaseMachinesPage />} />
             <Route path="/sell-machines" element={<SellMachinesPage />} />
