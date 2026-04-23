@@ -9,5 +9,6 @@ router.use("/machine-categories", require("./machineCategoryManagement/admin.mac
 router.use("/machine-divisions", require("./machineDivisionManagement/admin.machineDivision.routes"));
 router.use("/problem-types", require("./problemTypeManagement/admin.problemType.routes"));
 router.use("/customers", require("./customerManagement/admin.customer.routes"));
+router.use("/machines",  require("./inventoryManagement/admin.machine.routes"));
 
 module.exports = router;

@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 export interface Column<T> {
   key: string;
   label: string;
+  className?: string;
   render?: (item: T, index: number) => React.ReactNode;
 }
 
@@ -32,7 +33,7 @@ export function DataTable<T extends Record<string, any>>({
           <TableHeader>
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               {columns.map((col) => (
-                <TableHead key={col.key} className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">
+                <TableHead key={col.key} className={`font-semibold text-foreground/70 text-xs uppercase tracking-wider ${col.className ?? ""}`}>
                   {col.label}
                 </TableHead>
               ))}
@@ -53,7 +54,7 @@ export function DataTable<T extends Record<string, any>>({
                   onClick={() => onRowClick?.(item)}
                 >
                   {columns.map((col) => (
-                    <TableCell key={col.key}>
+                    <TableCell key={col.key} className={col.className ?? ""}>
                       {col.render ? col.render(item, page * pageSize + i) : item[col.key]}
                     </TableCell>
                   ))}
