@@ -60,7 +60,7 @@ const create = async (req, res) => {
     const { name, phone, email, address, zone, status } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
 
-    const error = validateCreateCustomer({ name, phone, email, status });
+    const error = validateCreateCustomer({ name, phone, email, address, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     if (gstNumber) {
@@ -70,6 +70,11 @@ const create = async (req, res) => {
       if (gstExists)
         return res.status(409).json({ success: false, message: "GST number already exists" });
     }
+
+    const phoneExists = await Customer.findOne({ phone: phone.trim() });
+    if (phoneExists) return res.status(409).json({ success: false, message: "Phone number already exists" });
+    const emailExists = await Customer.findOne({ email: email.trim().toLowerCase() });
+    if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
 
     let zoneId = null;
     if (zone) {
@@ -90,8 +95,11 @@ const create = async (req, res) => {
     const populated = await customer.populate("zone", "name code");
     res.status(201).json({ success: true, data: populated });
   } catch (err) {
-    if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+    if (err.code === 11000) {
+      const key = Object.keys(err.keyPattern || {})[0];
+      const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+      return res.status(409).json({ success: false, message: msg });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -107,7 +115,7 @@ const update = async (req, res) => {
       ? String(req.body.gstNumber).trim().toUpperCase()
       : undefined;
 
-    const error = validateUpdateCustomer({ name, phone, email, status });
+    const error = validateUpdateCustomer({ name, phone, email, address, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};
@@ -144,6 +152,14 @@ const update = async (req, res) => {
       if (conflict)
         return res.status(409).json({ success: false, message: "GST number already exists" });
     }
+    if (updateData.phone) {
+      const conflict = await Customer.findOne({ phone: updateData.phone, _id: { $ne: id } });
+      if (conflict) return res.status(409).json({ success: false, message: "Phone number already exists" });
+    }
+    if (updateData.email) {
+      const conflict = await Customer.findOne({ email: updateData.email, _id: { $ne: id } });
+      if (conflict) return res.status(409).json({ success: false, message: "Email already exists" });
+    }
 
     const customer = await Customer.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" }).populate("zone", "name code");
     if (!customer)
@@ -151,8 +167,11 @@ const update = async (req, res) => {
 
     res.status(200).json({ success: true, data: customer });
   } catch (err) {
-    if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+    if (err.code === 11000) {
+      const key = Object.keys(err.keyPattern || {})[0];
+      const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+      return res.status(409).json({ success: false, message: msg });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -203,12 +222,12 @@ const importCustomers = async (req, res) => {
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
-    const errors = [];
+    const skippedReasons = [];
     const docs   = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
       const error = validateImportCustomerRow(normalized, i + 2);
-      if (error) { errors.push(error); return; }
+      if (error) { skippedReasons.push(error); return; }
       docs.push({
         name:           String(normalized.name           || "").trim(),
         phone:          String(normalized.phone          || "").trim(),
@@ -221,9 +240,7 @@ const importCustomers = async (req, res) => {
       });
     });
 
-    if (errors.length) return res.status(400).json({ success: false, message: errors[0], errors });
-
-    let imported = 0, skipped = 0;
+    let imported = 0, skipped = skippedReasons.length;
     for (const doc of docs) {
       try {
         if (doc.gstNumber) {
@@ -232,6 +249,10 @@ const importCustomers = async (req, res) => {
           const gstExists = await Customer.findOne({ gstNumber: doc.gstNumber });
           if (gstExists) { skipped++; continue; }
         }
+        const phoneExists = await Customer.findOne({ phone: doc.phone });
+        if (phoneExists) { skipped++; continue; }
+        const emailExists = await Customer.findOne({ email: doc.email });
+        if (emailExists) { skipped++; continue; }
 
         let zoneId = null;
         if (doc.zoneName) {
@@ -251,8 +272,8 @@ const importCustomers = async (req, res) => {
     }
 
     const parts = [`${imported} customer${imported !== 1 ? "s" : ""} imported successfully`];
-    if (skipped) parts.push(`${skipped} skipped (duplicate GST number)`);
-    res.status(200).json({ success: true, message: parts.join(", ") });
+    if (skipped) parts.push(`${skipped} skipped`);
+    res.status(200).json({ success: true, message: parts.join(", "), skippedReasons: [...new Set(skippedReasons.map((r) => r.replace(/^Row \d+: /, "")))] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

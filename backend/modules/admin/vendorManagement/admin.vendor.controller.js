@@ -71,6 +71,11 @@ const create = async (req, res) => {
         return res.status(409).json({ success: false, message: "GST number already exists" });
     }
 
+    const phoneExists = await Vendor.findOne({ phone: phone.trim() });
+    if (phoneExists) return res.status(409).json({ success: false, message: "Phone number already exists" });
+    const emailExists = await Vendor.findOne({ email: email.trim().toLowerCase() });
+    if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
+
     const vendor = await Vendor.create({
       name: name.trim(), companyName: companyName.trim(),
       phone: phone.trim(), email: email.trim().toLowerCase(),
@@ -78,8 +83,11 @@ const create = async (req, res) => {
     });
     res.status(201).json({ success: true, data: vendor });
   } catch (err) {
-    if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+    if (err.code === 11000) {
+      const key = Object.keys(err.keyPattern || {})[0];
+      const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+      return res.status(409).json({ success: false, message: msg });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -108,6 +116,14 @@ const update = async (req, res) => {
       const gstError = validateGST(updateData.gstNumber);
       if (gstError) return res.status(400).json({ success: false, message: gstError });
     }
+    if (updateData.phone) {
+      const conflict = await Vendor.findOne({ phone: updateData.phone, _id: { $ne: id } });
+      if (conflict) return res.status(409).json({ success: false, message: "Phone number already exists" });
+    }
+    if (updateData.email) {
+      const conflict = await Vendor.findOne({ email: updateData.email, _id: { $ne: id } });
+      if (conflict) return res.status(409).json({ success: false, message: "Email already exists" });
+    }
     if (status !== undefined) updateData.status = status;
 
     if (Object.keys(updateData).length === 0)
@@ -119,8 +135,11 @@ const update = async (req, res) => {
 
     res.status(200).json({ success: true, data: vendor });
   } catch (err) {
-    if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "GST number already exists" });
+    if (err.code === 11000) {
+      const key = Object.keys(err.keyPattern || {})[0];
+      const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+      return res.status(409).json({ success: false, message: msg });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -171,12 +190,12 @@ const importVendors = async (req, res) => {
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
-    const errors = [];
+    const skippedReasons = [];
     const docs = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
       const error = validateImportVendorRow(normalized, i + 2);
-      if (error) { errors.push(error); return; }
+      if (error) { skippedReasons.push(error); return; }
       docs.push({
         name:        String(normalized.name        || "").trim(),
         companyName: String(normalized.companyname || "").trim(),
@@ -188,32 +207,29 @@ const importVendors = async (req, res) => {
       });
     });
 
-    if (errors.length) return res.status(400).json({ success: false, message: errors[0], errors });
-
-    let imported = 0, skipped = 0;
+    let imported = 0, skipped = skippedReasons.length;
     for (const doc of docs) {
       try {
         if (doc.gstNumber) {
           const gstError = validateGST(doc.gstNumber);
           if (gstError) { skipped++; continue; }
-          const existing = await Vendor.findOneAndUpdate(
-            { gstNumber: doc.gstNumber },
-            { $setOnInsert: { ...doc, source: "imported" } },
-            { upsert: true, returnDocument: "before", setDefaultsOnInsert: true }
-          );
-          existing ? skipped++ : imported++;
-        } else {
-          await Vendor.create({ ...doc, source: "imported" });
-          imported++;
+          const gstExists = await Vendor.findOne({ gstNumber: doc.gstNumber });
+          if (gstExists) { skipped++; continue; }
         }
+        const phoneExists = await Vendor.findOne({ phone: doc.phone });
+        if (phoneExists) { skipped++; continue; }
+        const emailExists = await Vendor.findOne({ email: doc.email });
+        if (emailExists) { skipped++; continue; }
+        await Vendor.create({ ...doc, source: "imported" });
+        imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
       }
     }
 
     const parts = [`${imported} vendor${imported !== 1 ? "s" : ""} imported successfully`];
-    if (skipped) parts.push(`${skipped} skipped (duplicate)`);
-    res.status(200).json({ success: true, message: parts.join(", ") });
+    if (skipped) parts.push(`${skipped} skipped`);
+    res.status(200).json({ success: true, message: parts.join(", "), skippedReasons: [...new Set(skippedReasons.map((r) => r.replace(/^Row \d+: /, "")))] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

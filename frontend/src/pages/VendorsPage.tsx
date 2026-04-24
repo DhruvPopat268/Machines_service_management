@@ -216,20 +216,20 @@ const VendorsPage = () => {
 
   const handleImportUpload = async () => {
     if (!importFile) return toast.error("Please select a file");
-    if (!importFile.name.match(/\.xlsx$/i)) return toast.error("Only .xlsx files are allowed");
     setSubmitting(true);
     try {
-      const form = new FormData();
-      form.append("file", importFile);
-      const res = await api.post("/admin/vendors/import", form, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await api.post("/admin/vendors/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      const reasons = res.data.skippedReasons?.length
+        ? `\nReasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchVendors(1);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Import failed");
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
   const handleExport = async () => {

@@ -260,7 +260,10 @@ const CustomersPage = () => {
       const form = new FormData();
       form.append("file", importFile);
       const res = await api.post("/admin/customers/import", form, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const reasons = res.data.skippedReasons?.length
+        ? `\nReasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchCustomers(1);
     } catch (err: any) {
