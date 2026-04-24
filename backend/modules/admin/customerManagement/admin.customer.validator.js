@@ -58,7 +58,7 @@ const validateUpdateCustomer = ({ name, phone, email, address, zone, status }) =
   }
   if (address !== undefined && (typeof address !== "string" || !address.trim()))
     return "Address must be a non-empty string";
-  if (zone !== undefined && !zone)
+  if (zone === "")
     return "Zone is required";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";

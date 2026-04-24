@@ -7,7 +7,7 @@ const customerSchema = new mongoose.Schema(
     email:     { type: String, required: true, trim: true, lowercase: true, unique: true },
     address:   { type: String, trim: true, default: "" },
     zone:      { type: mongoose.Schema.Types.ObjectId, ref: "Zone", default: null },
-    gstNumber:      { type: String, trim: true, uppercase: true, unique: true, sparse: true, default: "" },
+    gstNumber:      { type: String, trim: true, uppercase: true, unique: true, sparse: true, set: (v) => (v && v.trim() ? v.trim().toUpperCase() : undefined) },
     totalPurchases: { type: Number, default: 0 },
     status:         { type: String, enum: ["Active", "Inactive"], default: "Active" },
     source:         { type: String, enum: ["manual", "imported"], default: "manual" },

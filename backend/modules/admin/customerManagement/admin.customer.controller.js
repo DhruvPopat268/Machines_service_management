@@ -195,7 +195,7 @@ const remove = async (req, res) => {
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
     ["name", "phone", "email", "address", "zoneName", "gstNumber", "totalPurchases", "status"],
-    ["Acme Corp", "+91 9800000000", "acme@example.com", "123 Main St, Mumbai", "North Zone", "27AABCA1234A1Z5", 5, "Active"],
+    ["Acme Corp", "9800000000", "acme@example.com", "123 Main St, Mumbai", "North Zone", "27AABCA1234A1Z5", 5, "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Customers");

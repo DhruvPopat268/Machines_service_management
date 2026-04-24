@@ -48,7 +48,7 @@ const FormFields = ({ values, onChange }: { values: typeof emptyForm; onChange: 
   <div className="space-y-4 py-4">
     <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Contact person name" value={values.name} onChange={(e) => onChange("name", e.target.value)} /></div>
     <div className="space-y-2"><Label>Company Name <span className="text-destructive">*</span></Label><Input placeholder="Company / firm name" value={values.companyName} onChange={(e) => onChange("companyName", e.target.value)} /></div>
-    <div className="space-y-2"><Label>Phone <span className="text-destructive">*</span></Label><Input placeholder="+91 98XXXXXXXX" value={values.phone} onChange={(e) => onChange("phone", e.target.value)} /></div>
+    <div className="space-y-2"><Label>Phone <span className="text-destructive">*</span></Label><Input placeholder="e.g. 9800000000" value={values.phone} onChange={(e) => onChange("phone", e.target.value)} /></div>
     <div className="space-y-2"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" placeholder="vendor@company.com" value={values.email} onChange={(e) => onChange("email", e.target.value)} /></div>
     <div className="space-y-2"><Label>Address</Label><Input placeholder="Full address" value={values.address} onChange={(e) => onChange("address", e.target.value)} /></div>
     <div className="space-y-2"><Label>GST Number</Label><Input placeholder="e.g. 27AABCG1234A1Z5" value={values.gstNumber} onChange={(e) => onChange("gstNumber", e.target.value)} /></div>
