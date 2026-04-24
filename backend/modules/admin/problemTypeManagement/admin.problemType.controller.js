@@ -125,7 +125,7 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "description", "status"],
+    ["name", "description", "status (Active/Inactive)"],
     ["Mechanical Failure", "Issues related to mechanical components", "Active"],
   ]);
   const wb = xlsx.utils.book_new();
