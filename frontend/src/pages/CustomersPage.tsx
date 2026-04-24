@@ -61,7 +61,7 @@ interface CustomerFormProps {
 const CustomerForm = ({ form, setForm, zoneOptions }: CustomerFormProps) => (
   <div className="space-y-4 py-4">
     <div className="space-y-2"><Label htmlFor="cust-name">Name</Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
-    <div className="space-y-2"><Label htmlFor="cust-phone">Phone</Label><Input id="cust-phone" placeholder="+91 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+    <div className="space-y-2"><Label htmlFor="cust-phone">Phone</Label><Input id="cust-phone" placeholder="e.g. 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
     <div className="space-y-2"><Label htmlFor="cust-email">Email</Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
     <div className="space-y-2"><Label htmlFor="cust-address">Address</Label><Input id="cust-address" placeholder="Full address" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /></div>
     <div className="space-y-2">
@@ -260,7 +260,10 @@ const CustomersPage = () => {
       const form = new FormData();
       form.append("file", importFile);
       const res = await api.post("/admin/customers/import", form, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const reasons = res.data.skippedReasons?.length
+        ? `\nReasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchCustomers(1);
     } catch (err: any) {
