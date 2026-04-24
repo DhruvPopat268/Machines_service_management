@@ -318,7 +318,7 @@ const formatIST = (date) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "modelNumber", "serialNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "status", "notes"],
+    ["name", "modelNumber", "serialNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "status (Active/Inactive)", "notes"],
     ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Active", "Sample notes"],
   ]);
   const wb = xlsx.utils.book_new();

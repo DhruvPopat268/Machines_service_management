@@ -154,7 +154,7 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "code", "description", "freeService", "freeParts", "status"],
+    ["name", "code", "description", "freeService (true/false)", "freeParts (true/false)", "status (Active/Inactive)"],
     ["Warranty", "WTY", "Standard warranty", "true", "true", "Active"],
   ]);
   const wb = xlsx.utils.book_new();

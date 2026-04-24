@@ -140,7 +140,7 @@ const getAttributeCount = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "description", "status"],
+    ["name", "description", "status (Active/Inactive)"],
     ["Heavy Machinery", "Large industrial machines", "Active"],
   ]);
   const wb = xlsx.utils.book_new();

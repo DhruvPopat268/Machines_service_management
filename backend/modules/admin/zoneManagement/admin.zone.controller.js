@@ -164,7 +164,7 @@ const getCustomerCount = async (req, res) => {
 };
 
 const downloadSample = (req, res) => {
-  const ws = xlsx.utils.aoa_to_sheet([["name", "code", "status"], ["North Zone", "NZ", "Active"]]);
+  const ws = xlsx.utils.aoa_to_sheet([["name", "code", "status (Active/Inactive)"], ["North Zone", "NZ", "Active"]]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Zones");
   const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
