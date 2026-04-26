@@ -71,24 +71,25 @@ const createPurchase = async (req, res) => {
   try {
     const { vendorId, machineId, variants, willAddToInventory } = req.body;
 
+    const abort = async (status, message) => {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(status).json({ success: false, message });
+    };
+
     const validationError = validateCreatePurchase(req.body);
-    if (validationError)
-      return res.status(400).json({ success: false, message: validationError });
+    if (validationError) return abort(400, validationError);
 
     const machine = await Machine.findById(machineId)
       .populate("category", "name")
       .populate("division", "name")
       .session(session);
-    if (!machine)
-      return res.status(404).json({ success: false, message: "Machine not found" });
-    if (machine.status === "Inactive")
-      return res.status(400).json({ success: false, message: "Machine is inactive" });
+    if (!machine)                    return abort(404, "Machine not found");
+    if (machine.status === "Inactive") return abort(400, "Machine is inactive");
 
     const vendor = await Vendor.findById(vendorId).session(session);
-    if (!vendor)
-      return res.status(404).json({ success: false, message: "Vendor not found" });
-    if (vendor.status === "Inactive")
-      return res.status(400).json({ success: false, message: "Vendor is inactive" });
+    if (!vendor)                    return abort(404, "Vendor not found");
+    if (vendor.status === "Inactive") return abort(400, "Vendor is inactive");
 
     const vendorInfo = {
       vendorId:    vendor._id,
@@ -111,20 +112,17 @@ const createPurchase = async (req, res) => {
       const { attribute, value, quantity, price, discountedPrice } = v;
 
       const attrDoc = attrMap[attribute.toString()];
-      if (!attrDoc)
-        return res.status(404).json({ success: false, message: `Attribute "${attribute}" not found` });
-      if (attrDoc.status === "Inactive")
-        return res.status(400).json({ success: false, message: `Attribute "${attrDoc.name}" is inactive` });
-      if (!machineAttrIds.has(attribute.toString()))
-        return res.status(400).json({ success: false, message: `Attribute "${attrDoc.name}" does not belong to this machine` });
+      if (!attrDoc)                      return abort(404, `Attribute "${attribute}" not found`);
+      if (attrDoc.status === "Inactive")  return abort(400, `Attribute "${attrDoc.name}" is inactive`);
+      if (!machineAttrIds.has(attribute.toString())) return abort(400, `Attribute "${attrDoc.name}" does not belong to this machine`);
 
       const machineVariantIdx = machineVariants.findIndex(
         (mv) => mv.attribute.toString() === attribute.toString() && mv.value.trim().toLowerCase() === value.trim().toLowerCase()
       );
-      if (machineVariantIdx === -1)
-        return res.status(404).json({ success: false, message: `Variant "${attrDoc.name}: ${value}" not found on machine` });
+      if (machineVariantIdx === -1) return abort(404, `Variant "${attrDoc.name}: ${value}" not found on machine`);
 
       purchaseVariants.push({
+        attribute:       attrDoc._id,
         name:            attrDoc.name,
         value:           value.trim(),
         quantity,
@@ -216,40 +214,40 @@ const addToInventory = async (req, res) => {
   session.startTransaction();
 
   try {
+    const abort = async (status, message) => {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(status).json({ success: false, message });
+    };
+
     const { id } = req.params;
-    if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid purchase ID" });
+    if (!mongoose.isValidObjectId(id)) return abort(400, "Invalid purchase ID");
 
     const purchase = await PurchasedMachine.findById(id).session(session);
-    if (!purchase)
-      return res.status(404).json({ success: false, message: "Purchase record not found" });
-    if (purchase.willAddToInventory)
-      return res.status(400).json({ success: false, message: "Already added to inventory" });
+    if (!purchase)              return abort(404, "Purchase record not found");
+    if (purchase.willAddToInventory) return abort(400, "Already added to inventory");
 
     const machine = await Machine.findById(purchase.machineId)
       .populate("category", "name")
       .populate("division", "name")
       .session(session);
-    if (!machine)
-      return res.status(404).json({ success: false, message: "Machine not found" });
-    if (machine.status === "Inactive")
-      return res.status(400).json({ success: false, message: "Machine is inactive" });
+    if (!machine)                    return abort(404, "Machine not found");
+    if (machine.status === "Inactive") return abort(400, "Machine is inactive");
 
     const machineVariants = machine.variants;
     const logVariants     = [];
 
     for (const pv of purchase.variants) {
       const machineVariant = machineVariants.find(
-        (mv) => mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
+        (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
       );
-      if (!machineVariant)
-        return res.status(404).json({ success: false, message: `Variant "${pv.name}: ${pv.value}" not found on machine` });
+      if (!machineVariant) return abort(404, `Variant "${pv.name}: ${pv.value}" not found on machine`);
 
       const newStock  = machineVariant.currentStock + pv.quantity;
       const newStatus = resolveStockStatus(newStock, machineVariant.lowStockThreshold);
 
       await Machine.updateOne(
-        { _id: machine._id, "variants.value": machineVariant.value },
+        { _id: machine._id, "variants.attribute": machineVariant.attribute, "variants.value": machineVariant.value },
         {
           $set: {
             "variants.$.currentStock": newStock,
