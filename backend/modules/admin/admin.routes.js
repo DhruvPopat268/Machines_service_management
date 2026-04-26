@@ -10,5 +10,6 @@ router.use("/machine-divisions", require("./machineDivisionManagement/admin.mach
 router.use("/problem-types", require("./problemTypeManagement/admin.problemType.routes"));
 router.use("/customers", require("./customerManagement/admin.customer.routes"));
 router.use("/machines",  require("./inventoryManagement/admin.machine.routes"));
+router.use("/purchases", require("./purchasedMachines/admin.purchasedMachine.routes"));
 
 module.exports = router;

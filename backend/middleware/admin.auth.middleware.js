@@ -4,7 +4,10 @@ const AdminUserSession = require("../modules/admin/auth/admin.user.session.model
 
 const adminAuthMiddleware = async (req, res, next) => {
   try {
-    const token = req.cookies?.AdminToken;
+    const token =
+      process.env.NODE_ENV === "development" && req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.split(" ")[1]
+        : req.cookies?.AdminToken;
     if (!token)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
