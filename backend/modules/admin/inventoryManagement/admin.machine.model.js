@@ -5,7 +5,7 @@ const variantSchema = new mongoose.Schema(
     attribute:         { type: mongoose.Schema.Types.ObjectId, ref: "Attribute", required: true },
     value:             { type: String, trim: true, required: true },
     lowStockThreshold: { type: Number, default: -1 },
-    currentStock:      { type: Number, default: 0 },
+    currentStock:      { type: Number, default: 0, min: 0 },
     stockStatus:       { type: String, enum: ["In Stock", "Low Stock", "Out of Stock"], default: "Out of Stock" },
   },
   { _id: false }
