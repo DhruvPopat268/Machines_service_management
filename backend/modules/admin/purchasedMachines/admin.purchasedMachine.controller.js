@@ -185,12 +185,20 @@ const createPurchase = async (req, res) => {
           (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
         );
 
-        const newStock  = machineVariant.currentStock + pv.quantity;
-        const newStatus = resolveStockStatus(newStock, machineVariant.lowStockThreshold);
+        const updated = await Machine.findOneAndUpdate(
+          { _id: machine._id, "variants.attribute": pv.attribute, "variants.value": machineVariant.value },
+          { $inc: { "variants.$.currentStock": pv.quantity } },
+          { new: true, session }
+        );
+
+        const updatedVariant = updated.variants.find(
+          (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
+        );
+        const newStatus = resolveStockStatus(updatedVariant.currentStock, updatedVariant.lowStockThreshold);
 
         await Machine.updateOne(
           { _id: machine._id, "variants.attribute": pv.attribute, "variants.value": machineVariant.value },
-          { $set: { "variants.$.currentStock": newStock, "variants.$.stockStatus": newStatus } },
+          { $set: { "variants.$.stockStatus": newStatus } },
           { session }
         );
 
@@ -302,12 +310,20 @@ const addToInventory = async (req, res) => {
         );
         if (!machineVariant) return abort(404, `Variant "${pv.name}: ${pv.value}" not found on machine`);
 
-        const newStock  = machineVariant.currentStock + pv.quantity;
-        const newStatus = resolveStockStatus(newStock, machineVariant.lowStockThreshold);
+        const updated = await Machine.findOneAndUpdate(
+          { _id: machine._id, "variants.attribute": machineVariant.attribute, "variants.value": machineVariant.value },
+          { $inc: { "variants.$.currentStock": pv.quantity } },
+          { new: true, session }
+        );
+
+        const updatedVariant = updated.variants.find(
+          (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
+        );
+        const newStatus = resolveStockStatus(updatedVariant.currentStock, updatedVariant.lowStockThreshold);
 
         await Machine.updateOne(
           { _id: machine._id, "variants.attribute": machineVariant.attribute, "variants.value": machineVariant.value },
-          { $set: { "variants.$.currentStock": newStock, "variants.$.stockStatus": newStatus } },
+          { $set: { "variants.$.stockStatus": newStatus } },
           { session }
         );
 
