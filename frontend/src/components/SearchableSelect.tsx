@@ -17,9 +17,10 @@ interface SearchableSelectProps {
   placeholder?: string;
   searchPlaceholder?: string;
   className?: string;
+  onSearchChange?: (val: string) => void;
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder = "Select...", searchPlaceholder = "Search...", className }: SearchableSelectProps) {
+export function SearchableSelect({ options, value, onChange, placeholder = "Select...", searchPlaceholder = "Search...", className, onSearchChange }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
 
@@ -31,13 +32,13 @@ export function SearchableSelect({ options, value, onChange, placeholder = "Sele
           role="combobox"
           className={cn("w-full justify-between font-normal", !selected && "text-muted-foreground", className)}
         >
-          {selected ? selected.label : placeholder}
+          <span className="truncate">{selected ? selected.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }} align="start">
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput placeholder={searchPlaceholder} onValueChange={onSearchChange} />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup>

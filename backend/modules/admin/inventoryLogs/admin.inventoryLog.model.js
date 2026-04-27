@@ -9,6 +9,17 @@ const variantSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const machineEntrySchema = new mongoose.Schema(
+  {
+    machineName: { type: String, trim: true, required: true },
+    modelNumber: { type: String, trim: true, default: "" },
+    category:    { type: String, trim: true, default: "" },
+    division:    { type: String, trim: true, default: "" },
+    variants:    { type: [variantSchema], required: true },
+  },
+  { _id: false }
+);
+
 const inventoryLogSchema = new mongoose.Schema(
   {
     action: { type: String, enum: ["purchased", "sold"], required: true },
@@ -32,13 +43,15 @@ const inventoryLogSchema = new mongoose.Schema(
       gstNumber:  { type: String, trim: true, uppercase: true, default: "" },
     },
 
-    machineName: { type: String, trim: true, required: true },
-    modelNumber: { type: String, trim: true, default: "" },
-    category:    { type: String, trim: true, default: "" },
-    division:    { type: String, trim: true, default: "" },
-    variants: { type: [variantSchema], required: true },
+    machines: { type: [machineEntrySchema], required: true },
   },
   { timestamps: true }
 );
+
+inventoryLogSchema.index({ action: 1 });
+inventoryLogSchema.index({ "vendorInfo.vendorId": 1 });
+inventoryLogSchema.index({ "customerInfo.customerId": 1 });
+inventoryLogSchema.index({ "machines.machineName": 1 });
+inventoryLogSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("InventoryLog", inventoryLogSchema);
