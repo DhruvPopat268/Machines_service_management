@@ -10,7 +10,7 @@ api.interceptors.response.use(
   (error) => {
     const isLoginRoute = error.config?.url?.includes("/admin/users/login");
     if (error.response?.status === 401 && !isLoginRoute) {
-      window.location.href = "/login";
+      // window.location.href = "/login";
     }
     return Promise.reject(error);
   }
