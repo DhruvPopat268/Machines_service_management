@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const MachineCategory = require("./admin.machineCategory.model");
 const { validateCreateCategory, validateUpdateCategory, validateImportCategoryRow, caseInsensitiveNameRegex } = require("./admin.machineCategory.validator");
+const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 
 const Attribute = require("../attributeManagement/admin.attribute.model");
 
@@ -22,15 +23,31 @@ const getAll = async (req, res) => {
     if (status && ["Active", "Inactive"].includes(status)) query.status = status;
 
     if (fromDate || toDate) {
-      const parseIST = (ddmmyy, endOfDay = false) => {
-        const [dd, mm, yy] = ddmmyy.split("/");
-        const istOffsetMs = 5.5 * 60 * 60 * 1000;
-        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-        return new Date(base - istOffsetMs);
-      };
-      query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (fromDate) {
+        const parsed = validateAndParseDate(fromDate, "fromDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(fromDate, false);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid fromDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$gte = istDate;
+      }
+      
+      if (toDate) {
+        const parsed = validateAndParseDate(toDate, "toDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(toDate, true);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid toDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$lte = istDate;
+      }
     }
 
     const pageNum  = Math.max(1, parseInt(page));
@@ -228,8 +245,31 @@ const exportCategories = async (req, res) => {
     }
     if (status && ["Active", "Inactive"].includes(status)) query.status = status;
     if (fromDate || toDate) {
-      const p = (ddmmyy, end) => { const [dd,mm,yy]=ddmmyy.split("/"); return new Date(Date.UTC(2000+Number(yy),Number(mm)-1,Number(dd),end?23:0,end?59:0,end?59:0,end?999:0)-(5.5*60*60*1000)); };
-      query.createdAt={}; if(fromDate) query.createdAt.$gte=p(fromDate,false); if(toDate) query.createdAt.$lte=p(toDate,true);
+      if (fromDate) {
+        const parsed = validateAndParseDate(fromDate, "fromDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(fromDate, false);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid fromDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$gte = istDate;
+      }
+      
+      if (toDate) {
+        const parsed = validateAndParseDate(toDate, "toDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(toDate, true);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid toDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$lte = istDate;
+      }
     }
     const categories = await MachineCategory.find(query).lean();
     const rows = categories.map((c) => {
