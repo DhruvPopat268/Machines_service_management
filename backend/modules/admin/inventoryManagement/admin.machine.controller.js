@@ -384,7 +384,7 @@ const importMachines = async (req, res) => {
       if (!category) { rowErrors.push(`Row ${rowNum}: category is required`); continue; }
       if (!division) { rowErrors.push(`Row ${rowNum}: division is required`); continue; }
 
-      const status = String(row[statusKey] || "").trim();
+      const status = String(row[statusKey] || "Active").trim();
       if (status && !["Active", "Inactive"].includes(status)) {
         rowErrors.push(`Row ${rowNum}: status must be Active or Inactive`); continue;
       }
@@ -435,8 +435,12 @@ const importMachines = async (req, res) => {
 
       // resolve variant attribute IDs
       const resolvedVariants = [];
+      const seenVariantKeys  = new Set();
       let variantError = false;
       for (const v of variants) {
+        const variantKey = `${v.attrName.trim().toLowerCase()}||${v.value.trim().toLowerCase()}`;
+        if (seenVariantKeys.has(variantKey)) continue;
+        seenVariantKeys.add(variantKey);
         const attrId = attrMap[`${v.attrName.toLowerCase()}||${categoryId.toString()}`];
         if (!attrId) {
           skipped++; skippedReasons.push(`Row ${v.rowNum}: attribute "${v.attrName}" not found in category "${row.category}"`); variantError = true; break;

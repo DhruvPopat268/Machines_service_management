@@ -174,7 +174,7 @@ const importCategories = async (req, res) => {
     const docs = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
-      normalized.status = String(normalized[statusKey] || "").trim();
+      normalized.status = String(normalized[statusKey] || "Active").trim();
       const error = validateImportCategoryRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({

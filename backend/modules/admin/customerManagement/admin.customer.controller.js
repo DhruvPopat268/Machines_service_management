@@ -228,7 +228,7 @@ const importCustomers = async (req, res) => {
     const docs   = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
-      normalized.status = String(normalized[statusKey] || "").trim();
+      normalized.status = String(normalized[statusKey] || "Active").trim();
       const error = validateImportCustomerRow(normalized, i + 2);
       if (error) { skippedReasons.push(error); return; }
       docs.push({
