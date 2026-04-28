@@ -1,18 +1,75 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import { machines, customers, attributes as attributeOptions, machineSales as initialData, MachineSale, machineCategories } from "@/data/dummyData";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
-import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, ShoppingCart, Upload, Download } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info } from "lucide-react";
+import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
-import { SearchableSelect } from "@/components/SearchableSelect";
+import { Pagination } from "@/components/Pagination";
+import api from "@/lib/axiosInterceptor";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface CustomerInfo {
+  customerId: string | null;
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+  zone: string;
+  gstNumber: string;
+}
+
+interface Sale {
+  _id: string;
+  customerInfo: CustomerInfo;
+  machinesCount: number;
+  totalVariants: number;
+  grandTotal: number;
+  createdAt: string;
+}
+
+interface Customer {
+  _id: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
+interface MachineVariant {
+  attribute: { _id: string; name: string } | string;
+  value: string;
+  currentStock: number;
+}
+
+interface Machine {
+  _id: string;
+  name: string;
+  category?: { name: string };
+  variants: MachineVariant[];
+}
+
+interface VariantRow {
+  attributeId: string;
+  attributeName: string;
+  value: string;
+  quantity: string;
+  price: string;
+  discountedPrice: string;
+  availableStock: number;
+}
+
+interface MachineEntry {
+  machine: Machine;
+  variants: VariantRow[];
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
@@ -21,131 +78,454 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-interface VariantForm {
-  attribute: string;
-  price: string;
-  discountedPrice: string;
-  quantity: string;
-}
-
-const emptyVariant = (): VariantForm => ({ attribute: "", price: "", discountedPrice: "", quantity: "" });
-
-const emptyForm = {
-  customerId: "",
-  categoryId: "",
-  machineId: "",
-  variants: [emptyVariant()] as VariantForm[],
+const toISTDateParam = (htmlDate: string) => {
+  const [yyyy, mm, dd] = htmlDate.split("-");
+  return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const SellMachinesPage = () => {
-  const { toast } = useToast();
-  const location = useLocation();
-  const [data, setData] = useState<MachineSale[]>(initialData);
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-  const [dialog, setDialog] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [loading, setLoading] = useState(true);
+const LIMIT = 10;
 
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
-  }, []);
+// ─── Sale Dialog ──────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const customerId = params.get("customerId");
-    if (customerId) {
-      setForm((p) => ({ ...p, customerId }));
-      setDialog(true);
+const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialCustomerId?: string }) => {
+  const [customers, setCustomers]           = useState<Customer[]>([]);
+  const [customerId, setCustomerId]         = useState(initialCustomerId);
+  const [machineSearch, setMachineSearch]   = useState("");
+  const [machineResults, setMachineResults] = useState<Machine[]>([]);
+  const [searching, setSearching]           = useState(false);
+  const [dropdownOpen, setDropdownOpen]     = useState(false);
+  const [entries, setEntries]               = useState<MachineEntry[]>([]);
+  const [submitting, setSubmitting]         = useState(false);
+  const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  const fetchMachines = async (search = "") => {
+    setSearching(true);
+    try {
+      const params: Record<string, string> = { status: "Active", limit: "10" };
+      if (search.trim()) params.search = search.trim();
+      const r = await api.get("/admin/machines", { params });
+      setMachineResults(r.data.data);
+    } catch {
+      toast.error("Failed to load machines");
+    } finally {
+      setSearching(false);
     }
-  }, [location.search]);
-
-  const selectedMachine = machines.find((m) => m.id === form.machineId);
-  const activeCustomers = customers.filter((c) => c.status === "Active");
-  const activeCategories = machineCategories.filter((c) => c.status === "Active");
-  const activeMachines = machines.filter((m) => m.status === "Active" && (form.categoryId ? m.category === machineCategories.find((c) => c.id === form.categoryId)?.name : true));
-  const availableAttributes = attributeOptions.filter((a) => a.status === "Active");
-
-  const setField = (key: string, value: any) => setForm((p) => ({ ...p, [key]: value }));
-
-  const updateVariant = (vi: number, key: keyof VariantForm, value: string) =>
-    setForm((p) => ({ ...p, variants: p.variants.map((v, i) => i === vi ? { ...v, [key]: value } : v) }));
-
-  const addVariant = () => setForm((p) => ({ ...p, variants: [...p.variants, emptyVariant()] }));
-  const removeVariant = (vi: number) => setForm((p) => ({ ...p, variants: p.variants.filter((_, i) => i !== vi) }));
-
-  const handleSubmit = () => {
-    if (!form.customerId || !form.machineId) {
-      toast({ title: "Please select customer and machine", variant: "destructive" });
-      return;
-    }
-    const customer = customers.find((c) => c.id === form.customerId)!;
-    const machine = machines.find((m) => m.id === form.machineId)!;
-    const newSale: MachineSale = {
-      id: `MS-${String(data.length + 1).padStart(3, "0")}`,
-      customerId: form.customerId,
-      customerName: customer.name,
-      machineId: form.machineId,
-      machineName: machine.name,
-      machineModel: machine.model,
-      machineCategory: machine.category,
-      variants: form.variants.map((v) => ({
-        attribute: v.attribute,
-        price: Number(v.price) || 0,
-        discountedPrice: Number(v.discountedPrice) || 0,
-        quantity: Number(v.quantity) || 0,
-      })),
-      createdAt: new Date().toISOString(),
-    };
-    setData((prev) => [newSale, ...prev]);
-    toast({ title: "Sale recorded successfully" });
-    setDialog(false);
-    setForm(emptyForm);
   };
 
-  let filtered = [...data];
-  if (filters.customerName && filters.customerName !== "all") filtered = filtered.filter((s) => s.customerName === filters.customerName);
-  if (filters.machineCategory && filters.machineCategory !== "all") filtered = filtered.filter((s) => s.machineCategory === filters.machineCategory);
-  if (fromDate && toDate) filtered = filtered.filter((s) => s.createdAt.slice(0, 10) >= fromDate && s.createdAt.slice(0, 10) <= toDate);
-  if (search) {
-    const s = search.toLowerCase();
-    filtered = filtered.filter((r) => r.machineName.toLowerCase().includes(s) || r.customerName.toLowerCase().includes(s) || r.machineModel.toLowerCase().includes(s));
-  }
+  // sync customerId when initialCustomerId changes
+  useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
 
-  const handleClear = () => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); };
+  // fetch active customers once on open
+  useEffect(() => {
+    if (!open) return;
+    api.get("/admin/customers", { params: { status: "Active", limit: 100 } })
+      .then((r) => setCustomers(r.data.data))
+      .catch(() => toast.error("Failed to load customers"));
+    fetchMachines();
+  }, [open]);
 
-  const customerOptions = [...new Set(data.map((s) => s.customerName))].map((v) => ({ label: v, value: v }));
-  const categoryOptions = [...new Set(data.map((s) => s.machineCategory))].map((v) => ({ label: v, value: v }));
-  const allCustomerOptions = activeCustomers.map((c) => ({ label: `${c.name} — ${c.contact}`, value: c.id }));
+  // debounced machine search
+  useEffect(() => {
+    if (searchRef.current) clearTimeout(searchRef.current);
+    searchRef.current = setTimeout(() => fetchMachines(machineSearch), 400);
+  }, [machineSearch]);
 
-  const columns: Column<MachineSale>[] = [
-    { key: "id", label: "No.", render: (_s, i) => <span className="font-medium text-foreground">{i + 1}</span> },
-    { key: "customerName", label: "Customer", render: (s) => <span className="font-medium">{s.customerName}</span> },
-    { key: "machineName", label: "Machine", render: (s) => <span className="font-medium">{s.machineName}</span> },
-    { key: "machineModel", label: "Model", render: (s) => <span className="font-mono text-sm">{s.machineModel}</span> },
-    { key: "machineCategory", label: "Category", render: (s) => <span className="text-sm">{s.machineCategory}</span> },
-    {
-      key: "variants", label: "Variants", render: (s) => (
-        <div className="space-y-1">
-          {s.variants.map((v, i) => (
-            <div key={i} className="text-xs flex items-center gap-2">
-              {v.attribute && <span className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{v.attribute}</span>}
-              <span className="font-medium">₹{v.price.toLocaleString()}</span>
-              {v.discountedPrice > 0 && <span className="text-green-600">₹{v.discountedPrice.toLocaleString()}</span>}
-              <span className="text-muted-foreground">× {v.quantity}</span>
+  // close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node))
+        setDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const addMachine = (machine: Machine) => {
+    if (entries.find((e) => e.machine._id === machine._id)) {
+      toast.info("Machine already added");
+      return;
+    }
+    const variants: VariantRow[] = machine.variants
+      .filter((v) => v.currentStock > 0)
+      .map((v) => ({
+        attributeId:     typeof v.attribute === "string" ? v.attribute : v.attribute._id,
+        attributeName:   typeof v.attribute === "string" ? "" : v.attribute.name,
+        value:           v.value,
+        quantity:        "",
+        price:           "",
+        discountedPrice: "",
+        availableStock:  v.currentStock,
+      }));
+    
+    if (variants.length === 0) {
+      toast.error("This machine has no variants in stock");
+      return;
+    }
+    
+    setEntries((prev) => [...prev, { machine, variants }]);
+  };
+
+  const removeMachine = (machineId: string) =>
+    setEntries((prev) => prev.filter((e) => e.machine._id !== machineId));
+
+  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string) =>
+    setEntries((prev) =>
+      prev.map((e, i) =>
+        i !== mi ? e : {
+          ...e,
+          variants: e.variants.map((v, j) => j !== vi ? v : { ...v, [field]: value }),
+        }
+      )
+    );
+
+  const handleSubmit = async () => {
+    if (!customerId) { toast.error("Please select a customer"); return; }
+    if (entries.length === 0) { toast.error("Please add at least one machine"); return; }
+
+    for (const entry of entries) {
+      for (const v of entry.variants) {
+        const hasQty   = v.quantity !== "" && Number(v.quantity) > 0;
+        const hasPrice = v.price !== "";
+        if (hasQty && !hasPrice) {
+          toast.error(`Enter price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        if (hasPrice && !hasQty) {
+          toast.error(`Enter quantity for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        if (hasQty && Number(v.quantity) > v.availableStock) {
+          toast.error(`Insufficient stock for ${entry.machine.name} — ${v.attributeName}: ${v.value}. Available: ${v.availableStock}`);
+          return;
+        }
+        if (hasQty && hasPrice && v.discountedPrice !== "" && Number(v.discountedPrice) > Number(v.price)) {
+          toast.error(`Discounted price cannot exceed price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+      }
+    }
+
+    const payload = {
+      customerId,
+      machines: entries.map((e) => ({
+        machineId: e.machine._id,
+        variants:  e.variants
+          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "")
+          .map((v) => ({
+            attribute:       v.attributeId,
+            value:           v.value,
+            quantity:        Number(v.quantity),
+            price:           Number(v.price),
+            discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
+          })),
+      })).filter((m) => m.variants.length > 0),
+    };
+
+    if (payload.machines.length === 0) {
+      toast.error("Please fill quantity and price for at least one variant");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.post("/admin/sales", payload);
+      toast.success("Sale recorded successfully");
+      onSuccess();
+      handleClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to record sale");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    setCustomerId(initialCustomerId);
+    setMachineSearch("");
+    setMachineResults([]);
+    setDropdownOpen(false);
+    setEntries([]);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
+      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Sell Machine</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6 py-2 flex-1 overflow-y-auto">
+          {/* Customer */}
+          <div className="space-y-1.5">
+            <Label>Customer <span className="text-destructive">*</span></Label>
+            <SearchableSelect
+              options={customers.map((c) => ({ label: `${c.name} — ${c.phone}`, value: c._id }))}
+              value={customerId}
+              onChange={setCustomerId}
+              placeholder="Select customer"
+              searchPlaceholder="Search customer..."
+            />
+          </div>
+
+          {/* Machine search */}
+          <div className="space-y-1.5">
+            <Label>Add Machine</Label>
+            <div className="relative" ref={wrapperRef}>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search machine by name..."
+                  value={machineSearch}
+                  onChange={(e) => setMachineSearch(e.target.value)}
+                  onFocus={() => setDropdownOpen(true)}
+                />
+              </div>
+              {dropdownOpen && (
+                <div className="absolute z-50 w-full border rounded-md bg-background shadow-md divide-y max-h-48 overflow-y-auto mt-1">
+                  {searching
+                    ? <p className="text-xs text-muted-foreground px-3 py-2">Loading...</p>
+                    : machineResults.length === 0
+                      ? <p className="text-xs text-muted-foreground px-3 py-2">No machines found</p>
+                      : machineResults.map((m) => (
+                          <button
+                            key={m._id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between"
+                            onMouseDown={(e) => { e.preventDefault(); addMachine(m); setDropdownOpen(false); }}
+                          >
+                            <span>{m.name}</span>
+                            <span className="text-xs text-muted-foreground">{m.category?.name}</span>
+                          </button>
+                        ))
+                  }
+                </div>
+              )}
             </div>
-          ))}
+          </div>
+
+          {/* Machine entries */}
+          {entries.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Variants with empty quantity or price will be skipped. Stock will be automatically deducted.</span>
+              </div>
+              {entries.map((entry, mi) => (
+                <div key={entry.machine._id} className="border rounded-lg p-4 space-y-3">
+                  {/* Machine header */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">{entry.machine.name}</p>
+                      {entry.machine.category && (
+                        <p className="text-xs text-muted-foreground">{entry.machine.category.name}</p>
+                      )}
+                    </div>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => removeMachine(entry.machine._id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Variants table */}
+                  {entry.variants.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No variants available in stock.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-muted-foreground border-b">
+                            <th className="text-left font-medium pb-2 pr-3">Attribute</th>
+                            <th className="text-left font-medium pb-2 pr-3">Value</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-20">Available</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entry.variants.map((v, vi) => (
+                            <tr key={vi} className="border-b last:border-0">
+                              <td className="py-1.5 pr-3">{v.attributeName}</td>
+                              <td className="py-1.5 pr-3">{v.value}</td>
+                              <td className="py-1.5 pr-3">
+                                <span className={`font-medium ${v.availableStock < 10 ? "text-orange-600" : "text-green-600"}`}>
+                                  {v.availableStock}
+                                </span>
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={v.availableStock}
+                                  className="h-7 text-xs w-20"
+                                  value={v.quantity}
+                                  onChange={(e) => updateVariant(mi, vi, "quantity", e.target.value)}
+                                />
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-7 text-xs w-24"
+                                  value={v.price}
+                                  onChange={(e) => updateVariant(mi, vi, "price", e.target.value)}
+                                />
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  className="h-7 text-xs w-24"
+                                  placeholder="—"
+                                  value={v.discountedPrice}
+                                  onChange={(e) => updateVariant(mi, vi, "discountedPrice", e.target.value)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
+          <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {submitting ? "Recording..." : "Record Sale"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+const SellMachinesPage = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [data, setData]                       = useState<Sale[]>([]);
+  const [filters, setFilters]                 = useState<Record<string, string>>({});
+  const [fromDate, setFromDate]               = useState("");
+  const [toDate, setToDate]                   = useState("");
+  const [loading, setLoading]                 = useState(true);
+  const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
+  const [dialogOpen, setDialogOpen]           = useState(false);
+  const [initialCustomerId, setInitialCustomerId] = useState("");
+  const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
+  const [customerSearch, setCustomerSearch]   = useState("");
+  const customerSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // auto-open dialog if customerId is in query params
+  useEffect(() => {
+    const cid = searchParams.get("customerId");
+    if (cid) {
+      setInitialCustomerId(cid);
+      setDialogOpen(true);
+    }
+  }, [searchParams]);
+
+  // fetch customer options for filter dropdown with debounce
+  const fetchCustomerOptions = useCallback(async (search = "") => {
+    try {
+      const params: Record<string, string> = { status: "Active", limit: "100" };
+      if (search.trim()) params.search = search.trim();
+      const r = await api.get("/admin/customers", { params });
+      setCustomerOptions(r.data.data.map((c: Customer) => ({
+        label: `${c.name} — ${c.phone}`,
+        value: c._id,
+      })));
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { fetchCustomerOptions(); }, [fetchCustomerOptions]);
+
+  useEffect(() => {
+    if (customerSearchRef.current) clearTimeout(customerSearchRef.current);
+    customerSearchRef.current = setTimeout(() => fetchCustomerOptions(customerSearch), 400);
+  }, [customerSearch, fetchCustomerOptions]);
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchSales = useCallback(async (page = 1) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    try {
+      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
+      if (filters.customerId && filters.customerId !== "all") params.customerId = filters.customerId;
+      if (filters.category && filters.category !== "all") params.category = filters.category;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+
+      const res = await api.get("/admin/sales", { params, signal: controller.signal });
+      setData(res.data.data);
+      setPagination({
+        page:       res.data.pagination.page,
+        totalPages: res.data.pagination.totalPages,
+        total:      res.data.pagination.total,
+      });
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
+        toast.error("Failed to fetch sales");
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [filters, fromDate, toDate]);
+
+  useEffect(() => { fetchSales(1); }, [fetchSales]);
+
+  const columns: Column<Sale>[] = [
+    {
+      key: "_id", label: "No.",
+      render: (_s, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span>,
+    },
+    {
+      key: "customerInfo", label: "Customer Info",
+      render: (s) => (
+        <div>
+          <p className="font-medium text-sm">{s.customerInfo.name}</p>
+          <p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p>
+          <p className="text-xs text-muted-foreground">{s.customerInfo.email}</p>
         </div>
       ),
     },
     {
-      key: "createdAt", label: "Sold At", render: (s) => {
+      key: "machinesCount", label: "Machines",
+      render: (s) => <span className="font-medium">{s.machinesCount}</span>,
+    },
+    {
+      key: "totalVariants", label: "Total Variants",
+      render: (s) => <span className="font-medium">{s.totalVariants}</span>,
+    },
+    {
+      key: "grandTotal", label: "Total Sold",
+      render: (s) => <span className="font-medium">₹{s.grandTotal.toLocaleString()}</span>,
+    },
+    {
+      key: "createdAt", label: "Sold At",
+      render: (s) => {
         const { date, time } = formatDateTime(s.createdAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
+    },
+    {
+      key: "actions", label: "Actions",
+      render: (s) => (
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}>
+          <Eye className="h-3 w-3" />
+        </Button>
+      ),
     },
   ];
 
@@ -155,138 +535,54 @@ const SellMachinesPage = () => {
         <>
           <PageHeader
             title="Sell Machines"
-            description="Record machine sales to customers"
+            description="Record and manage machine sales to customers"
             actionLabel="Sell Machine"
             actionIcon={ShoppingCart}
-            onAction={() => { setForm(emptyForm); setDialog(true); }}
-          >
-            <Button variant="outline" className="gap-2" disabled><Upload className="h-4 w-4" /> Import</Button>
-            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
-          </PageHeader>
-          <FilterBar
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search by machine name, model or customer..."
-            searchableFilters={[
-              { key: "customerName", placeholder: "Customer", options: customerOptions },
-            ]}
-            filters={[
-              { key: "machineCategory", label: "Category", options: categoryOptions },
-            ]}
-            filterValues={filters}
-            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
-            showDateRange
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onClear={handleClear}
+            onAction={() => { setInitialCustomerId(""); setDialogOpen(true); }}
           />
-          <DataTable columns={columns} data={filtered} />
+          <div className="flex justify-end flex-wrap gap-3 items-center">
+            <SearchableSelect
+              options={[{ label: "All Customers", value: "" }, ...customerOptions]}
+              value={filters.customerId || ""}
+              onChange={(v) => setFilters((prev) => ({ ...prev, customerId: v }))}
+              placeholder="All Customers"
+              searchPlaceholder="Search customer..."
+              onSearchChange={setCustomerSearch}
+              className="w-[220px] h-9 text-sm"
+            />
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
+            </div>
+            {(filters.customerId || fromDate || toDate) && (
+              <Button variant="outline" size="sm" onClick={() => { setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+                <X className="h-4 w-4 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+          <div>
+            <DataTable columns={columns} data={data} />
+          </div>
+          <Pagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={LIMIT}
+            onPageChange={fetchSales}
+          />
         </>
       )}
 
-      <Dialog open={dialog} onOpenChange={(open) => { if (!open) { setDialog(false); setForm(emptyForm); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Sell Machine</DialogTitle></DialogHeader>
-
-          <div className="space-y-5 py-2">
-            {/* Customer */}
-            <div className="space-y-2">
-              <Label>Customer <span className="text-destructive">*</span></Label>
-              <SearchableSelect
-                options={allCustomerOptions}
-                value={form.customerId}
-                onChange={(v) => setField("customerId", v)}
-                placeholder="Select customer"
-                searchPlaceholder="Search customer..."
-              />
-            </div>
-
-            {/* Category */}
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={form.categoryId} onValueChange={(v) => setForm((p) => ({ ...p, categoryId: v, machineId: "" }))}>
-                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  {activeCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.categoryId && <p className="text-xs text-muted-foreground">Showing machines in selected category</p>}
-            </div>
-
-            {/* Machine */}
-            <div className="space-y-2">
-              <Label>Machine <span className="text-destructive">*</span></Label>
-              <Select value={form.machineId} onValueChange={(v) => setField("machineId", v)}>
-                <SelectTrigger><SelectValue placeholder="Select machine" /></SelectTrigger>
-                <SelectContent>
-                  {activeMachines.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name} — {m.model}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedMachine && (
-                <p className="text-xs text-muted-foreground">{selectedMachine.division} · {selectedMachine.category}</p>
-              )}
-            </div>
-
-            {/* Variants */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Variants</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addVariant}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Variant
-                </Button>
-              </div>
-              {form.variants.map((variant, vi) => (
-                <div key={vi} className="border rounded-lg p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Variant {vi + 1}</span>
-                    {form.variants.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeVariant(vi)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Attribute</Label>
-                      <Select value={variant.attribute} onValueChange={(v) => updateVariant(vi, "attribute", v)}>
-                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select attribute" /></SelectTrigger>
-                        <SelectContent>
-                          {availableAttributes.map((a) => (
-                            <SelectItem key={a.id} value={a.name}>{a.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Quantity</Label>
-                      <Input type="number" placeholder="0" min={1} value={variant.quantity} onChange={(e) => updateVariant(vi, "quantity", e.target.value)} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Price (₹) <span className="text-destructive">*</span></Label>
-                      <Input type="number" placeholder="0" min={0} value={variant.price} onChange={(e) => updateVariant(vi, "price", e.target.value)} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Discounted Price (₹)</Label>
-                      <Input type="number" placeholder="0" min={0} value={variant.discountedPrice} onChange={(e) => updateVariant(vi, "discountedPrice", e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setDialog(false); setForm(emptyForm); }}>Cancel</Button>
-            <Button onClick={handleSubmit}>Record Sale</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SellMachineDialog
+        open={dialogOpen}
+        onClose={() => { setDialogOpen(false); setInitialCustomerId(""); navigate("/sell-machines", { replace: true }); }}
+        onSuccess={() => fetchSales(1)}
+        initialCustomerId={initialCustomerId}
+      />
     </div>
   );
 };
