@@ -52,10 +52,16 @@ interface InventoryLogDetail {
 }
 
 const formatDateTime = (iso: string) => {
-  const d = new Date(iso);
-  const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
-  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  return `${date} ${time}`;
+  // Add 5.5 hours to convert UTC to IST
+  const d = new Date(new Date(iso).getTime() + 5.5 * 60 * 60 * 1000);
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yy = String(d.getUTCFullYear()).toString().slice(2);
+  const h = d.getUTCHours();
+  const min = String(d.getUTCMinutes()).padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = String(h % 12 || 12).padStart(2, "0");
+  return `${dd}/${mm}/${yy} ${h12}:${min} ${ampm}`;
 };
 
 const InventoryLogDetailPage = () => {

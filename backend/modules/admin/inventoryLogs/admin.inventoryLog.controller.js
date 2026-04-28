@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const InventoryLog = require("./admin.inventoryLog.model");
+const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 
 const getAll = async (req, res) => {
   try {
@@ -24,19 +25,46 @@ const getAll = async (req, res) => {
     }
 
     if (fromDate || toDate) {
-      const parseIST = (ddmmyy, endOfDay = false) => {
-        const [dd, mm, yy] = ddmmyy.split("/");
-        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-        return new Date(base - 5.5 * 60 * 60 * 1000);
-      };
-      query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (fromDate) {
+        const parsed = validateAndParseDate(fromDate, "fromDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(fromDate, false);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid fromDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$gte = istDate;
+      }
+      
+      if (toDate) {
+        const parsed = validateAndParseDate(toDate, "toDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(toDate, true);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid toDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$lte = istDate;
+      }
     }
 
-    const pageNum  = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip     = (pageNum - 1) * limitNum;
+    // Validate pagination parameters
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+
+    if (!Number.isInteger(pageNum) || pageNum < 1) {
+      return res.status(400).json({ success: false, message: "page must be a positive integer" });
+    }
+
+    if (!Number.isInteger(limitNum) || limitNum < 1 || limitNum > 100) {
+      return res.status(400).json({ success: false, message: "limit must be a positive integer between 1 and 100" });
+    }
+
+    const skip = (pageNum - 1) * limitNum;
 
     const [logs, total] = await Promise.all([
       InventoryLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
@@ -113,14 +141,31 @@ const exportInventoryLogs = async (req, res) => {
     }
 
     if (fromDate || toDate) {
-      const parseIST = (ddmmyy, endOfDay = false) => {
-        const [dd, mm, yy] = ddmmyy.split("/");
-        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-        return new Date(base - 5.5 * 60 * 60 * 1000);
-      };
-      query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (fromDate) {
+        const parsed = validateAndParseDate(fromDate, "fromDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(fromDate, false);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid fromDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$gte = istDate;
+      }
+      
+      if (toDate) {
+        const parsed = validateAndParseDate(toDate, "toDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(toDate, true);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid toDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$lte = istDate;
+      }
     }
 
     const logs = await InventoryLog.find(query).sort({ createdAt: -1 }).lean();
@@ -133,13 +178,11 @@ const exportInventoryLogs = async (req, res) => {
       log.machines.forEach((machine) => {
         machine.variants.forEach((variant) => {
           rows.push({
-            "Company Name": isPurchased ? (log.vendorInfo?.companyName || "") : "",
-            "Vendor Name": isPurchased 
-              ? (log.vendorInfo?.name || "")
-              : (log.customerInfo?.name || ""),
-            "Contact": isPurchased
-              ? (log.vendorInfo?.phone || "")
-              : (log.customerInfo?.phone || ""),
+            "Company Name": log.vendorInfo?.companyName || "",
+            "Vendor Name": log.vendorInfo?.name || "",
+            "Vendor Contact": log.vendorInfo?.phone || "",
+            "Customer Name": log.customerInfo?.name || "",
+            "Customer Contact": log.customerInfo?.phone || "",
             "Machine Name": machine.machineName,
             "Model Number": machine.modelNumber || "",
             "Category": machine.category || "",

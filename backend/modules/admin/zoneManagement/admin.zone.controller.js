@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const Zone = require("./admin.zone.model");
 const { validateCreateZone, validateUpdateZone, validateImportZoneRow, caseInsensitiveNameRegex } = require("./admin.zone.validator");
+const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 
 const Customer = require("../customerManagement/admin.customer.model");
 
@@ -28,18 +29,31 @@ const getAllZones = async (req, res) => {
 
     // fromDate / toDate arrive as dd/mm/yy IST — convert to UTC range for MongoDB
     if (fromDate || toDate) {
-      const parseIST = (ddmmyy, endOfDay = false) => {
-        const [dd, mm, yy] = ddmmyy.split("/");
-        const year = 2000 + Number(yy);
-        // IST midnight = UTC 18:30 previous day; IST 23:59:59 = UTC 18:29:59 same day
-        const istOffsetMs = 5.5 * 60 * 60 * 1000;
-        const base = Date.UTC(year, Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
-        return new Date(base - istOffsetMs);
-      };
-
-      query.createdAt = {};
-      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (fromDate) {
+        const parsed = validateAndParseDate(fromDate, "fromDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(fromDate, false);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid fromDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$gte = istDate;
+      }
+      
+      if (toDate) {
+        const parsed = validateAndParseDate(toDate, "toDate");
+        if (parsed.error) {
+          return res.status(400).json({ success: false, message: parsed.error });
+        }
+        const istDate = parseIST(toDate, true);
+        if (!istDate) {
+          return res.status(400).json({ success: false, message: "Invalid toDate" });
+        }
+        query.createdAt = query.createdAt || {};
+        query.createdAt.$lte = istDate;
+      }
     }
 
     const pageNum  = Math.max(1, parseInt(page));
