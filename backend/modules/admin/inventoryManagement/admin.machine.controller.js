@@ -49,6 +49,12 @@ const processImages = async (files, existingCount = 0) => {
   return urls;
 };
 
+const resolveStockStatus = (currentStock, lowStockThreshold) => {
+  if (currentStock === 0) return "Out of Stock";
+  if (lowStockThreshold === -1) return "In Stock";
+  return lowStockThreshold < currentStock ? "In Stock" : "Low Stock";
+};
+
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const caseInsensitiveRegex = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
 
@@ -265,7 +271,37 @@ const update = async (req, res) => {
     if (status !== undefined)        updateData.status        = status;
     if (variants !== undefined) {
       try {
-        updateData.variants = typeof variants === "string" ? JSON.parse(variants) : variants;
+        const newVariants = typeof variants === "string" ? JSON.parse(variants) : variants;
+        
+        // Preserve currentStock from existing variants and recalculate stockStatus
+        const processedVariants = newVariants.map((newVar) => {
+          // Find matching existing variant by attribute and value
+          const existingVar = machine.variants.find(
+            (v) => v.attribute.toString() === newVar.attribute.toString() && 
+                   v.value.trim().toLowerCase() === newVar.value.trim().toLowerCase()
+          );
+          
+          // Preserve currentStock if variant exists, otherwise use 0
+          const currentStock = existingVar ? existingVar.currentStock : 0;
+          
+          // Use new lowStockThreshold or preserve existing one
+          const lowStockThreshold = newVar.lowStockThreshold !== undefined 
+            ? newVar.lowStockThreshold 
+            : (existingVar ? existingVar.lowStockThreshold : -1);
+          
+          // Recalculate stockStatus based on currentStock and lowStockThreshold
+          const stockStatus = resolveStockStatus(currentStock, lowStockThreshold);
+          
+          return {
+            attribute: newVar.attribute,
+            value: newVar.value,
+            lowStockThreshold,
+            currentStock,
+            stockStatus,
+          };
+        });
+        
+        updateData.variants = processedVariants;
       } catch (_) {
         return res.status(400).json({ success: false, message: "Invalid variants format" });
       }
