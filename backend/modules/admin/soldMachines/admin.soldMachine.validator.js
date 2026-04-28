@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
 
-const validateCreatePurchase = (body) => {
-  const { vendorId, machines } = body;
+const validateCreateSale = (body) => {
+  const { customerId, machines } = body;
 
-  if (!vendorId || !mongoose.isValidObjectId(vendorId))
-    return "Invalid or missing vendor ID";
+  if (!customerId || !mongoose.isValidObjectId(customerId))
+    return "Invalid or missing customer ID";
 
   if (!Array.isArray(machines) || machines.length === 0)
     return "machines array is required and must not be empty";
@@ -20,7 +20,7 @@ const validateCreatePurchase = (body) => {
       return `${machineLabel}: variants array is required and must not be empty`;
 
     for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice, willAddToInventory } = variants[vi];
+      const { attribute, value, quantity, price, discountedPrice } = variants[vi];
       const label = `${machineLabel} Variant ${vi + 1}`;
 
       if (!attribute || !mongoose.isValidObjectId(attribute))
@@ -55,13 +55,10 @@ const validateCreatePurchase = (body) => {
         if (numDiscountedPrice > numPrice)
           return `${label}: discounted price cannot be greater than price`;
       }
-
-      if (willAddToInventory !== undefined && typeof willAddToInventory !== "boolean")
-        return `${label}: willAddToInventory must be a boolean`;
     }
   }
 
   return null;
 };
 
-module.exports = { validateCreatePurchase };
+module.exports = { validateCreateSale };

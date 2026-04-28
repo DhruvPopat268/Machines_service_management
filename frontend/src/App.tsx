@@ -23,6 +23,7 @@ import ProblemTypesPage from "./pages/ProblemTypesPage";
 import PurchaseMachinesPage from "./pages/PurchaseMachinesPage";
 import PurchaseMachineDetailPage from "./pages/PurchaseMachineDetailPage";
 import SellMachinesPage from "./pages/SellMachinesPage";
+import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
 import ZonesPage from "./pages/ZonesPage";
 import VendorsPage from "./pages/VendorsPage";
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/purchase-machines" element={<PurchaseMachinesPage />} />
             <Route path="/purchase-machines/:id" element={<PurchaseMachineDetailPage />} />
             <Route path="/sell-machines" element={<SellMachinesPage />} />
+            <Route path="/sell-machines/:id" element={<SellMachineDetailPage />} />
             <Route path="/attributes" element={<AttributesPage />} />
             <Route path="/machine-divisions" element={<MachineDivisionsPage />} />
             <Route path="/machine-categories" element={<MachineCategoriesPage />} />

@@ -11,6 +11,7 @@ router.use("/problem-types", require("./problemTypeManagement/admin.problemType.
 router.use("/customers", require("./customerManagement/admin.customer.routes"));
 router.use("/machines",  require("./inventoryManagement/admin.machine.routes"));
 router.use("/purchases", require("./purchasedMachines/admin.purchasedMachine.routes"));
+router.use("/sales", require("./soldMachines/admin.soldMachine.routes"));
 router.use("/inventory-logs", require("./inventoryLogs/admin.inventoryLog.routes"));
 
 module.exports = router;

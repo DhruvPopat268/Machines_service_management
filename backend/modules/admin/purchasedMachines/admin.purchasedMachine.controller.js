@@ -185,11 +185,20 @@ const createPurchase = async (req, res) => {
           (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
         );
 
+        // Atomic operation: increment stock
         const updated = await Machine.findOneAndUpdate(
-          { _id: machine._id, "variants.attribute": pv.attribute, "variants.value": machineVariant.value },
+          { 
+            _id: machine._id, 
+            "variants.attribute": pv.attribute, 
+            "variants.value": machineVariant.value 
+          },
           { $inc: { "variants.$.currentStock": pv.quantity } },
           { new: true, session }
         );
+
+        if (!updated) {
+          return abort(404, `Failed to update stock for "${machine.name}" - "${pv.name}: ${pv.value}". Variant may have been removed.`);
+        }
 
         const updatedVariant = updated.variants.find(
           (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
@@ -310,11 +319,20 @@ const addToInventory = async (req, res) => {
         );
         if (!machineVariant) return abort(404, `Variant "${pv.name}: ${pv.value}" not found on machine`);
 
+        // Atomic operation: increment stock
         const updated = await Machine.findOneAndUpdate(
-          { _id: machine._id, "variants.attribute": machineVariant.attribute, "variants.value": machineVariant.value },
+          { 
+            _id: machine._id, 
+            "variants.attribute": machineVariant.attribute, 
+            "variants.value": machineVariant.value 
+          },
           { $inc: { "variants.$.currentStock": pv.quantity } },
           { new: true, session }
         );
+
+        if (!updated) {
+          return abort(404, `Failed to update stock for "${machine.name}" - "${pv.name}: ${pv.value}". Variant may have been removed.`);
+        }
 
         const updatedVariant = updated.variants.find(
           (mv) => mv.attribute.toString() === pv.attribute.toString() && mv.value.trim().toLowerCase() === pv.value.trim().toLowerCase()
