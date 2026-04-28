@@ -216,16 +216,19 @@ const importCustomers = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "phone", "email", "status"];
+    const required = ["name", "phone", "email"];
     const headers  = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing  = required.filter((h) => !headers.includes(h));
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
+    const statusKey = headers.find((h) => h === "status" || h.startsWith("status ")) ?? "status";
+
     const skippedReasons = [];
     const docs   = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      normalized.status = String(normalized[statusKey] || "").trim();
       const error = validateImportCustomerRow(normalized, i + 2);
       if (error) { skippedReasons.push(error); return; }
       docs.push({

@@ -154,7 +154,10 @@ const MachinesPage = () => {
       const fd = new FormData();
       fd.append("file", importFile);
       const res = await api.post("/admin/machines/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const reasons = res.data.skippedReasons?.length
+        ? `\nSkipped reasons: ${res.data.skippedReasons.join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchMachines(1);
     } catch (err: any) {

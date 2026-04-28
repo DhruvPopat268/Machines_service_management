@@ -193,7 +193,10 @@ const MachineDivisionsPage = () => {
       const form = new FormData();
       form.append("file", importFile);
       const res = await api.post("/admin/machine-divisions/import", form, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const reasons = res.data.skippedReasons?.length
+        ? `\nSkipped reasons: ${res.data.skippedReasons.join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchDivisions(1);
     } catch (err: any) {

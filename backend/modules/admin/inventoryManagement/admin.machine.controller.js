@@ -318,8 +318,11 @@ const formatIST = (date) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "modelNumber", "serialNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "status (Active/Inactive)", "notes"],
-    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Active", "Sample notes"],
+    ["name", "modelNumber", "serialNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "attribute", "value", "lowStockThreshold", "status (Active/Inactive)", "notes"],
+    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Red",  "5",  "Active", "Sample notes"],
+    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Blue", "5",  "Active", "Sample notes"],
+    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Voltage", "220V", "-1", "Active", "Sample notes"],
+    ["Laser Cutter L10", "L10",  "",       "",            "",         "",   "Light Machinery", "Laser Division", "",      "",     "",   "Active", ""],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Machines");
@@ -340,13 +343,15 @@ const importMachines = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "category", "status"];
+    const required = ["name", "category", "division"];
     const headers  = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing  = required.filter((h) => !headers.includes(h));
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
-    // pre-load all categories, divisions, attributes for name → id lookup
+    // resolve status key — header may be "status" or "status (active/inactive)"
+    const statusKey = headers.find((h) => h === "status" || h.startsWith("status ")) ?? "status";
+
     const [allCategories, allDivisions, allAttributes] = await Promise.all([
       MachineCategory.find({}, "name _id").lean(),
       MachineDivision.find({}, "name _id").lean(),
@@ -355,41 +360,138 @@ const importMachines = async (req, res) => {
 
     const catMap  = Object.fromEntries(allCategories.map((c) => [c.name.toLowerCase(), c._id]));
     const divMap  = Object.fromEntries(allDivisions.map((d)  => [d.name.toLowerCase(), d._id]));
-    const attrMap = Object.fromEntries(allAttributes.map((a) => [a.name.toLowerCase(), a._id]));
+    const attrMap = Object.fromEntries(allAttributes.map((a) => [`${a.name.toLowerCase()}||${a.machineCategory.toString()}`, a._id]));
+
+    // normalize all rows
+    const normalized = rows.map((row) =>
+      Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), typeof v === "string" ? v.trim() : v]))
+    );
+
+    // group rows by machine identity: name + category + division + modelNumber
+    const machineMap = new Map(); // key → { rowNum, normalized, variantRows[] }
+    const rowErrors  = [];
+
+    for (let i = 0; i < normalized.length; i++) {
+      const row    = normalized[i];
+      const rowNum = i + 2;
+
+      const name        = String(row.name        || "").trim();
+      const category    = String(row.category    || "").trim();
+      const division    = String(row.division    || "").trim();
+      const modelNumber = String(row.modelnumber || "").trim();
+
+      if (!name)     { rowErrors.push(`Row ${rowNum}: name is required`);     continue; }
+      if (!category) { rowErrors.push(`Row ${rowNum}: category is required`); continue; }
+      if (!division) { rowErrors.push(`Row ${rowNum}: division is required`); continue; }
+
+      const status = String(row[statusKey] || "").trim();
+      if (status && !["Active", "Inactive"].includes(status)) {
+        rowErrors.push(`Row ${rowNum}: status must be Active or Inactive`); continue;
+      }
+      if (row.gstpercentage !== undefined && row.gstpercentage !== "") {
+        const gst = Number(row.gstpercentage);
+        if (isNaN(gst) || gst < 0 || gst > 100) {
+          rowErrors.push(`Row ${rowNum}: gstPercentage must be between 0 and 100`); continue;
+        }
+      }
+
+      const key = `${name.toLowerCase()}||${category.toLowerCase()}||${division.toLowerCase()}||${modelNumber.toLowerCase()}`;
+
+      if (!machineMap.has(key)) {
+        machineMap.set(key, { firstRowNum: rowNum, row, variants: [] });
+      }
+
+      // if attribute + value present, treat as a variant row
+      const attrName = String(row.attribute || "").trim();
+      const value    = String(row.value     || "").trim();
+
+      if (attrName && value) {
+        const threshold = row.lowstockthreshold !== "" ? Number(row.lowstockthreshold) : -1;
+        if (isNaN(threshold)) {
+          rowErrors.push(`Row ${rowNum}: lowStockThreshold must be a number`); continue;
+        }
+        machineMap.get(key).variants.push({ rowNum, attrName, value, threshold });
+      }
+    }
 
     let imported = 0, skipped = 0;
-    const skippedReasons = [];
+    const skippedReasons = [...rowErrors];
+    // rowErrors are individual row issues, not machine-level skips — don't count them in skipped
+    // they are informational only
 
-    for (let i = 0; i < rows.length; i++) {
-      const row        = rows[i];
-      const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), typeof v === "string" ? v.trim() : v]));
-      const rowNum     = i + 2;
+    for (const [, entry] of machineMap) {
+      const { firstRowNum, row, variants } = entry;
+      const rowNum = firstRowNum;
 
-      const validationError = validateImportMachineRow(normalized, rowNum);
-      if (validationError) { skipped++; skippedReasons.push(validationError); continue; }
+      const categoryId = catMap[String(row.category || "").toLowerCase()];
+      if (!categoryId) {
+        skipped++; skippedReasons.push(`Row ${rowNum}: category "${row.category}" not found`); continue;
+      }
 
-      const categoryId = catMap[String(normalized.category || "").toLowerCase()];
-      if (!categoryId) { skipped++; skippedReasons.push(`Row ${rowNum}: category "${normalized.category}" not found`); continue; }
+      const divisionId = divMap[String(row.division || "").toLowerCase()];
+      if (!divisionId) {
+        skipped++; skippedReasons.push(`Row ${rowNum}: division "${row.division}" not found`); continue;
+      }
 
-      const divisionId = normalized.division ? divMap[String(normalized.division).toLowerCase()] : null;
-      if (!normalized.division || !divisionId) { skipped++; skippedReasons.push(`Row ${rowNum}: division "${normalized.division}" not found`); continue; }
+      // resolve variant attribute IDs
+      const resolvedVariants = [];
+      let variantError = false;
+      for (const v of variants) {
+        const attrId = attrMap[`${v.attrName.toLowerCase()}||${categoryId.toString()}`];
+        if (!attrId) {
+          skipped++; skippedReasons.push(`Row ${v.rowNum}: attribute "${v.attrName}" not found in category "${row.category}"`); variantError = true; break;
+        }
+        resolvedVariants.push({ attribute: attrId, value: v.value, lowStockThreshold: v.threshold, currentStock: 0, stockStatus: "Out of Stock" });
+      }
+      if (variantError) continue;
 
       try {
-        const duplicate = await isMachineDuplicate(normalized.name, categoryId, divisionId, normalized.modelnumber || "");
-        if (duplicate) { skipped++; skippedReasons.push(`Row ${rowNum}: duplicate machine (same name, category, division, model number)`); continue; }
+        const modelNumber = String(row.modelnumber || "").trim();
+        const existingMachine = await Machine.findOne({
+          name:        caseInsensitiveRegex(row.name),
+          category:    categoryId,
+          division:    divisionId,
+          modelNumber: caseInsensitiveRegex(modelNumber),
+        });
+
+        if (existingMachine) {
+          // machine exists — merge new variants that don't already exist
+          if (resolvedVariants.length > 0) {
+            const existingKeys = new Set(
+              existingMachine.variants.map((v) => `${v.attribute.toString()}||${v.value.trim().toLowerCase()}`)
+            );
+            const newVariants = resolvedVariants.filter(
+              (v) => !existingKeys.has(`${v.attribute.toString()}||${v.value.trim().toLowerCase()}`)
+            );
+            if (newVariants.length > 0) {
+              await Machine.updateOne(
+                { _id: existingMachine._id },
+                { $push: { variants: { $each: newVariants } } }
+              );
+              imported++;
+            } else {
+              skipped++;
+              skippedReasons.push(`Row ${rowNum}: machine "${row.name}" already exists with all specified variants`);
+            }
+          } else {
+            skipped++;
+            skippedReasons.push(`Row ${rowNum}: machine "${row.name}" already exists`);
+          }
+          continue;
+        }
 
         await Machine.create({
-          name:          String(normalized.name          || ""),
-          modelNumber:   String(normalized.modelnumber   || ""),
-          serialNumber:  String(normalized.serialnumber  || ""),
-          partCode:      String(normalized.partcode      || ""),
-          hsnCode:       String(normalized.hsncode       || ""),
-          gstPercentage: normalized.gstpercentage !== "" ? Number(normalized.gstpercentage) : null,
+          name:          String(row.name         || ""),
+          modelNumber:   String(row.modelnumber  || ""),
+          serialNumber:  String(row.serialnumber || ""),
+          partCode:      String(row.partcode     || ""),
+          hsnCode:       String(row.hsncode      || ""),
+          gstPercentage: row.gstpercentage !== "" ? Number(row.gstpercentage) : null,
           category:      categoryId,
-          division:      divisionId || null,
-          status:        ["Active", "Inactive"].includes(normalized.status) ? normalized.status : "Active",
-          notes:         String(normalized.notes || ""),
-          variants:      [],
+          division:      divisionId,
+          status:        ["Active", "Inactive"].includes(String(row[statusKey] || "").trim()) ? String(row[statusKey]).trim() : "Active",
+          notes:         String(row.notes || ""),
+          variants:      resolvedVariants,
           images:        [],
           source:        "imported",
         });
@@ -446,25 +548,58 @@ const exportMachines = async (req, res) => {
       .populate("variants.attribute", "name")
       .lean();
 
-    const rows = machines.map((m) => {
+    const rows = [];
+    for (const m of machines) {
       const created = formatIST(m.createdAt);
       const updated = formatIST(m.updatedAt);
-      return {
-        name:          m.name,
-        modelNumber:   m.modelNumber,
-        serialNumber:  m.serialNumber,
-        partCode:      m.partCode,
-        hsnCode:       m.hsnCode,
-        gstPercentage: m.gstPercentage ?? "",
-        category:      m.category?.name  ?? "",
-        division:      m.division?.name  ?? "",
-        status:        m.status,
-        notes:         m.notes,
-        variants:      m.variants.map((v) => `${v.attribute?.name}:${v.value}`).join(" | "),
-        "Created Date": created.date, "Created Time": created.time,
-        "Updated Date": updated.date,  "Updated Time": updated.time,
-      };
-    });
+      if (!m.variants || m.variants.length === 0) {
+        rows.push({
+          name:              m.name,
+          modelNumber:       m.modelNumber,
+          serialNumber:      m.serialNumber,
+          partCode:          m.partCode,
+          hsnCode:           m.hsnCode,
+          gstPercentage:     m.gstPercentage ?? "",
+          category:          m.category?.name ?? "",
+          division:          m.division?.name ?? "",
+          attribute:         "",
+          value:             "",
+          lowStockThreshold: "",
+          currentStock:      "",
+          stockStatus:       "",
+          status:            m.status,
+          notes:             m.notes,
+          "Created Date":    created.date,
+          "Created Time":    created.time,
+          "Updated Date":    updated.date,
+          "Updated Time":    updated.time,
+        });
+      } else {
+        for (const v of m.variants) {
+          rows.push({
+            name:              m.name,
+            modelNumber:       m.modelNumber,
+            serialNumber:      m.serialNumber,
+            partCode:          m.partCode,
+            hsnCode:           m.hsnCode,
+            gstPercentage:     m.gstPercentage ?? "",
+            category:          m.category?.name ?? "",
+            division:          m.division?.name ?? "",
+            attribute:         v.attribute?.name ?? "",
+            value:             v.value,
+            lowStockThreshold: v.lowStockThreshold,
+            currentStock:      v.currentStock,
+            stockStatus:       v.stockStatus,
+            status:            m.status,
+            notes:             m.notes,
+            "Created Date":    created.date,
+            "Created Time":    created.time,
+            "Updated Date":    updated.date,
+            "Updated Time":    updated.time,
+          });
+        }
+      }
+    }
 
     const ws = xlsx.utils.json_to_sheet(rows);
     const wb = xlsx.utils.book_new();
