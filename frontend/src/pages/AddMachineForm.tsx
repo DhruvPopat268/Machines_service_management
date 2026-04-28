@@ -63,10 +63,11 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         const [catRes, divRes, attrRes] = await Promise.all([
           api.get("/admin/machine-categories", { params: { limit: 100, status: "Active" } }),
           api.get("/admin/machine-divisions",  { params: { limit: 100, status: "Active" } }),
-          api.get("/admin/attributes",         { params: { limit: 100, status: "Active" } }),
+          api.get("/admin/attributes",         { params: { limit: 1000, status: "Active" } }),
         ]);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
+        // Attributes come with populated machineCategory from backend
         setAttributes(attrRes.data.data);
       } catch {
         toast.error("Failed to load form options");
@@ -74,6 +75,17 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     };
     fetchOptions();
   }, []);
+
+  // Filter attributes based on selected category
+  const filteredAttributes = form.category
+    ? attributes.filter((attr: any) => {
+        // Handle both populated (object) and non-populated (string) machineCategory
+        const attrCategoryId = typeof attr.machineCategory === 'object' 
+          ? attr.machineCategory?._id 
+          : attr.machineCategory;
+        return attrCategoryId === form.category;
+      })
+    : [];
 
   useEffect(() => {
     if (!isEdit && !isView) return;
@@ -109,7 +121,13 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     fetchMachine();
   }, [id, isEdit, isView]);
 
-  const setField = (key: string, value: string) => setForm((p) => ({ ...p, [key]: value }));
+  const setField = (key: string, value: string) => {
+    setForm((p) => ({ ...p, [key]: value }));
+    // Clear variants when category changes
+    if (key === "category" && value !== form.category) {
+      setVariants([emptyVariant()]);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files     = Array.from(e.target.files || []);
@@ -245,6 +263,9 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>{categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
+                {form.category && filteredAttributes.length === 0 && (
+                  <p className="text-xs text-amber-600">No attributes found for this category. Please add attributes first.</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Division</Label>
@@ -260,39 +281,54 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         <Card className="border-0 shadow-sm">
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variants</p>
-              {!isReadOnly && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="h-3.5 w-3.5 mr-1" />Add Variant</Button>}
-            </div>
-            {variants.map((variant, vi) => (
-              <div key={vi} className="border rounded-lg p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Variant {vi + 1}</span>
-                  {variants.length > 1 && !isReadOnly && (
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeVariant(vi)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-3 items-start">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Attribute</Label>
-                    <Select value={variant.attribute} onValueChange={(v) => updateVariant(vi, "attribute", v)} disabled={isReadOnly}>
-                      <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select attribute" /></SelectTrigger>
-                      <SelectContent>{attributes.map((a) => <SelectItem key={a._id} value={a._id}>{a.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Value</Label>
-                    <Input className="h-9 text-sm" placeholder="e.g. Red, 500ml" value={variant.value} onChange={(e) => updateVariant(vi, "value", e.target.value)} disabled={isReadOnly} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Low Stock Threshold</Label>
-                    <Input type="number" placeholder="e.g. 5 or -1 to disable" min={-1} value={variant.lowStockThreshold} onChange={(e) => updateVariant(vi, "lowStockThreshold", e.target.value)} disabled={isReadOnly} />
-                    <p className="text-xs text-muted-foreground">Set <span className="font-medium text-foreground">0</span>+ for alerts · <span className="font-medium text-foreground">-1</span> to disable</p>
-                  </div>
-                </div>
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variants</p>
+                {!form.category && <p className="text-xs text-amber-600">Please select a category first to add variants</p>}
               </div>
-            ))}
+              {!isReadOnly && form.category && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="h-3.5 w-3.5 mr-1" />Add Variant</Button>}
+            </div>
+            {!form.category ? (
+              <div className="border rounded-lg p-8 text-center">
+                <p className="text-sm text-muted-foreground">Select a category to enable variants</p>
+              </div>
+            ) : (
+              variants.map((variant, vi) => (
+                <div key={vi} className="border rounded-lg p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Variant {vi + 1}</span>
+                    {variants.length > 1 && !isReadOnly && (
+                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeVariant(vi)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 items-start">
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Attribute</Label>
+                      <Select value={variant.attribute} onValueChange={(v) => updateVariant(vi, "attribute", v)} disabled={isReadOnly}>
+                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select attribute" /></SelectTrigger>
+                        <SelectContent>
+                          {filteredAttributes.length === 0 ? (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">No attributes available for this category</div>
+                          ) : (
+                            filteredAttributes.map((a) => <SelectItem key={a._id} value={a._id}>{a.name}</SelectItem>)
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">Value</Label>
+                      <Input className="h-9 text-sm" placeholder="e.g. Red, 500ml" value={variant.value} onChange={(e) => updateVariant(vi, "value", e.target.value)} disabled={isReadOnly} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Low Stock Threshold</Label>
+                      <Input type="number" placeholder="e.g. 5 or -1 to disable" min={-1} value={variant.lowStockThreshold} onChange={(e) => updateVariant(vi, "lowStockThreshold", e.target.value)} disabled={isReadOnly} />
+                      <p className="text-xs text-muted-foreground">Set <span className="font-medium text-foreground">0</span>+ for alerts · <span className="font-medium text-foreground">-1</span> to disable</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 

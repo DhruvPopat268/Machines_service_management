@@ -155,7 +155,7 @@ const create = async (req, res) => {
   try {
     const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, imageOrder } = req.body;
 
-    const error = validateCreateMachine({ name, category, division, gstPercentage, status, variants });
+    const error = validateCreateMachine({ name, modelNumber, category, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const duplicate = await isMachineDuplicate(name, category, division, modelNumber);
@@ -217,7 +217,7 @@ const update = async (req, res) => {
 
     const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, existingImages, imageOrder } = req.body;
 
-    const error = validateUpdateMachine({ name, division, gstPercentage, status, variants });
+    const error = validateUpdateMachine({ name, modelNumber, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const dupName     = name        !== undefined ? name        : machine.name;
@@ -343,7 +343,7 @@ const importMachines = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "category", "division"];
+    const required = ["name", "modelnumber", "category", "division"];
     const headers  = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing  = required.filter((h) => !headers.includes(h));
     if (missing.length)
@@ -353,9 +353,9 @@ const importMachines = async (req, res) => {
     const statusKey = headers.find((h) => h === "status" || h.startsWith("status ")) ?? "status";
 
     const [allCategories, allDivisions, allAttributes] = await Promise.all([
-      MachineCategory.find({}, "name _id").lean(),
-      MachineDivision.find({}, "name _id").lean(),
-      Attribute.find({}, "name _id").lean(),
+      MachineCategory.find({ status: "Active" }, "name _id").lean(),
+      MachineDivision.find({ status: "Active" }, "name _id").lean(),
+      Attribute.find({ status: "Active" }, "name machineCategory _id").lean(),
     ]);
 
     const catMap  = Object.fromEntries(allCategories.map((c) => [c.name.toLowerCase(), c._id]));
@@ -380,9 +380,10 @@ const importMachines = async (req, res) => {
       const division    = String(row.division    || "").trim();
       const modelNumber = String(row.modelnumber || "").trim();
 
-      if (!name)     { rowErrors.push(`Row ${rowNum}: name is required`);     continue; }
-      if (!category) { rowErrors.push(`Row ${rowNum}: category is required`); continue; }
-      if (!division) { rowErrors.push(`Row ${rowNum}: division is required`); continue; }
+      if (!name)        { rowErrors.push(`Row ${rowNum}: name is required`);        continue; }
+      if (!modelNumber) { rowErrors.push(`Row ${rowNum}: modelNumber is required`); continue; }
+      if (!category)    { rowErrors.push(`Row ${rowNum}: category is required`);    continue; }
+      if (!division)    { rowErrors.push(`Row ${rowNum}: division is required`);    continue; }
 
       const status = String(row[statusKey] || "Active").trim();
       if (status && !["Active", "Inactive"].includes(status)) {
@@ -443,7 +444,10 @@ const importMachines = async (req, res) => {
         seenVariantKeys.add(variantKey);
         const attrId = attrMap[`${v.attrName.toLowerCase()}||${categoryId.toString()}`];
         if (!attrId) {
-          skipped++; skippedReasons.push(`Row ${v.rowNum}: attribute "${v.attrName}" not found in category "${row.category}"`); variantError = true; break;
+          skipped++; 
+          skippedReasons.push(`Row ${v.rowNum}: attribute "${v.attrName}" not found or inactive in category "${row.category}"`); 
+          variantError = true; 
+          break;
         }
         resolvedVariants.push({ attribute: attrId, value: v.value, lowStockThreshold: v.threshold, currentStock: 0, stockStatus: "Out of Stock" });
       }

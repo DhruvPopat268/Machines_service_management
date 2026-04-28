@@ -21,13 +21,15 @@ const validateVariants = (variants) => {
   return null;
 };
 
-const validateCreateMachine = ({ name, category, division, gstPercentage, status, variants }) => {
+const validateCreateMachine = ({ name, category, division, modelNumber, gstPercentage, status, variants }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
   if (!category)
     return "Category is required";
   if (!division)
     return "Division is required";
+  if (!modelNumber || typeof modelNumber !== "string" || !modelNumber.trim())
+    return "Model number is required";
   if (gstPercentage !== undefined && gstPercentage !== null && gstPercentage !== "") {
     const gst = Number(gstPercentage);
     if (isNaN(gst) || gst < 0 || gst > 100)
@@ -40,9 +42,11 @@ const validateCreateMachine = ({ name, category, division, gstPercentage, status
   return null;
 };
 
-const validateUpdateMachine = ({ name, division, gstPercentage, status, variants }) => {
+const validateUpdateMachine = ({ name, modelNumber, division, gstPercentage, status, variants }) => {
   if (name !== undefined && (typeof name !== "string" || !name.trim()))
     return "Name must be a non-empty string";
+  if (modelNumber !== undefined && (typeof modelNumber !== "string" || !modelNumber.trim()))
+    return "Model number must be a non-empty string";
   if (division !== undefined && !division)
     return "Division is required";
   if (gstPercentage !== undefined && gstPercentage !== null && gstPercentage !== "") {
@@ -69,9 +73,11 @@ const validateImageFile = (file) => {
 };
 
 const validateImportMachineRow = (row, rowNum) => {
-  const name   = String(row.name   || "").trim();
-  const status = String(row.status || "").trim();
+  const name        = String(row.name        || "").trim();
+  const modelNumber = String(row.modelnumber || "").trim();
+  const status      = String(row.status      || "").trim();
   if (!name) return `Row ${rowNum}: name is required`;
+  if (!modelNumber) return `Row ${rowNum}: modelNumber is required`;
   if (!row.category || !String(row.category).trim()) return `Row ${rowNum}: category is required`;
   if (!row.division || !String(row.division).trim()) return `Row ${rowNum}: division is required`;
   if (status && !["Active", "Inactive"].includes(status)) return `Row ${rowNum}: status must be Active or Inactive`;
