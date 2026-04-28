@@ -384,7 +384,7 @@ const MachinesPage = () => {
             <>
               <DialogHeader><DialogTitle>Upload Machines</DialogTitle><DialogDescription>Please confirm you have checked the sample file and your file matches the required format before uploading.</DialogDescription></DialogHeader>
               <div className="flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2 mt-2">
-                <span className="text-blue-600 text-sm">Import only covers basic machine data. After import, open each machine in edit mode to add variants, images, and other details.</span>
+                <span className="text-blue-600 text-sm">Import covers basic machine data only. After import, go to each machine's detail page to upload images.</span>
               </div>
               <DialogFooter className="pt-4">
                 <Button variant="outline" onClick={() => setImportStep("menu")}>Back</Button>
