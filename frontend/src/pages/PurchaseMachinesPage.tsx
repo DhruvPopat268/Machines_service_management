@@ -240,12 +240,12 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Record Machine Purchase</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-6 py-2 flex-1 overflow-y-auto">
           {/* Vendor */}
           <div className="space-y-1.5">
             <Label>Vendor <span className="text-destructive">*</span></Label>
