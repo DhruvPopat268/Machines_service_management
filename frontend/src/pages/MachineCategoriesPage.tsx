@@ -206,7 +206,10 @@ const MachineCategoriesPage = () => {
       const form = new FormData();
       form.append("file", importFile);
       const res = await api.post("/admin/machine-categories/import", form, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(res.data.message);
+      const reasons = res.data.skippedReasons?.length
+        ? `\nSkipped reasons: ${res.data.skippedReasons.join(", ")}`
+        : "";
+      toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
       fetchCategories(1);
     } catch (err: any) {

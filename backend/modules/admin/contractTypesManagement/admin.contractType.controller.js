@@ -176,22 +176,25 @@ const importContractTypes = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "code", "status"];
+    const required = ["name", "code"];
     const headers = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing = required.filter((h) => !headers.includes(h));
     if (missing.length)
       return res.status(400).json({ success: false, message: `Missing columns: ${missing.join(", ")}` });
 
+    const statusKey = headers.find((h) => h === "status" || h.startsWith("status ")) ?? "status";
+
     const errors = [];
     const docs = [];
     rows.forEach((row, i) => {
       const normalized = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), v]));
+      normalized.status = String(normalized[statusKey] || "Active").trim();
       const error = validateImportContractTypeRow(normalized, i + 2);
       if (error) { errors.push(error); return; }
       docs.push({
         name:        String(normalized.name        || "").trim(),
         code:        String(normalized.code        || "").trim().toUpperCase(),
-        status:      String(normalized.status      || "").trim(),
+        status:      String(normalized[statusKey] || "Active").trim(),
         freeService: String(normalized.freeservice || "").trim().toLowerCase() === "true",
         freeParts:   String(normalized.freeparts   || "").trim().toLowerCase() === "true",
         description: String(normalized.description || "").trim(),

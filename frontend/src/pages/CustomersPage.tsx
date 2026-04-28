@@ -261,7 +261,7 @@ const CustomersPage = () => {
       form.append("file", importFile);
       const res = await api.post("/admin/customers/import", form, { headers: { "Content-Type": "multipart/form-data" } });
       const reasons = res.data.skippedReasons?.length
-        ? `\nReasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
+        ? `\nSkipped reasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
         : "";
       toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);

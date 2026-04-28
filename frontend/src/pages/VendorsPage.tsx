@@ -222,7 +222,7 @@ const VendorsPage = () => {
       fd.append("file", importFile);
       const res = await api.post("/admin/vendors/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
       const reasons = res.data.skippedReasons?.length
-        ? `\nReasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
+        ? `\nSkipped reasons: ${res.data.skippedReasons.map((r: string) => r).join(", ")}`
         : "";
       toast.success(`${res.data.message}${reasons}`);
       setImportDialog(false); setImportStep("menu"); setImportFile(null);
