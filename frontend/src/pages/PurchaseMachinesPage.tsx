@@ -520,8 +520,8 @@ const PurchaseMachinesPage = () => {
     {
       key: "actions", label: "Actions",
       render: (p) => (
-        <Button size="sm" variant="outline" className="text-xs h-7 gap-1" onClick={() => navigate(`/purchase-machines/${p._id}`)}>
-          <Eye className="h-3 w-3" /> View
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/purchase-machines/${p._id}`)}>
+          <Eye className="h-3 w-3" />
         </Button>
       ),
     },
