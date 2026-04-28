@@ -415,7 +415,6 @@ const PurchaseMachinesPage = () => {
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
-  const [pageLoading, setPageLoading]          = useState(false);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [initialVendorId, setInitialVendorId] = useState("");
@@ -459,8 +458,7 @@ const PurchaseMachinesPage = () => {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(page === 1 && !Object.keys(filters).some(k => filters[k]) && !fromDate && !toDate);
-    setPageLoading(true);
+    setLoading(true);
     try {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
       if (filters.vendorId && filters.vendorId !== "all") params.vendorId = filters.vendorId;
@@ -479,7 +477,7 @@ const PurchaseMachinesPage = () => {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
         toast.error("Failed to fetch purchases");
     } finally {
-      if (!controller.signal.aborted) { setLoading(false); setPageLoading(false); }
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [filters, fromDate, toDate]);
 
@@ -564,7 +562,7 @@ const PurchaseMachinesPage = () => {
               </Button>
             )}
           </div>
-          <div className={pageLoading ? "opacity-50 pointer-events-none" : ""}>
+          <div>
             <DataTable columns={columns} data={data} />
           </div>
           <Pagination
