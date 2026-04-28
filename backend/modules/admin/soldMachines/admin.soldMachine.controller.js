@@ -136,10 +136,6 @@ const createSale = async (req, res) => {
         );
         if (!machineVariant) return abort(404, `Variant "${attrDoc.name}: ${value}" not found on machine "${machine.name}"`);
 
-        // Check stock availability
-        if (machineVariant.currentStock < quantity)
-          return abort(400, `Insufficient stock for "${machine.name}" - "${attrDoc.name}: ${value}". Available: ${machineVariant.currentStock}, Requested: ${quantity}`);
-
         const effectivePrice = discountedPrice !== null && discountedPrice !== undefined ? discountedPrice : price;
         const total          = Math.round(effectivePrice * quantity * 100) / 100;
 
@@ -187,11 +183,21 @@ const createSale = async (req, res) => {
           (mv) => mv.attribute.toString() === sv.attribute.toString() && mv.value.trim().toLowerCase() === sv.value.trim().toLowerCase()
         );
 
+        // Atomic operation: check stock availability and decrement in one query
         const updated = await Machine.findOneAndUpdate(
-          { _id: machine._id, "variants.attribute": sv.attribute, "variants.value": machineVariant.value },
+          { 
+            _id: machine._id, 
+            "variants.attribute": sv.attribute, 
+            "variants.value": machineVariant.value,
+            "variants.currentStock": { $gte: sv.quantity }  // Atomic stock check
+          },
           { $inc: { "variants.$.currentStock": -sv.quantity } },
           { new: true, session }
         );
+
+        if (!updated) {
+          return abort(400, `Insufficient stock for "${machine.name}" - "${sv.name}: ${sv.value}". Stock changed during transaction or insufficient quantity available.`);
+        }
 
         const updatedVariant = updated.variants.find(
           (mv) => mv.attribute.toString() === sv.attribute.toString() && mv.value.trim().toLowerCase() === sv.value.trim().toLowerCase()

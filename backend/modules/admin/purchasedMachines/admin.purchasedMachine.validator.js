@@ -32,13 +32,27 @@ const validateCreatePurchase = (body) => {
       if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
         return `${label}: quantity must be a positive number`;
 
-      if (price == null || isNaN(price) || Number(price) < 0)
+      // Strict validation for price
+      if (price == null)
+        return `${label}: price is required`;
+      if (typeof price === "string" && price.trim() === "")
+        return `${label}: price cannot be empty`;
+      const numPrice = Number(price);
+      if (Number.isNaN(numPrice))
+        return `${label}: price must be a valid number`;
+      if (numPrice < 0)
         return `${label}: price must be a non-negative number`;
 
+      // Strict validation for discountedPrice
       if (discountedPrice !== undefined && discountedPrice !== null) {
-        if (isNaN(discountedPrice) || Number(discountedPrice) < 0)
+        if (typeof discountedPrice === "string" && discountedPrice.trim() === "")
+          return `${label}: discounted price cannot be empty`;
+        const numDiscountedPrice = Number(discountedPrice);
+        if (Number.isNaN(numDiscountedPrice))
+          return `${label}: discounted price must be a valid number`;
+        if (numDiscountedPrice < 0)
           return `${label}: discounted price must be a non-negative number`;
-        if (Number(discountedPrice) > Number(price))
+        if (numDiscountedPrice > numPrice)
           return `${label}: discounted price cannot be greater than price`;
       }
 

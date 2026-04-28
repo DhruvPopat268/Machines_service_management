@@ -287,8 +287,9 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                           <button
                             key={m._id}
                             type="button"
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between"
-                            onMouseDown={(e) => { e.preventDefault(); addMachine(m); setDropdownOpen(false); }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
+                            onClick={() => { addMachine(m); setDropdownOpen(false); }}
+                            onMouseDown={(e) => e.preventDefault()}
                           >
                             <span>{m.name}</span>
                             <span className="text-xs text-muted-foreground">{m.category?.name}</span>
@@ -317,7 +318,14 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                         <p className="text-xs text-muted-foreground">{entry.machine.category.name}</p>
                       )}
                     </div>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => removeMachine(entry.machine._id)}>
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-7 w-7 text-destructive" 
+                      onClick={() => removeMachine(entry.machine._id)}
+                      aria-label={`Remove ${entry.machine.name}`}
+                      title={`Remove ${entry.machine.name}`}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -520,7 +528,14 @@ const PurchaseMachinesPage = () => {
     {
       key: "actions", label: "Actions",
       render: (p) => (
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/purchase-machines/${p._id}`)}>
+        <Button 
+          size="sm" 
+          variant="outline" 
+          className="text-xs h-7" 
+          onClick={() => navigate(`/purchase-machines/${p._id}`)}
+          aria-label="View purchase details"
+          title="View purchase details"
+        >
           <Eye className="h-3 w-3" />
         </Button>
       ),
