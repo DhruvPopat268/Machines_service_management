@@ -82,8 +82,8 @@ const MachinesPage = () => {
     const fetchOptions = async () => {
       try {
         const [catRes, divRes] = await Promise.all([
-          api.get("/admin/machine-categories", { params: { limit: 100, status: "Active" } }),
-          api.get("/admin/machine-divisions",  { params: { limit: 100, status: "Active" } }),
+          api.get("/admin/machine-categories", { params: { limit: 10 } }),
+          api.get("/admin/machine-divisions",  { params: { limit: 10 } }),
         ]);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
@@ -92,6 +92,30 @@ const MachinesPage = () => {
       }
     };
     fetchOptions();
+  }, []);
+
+  // Fetch categories with search
+  const fetchCategories = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-categories", { params });
+      setCategories(res.data.data);
+    } catch {
+      toast.error("Failed to search categories");
+    }
+  }, []);
+
+  // Fetch divisions with search
+  const fetchDivisions = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-divisions", { params });
+      setDivisions(res.data.data);
+    } catch {
+      toast.error("Failed to search divisions");
+    }
   }, []);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -104,10 +128,11 @@ const MachinesPage = () => {
     setLoading(true);
     try {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
-      if (debouncedSearch)                                    params.search   = debouncedSearch;
-      if (filters.status   && filters.status   !== "all")    params.status   = filters.status;
-      if (filters.category && filters.category !== "all")    params.category = filters.category;
-      if (filters.division && filters.division !== "all")    params.division = filters.division;
+      if (debouncedSearch)                                         params.search      = debouncedSearch;
+      if (filters.status      && filters.status      !== "all" && filters.status      !== "")    params.status      = filters.status;
+      if (filters.category    && filters.category    !== "all" && filters.category    !== "")    params.category    = filters.category;
+      if (filters.division    && filters.division    !== "all" && filters.division    !== "")    params.division    = filters.division;
+      if (filters.stockStatus && filters.stockStatus !== "all" && filters.stockStatus !== "")    params.stockStatus = filters.stockStatus;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -170,10 +195,11 @@ const MachinesPage = () => {
     toast.success("Download starting...");
     try {
       const params: Record<string, string> = {};
-      if (debouncedSearch)                                 params.search   = debouncedSearch;
-      if (filters.status   && filters.status   !== "all") params.status   = filters.status;
-      if (filters.category && filters.category !== "all") params.category = filters.category;
-      if (filters.division && filters.division !== "all") params.division = filters.division;
+      if (debouncedSearch)                                         params.search      = debouncedSearch;
+      if (filters.status      && filters.status      !== "all" && filters.status      !== "") params.status      = filters.status;
+      if (filters.category    && filters.category    !== "all" && filters.category    !== "") params.category    = filters.category;
+      if (filters.division    && filters.division    !== "all" && filters.division    !== "") params.division    = filters.division;
+      if (filters.stockStatus && filters.stockStatus !== "all" && filters.stockStatus !== "") params.stockStatus = filters.stockStatus;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -328,9 +354,12 @@ const MachinesPage = () => {
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="Search by name or model number..."
+            searchableFilters={[
+              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categories.map((c) => ({ label: c.name, value: c._id })), onSearch: fetchCategories },
+              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisions.map((d) => ({ label: d.name, value: d._id })), onSearch: fetchDivisions },
+            ]}
             filters={[
-              { key: "category", label: "Category", options: categories.map((c) => ({ label: c.name, value: c._id })) },
-              { key: "division", label: "Division",  options: divisions.map((d)  => ({ label: d.name, value: d._id })) },
+              { key: "stockStatus", label: "Stock Status", options: [{ label: "In Stock", value: "In Stock" }, { label: "Low Stock", value: "Low Stock" }, { label: "Out of Stock", value: "Out of Stock" }] },
               { key: "status",   label: "Status",    options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
             ]}
             filterValues={filters}

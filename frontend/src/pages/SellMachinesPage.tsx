@@ -557,10 +557,10 @@ const SellMachinesPage = () => {
           />
           <div className="flex justify-end flex-wrap gap-3 items-center">
             <SearchableSelect
-              options={[{ label: "All Customers", value: "" }, ...customerOptions]}
+              options={customerOptions}
               value={filters.customerId || ""}
               onChange={(v) => setFilters((prev) => ({ ...prev, customerId: v }))}
-              placeholder="All Customers"
+              placeholder="Customers"
               searchPlaceholder="Search customer..."
               onSearchChange={setCustomerSearch}
               className="w-[220px] h-9 text-sm"

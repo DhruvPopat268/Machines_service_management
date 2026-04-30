@@ -21,6 +21,7 @@ interface SearchableFilterConfig {
   placeholder: string;
   searchPlaceholder?: string;
   options: FilterOption[];
+  onSearch?: (query: string) => void;
 }
 
 interface FilterBarProps {
@@ -66,12 +67,13 @@ export function FilterBar({
           {searchableFilters.map((f) => (
             <SearchableSelect
               key={f.key}
-              options={[{ label: `All ${f.placeholder}`, value: "" }, ...f.options]}
+              options={f.options}
               value={filterValues[f.key] ?? ""}
               onChange={(v) => onFilterChange?.(f.key, v)}
               placeholder={f.placeholder}
               searchPlaceholder={f.searchPlaceholder ?? `Search ${f.placeholder.toLowerCase()}...`}
               className="w-[180px] h-9 text-sm"
+              onSearchChange={f.onSearch}
             />
           ))}
           {filters.map((f) => (
