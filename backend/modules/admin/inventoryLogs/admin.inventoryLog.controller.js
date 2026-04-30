@@ -2,14 +2,45 @@ const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const InventoryLog = require("./admin.inventoryLog.model");
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
+const MachineCategory = require("../machineCategoryManagement/admin.machineCategory.model");
+const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
+const Machine = require("../inventoryManagement/admin.machine.model");
 
 const getAll = async (req, res) => {
   try {
-    const { action, search, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { action, search, vendorId, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
     if (action && ["purchased", "sold"].includes(action)) query.action = action;
+
+    // Filter by vendor
+    if (vendorId && mongoose.isValidObjectId(vendorId)) {
+      query["vendorInfo.vendorId"] = vendorId;
+    }
+
+    // Filter by customer
+    if (customerId && mongoose.isValidObjectId(customerId)) {
+      query["customerInfo.customerId"] = customerId;
+    }
+
+    // Filter by category
+    if (category && mongoose.isValidObjectId(category)) {
+      const cat = await MachineCategory.findById(category);
+      if (cat) query["machines.category"] = cat.name;
+    }
+
+    // Filter by division
+    if (division && mongoose.isValidObjectId(division)) {
+      const div = await MachineDivision.findById(division);
+      if (div) query["machines.division"] = div.name;
+    }
+
+    // Filter by machine
+    if (machineId && mongoose.isValidObjectId(machineId)) {
+      const machine = await Machine.findById(machineId);
+      if (machine) query["machines.machineName"] = machine.name;
+    }
 
     if (typeof search === "string") {
       const s = search.trim().slice(0, 100);
@@ -17,9 +48,12 @@ const getAll = async (req, res) => {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName":  { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
           { "customerInfo.name":     { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone":    { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -122,10 +156,38 @@ const formatIST = (date) => {
 
 const exportInventoryLogs = async (req, res) => {
   try {
-    const { action, search, fromDate, toDate } = req.query;
+    const { action, search, vendorId, customerId, category, division, machineId, fromDate, toDate } = req.query;
     const query = {};
 
     if (action && ["purchased", "sold"].includes(action)) query.action = action;
+
+    // Filter by vendor
+    if (vendorId && mongoose.isValidObjectId(vendorId)) {
+      query["vendorInfo.vendorId"] = vendorId;
+    }
+
+    // Filter by customer
+    if (customerId && mongoose.isValidObjectId(customerId)) {
+      query["customerInfo.customerId"] = customerId;
+    }
+
+    // Filter by category
+    if (category && mongoose.isValidObjectId(category)) {
+      const cat = await MachineCategory.findById(category);
+      if (cat) query["machines.category"] = cat.name;
+    }
+
+    // Filter by division
+    if (division && mongoose.isValidObjectId(division)) {
+      const div = await MachineDivision.findById(division);
+      if (div) query["machines.division"] = div.name;
+    }
+
+    // Filter by machine
+    if (machineId && mongoose.isValidObjectId(machineId)) {
+      const machine = await Machine.findById(machineId);
+      if (machine) query["machines.machineName"] = machine.name;
+    }
 
     if (typeof search === "string") {
       const s = search.trim().slice(0, 100);
@@ -133,9 +195,12 @@ const exportInventoryLogs = async (req, res) => {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName":  { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
           { "customerInfo.name":     { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone":    { $regex: escaped, $options: "i" } },
         ];
       }
     }

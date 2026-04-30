@@ -19,6 +19,7 @@ interface SearchableSelectProps {
   className?: string;
   onSearchChange?: (val: string) => void;
   maxInitialDisplay?: number;
+  disabled?: boolean;
 }
 
 export function SearchableSelect({ 
@@ -29,7 +30,8 @@ export function SearchableSelect({
   searchPlaceholder = "Search...", 
   className, 
   onSearchChange,
-  maxInitialDisplay = 10 
+  maxInitialDisplay = 10,
+  disabled = false
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,6 +98,7 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           className={cn("w-full justify-between font-normal", className)}
+          disabled={disabled}
         >
           <span className="truncate">{selected ? selected.label : placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

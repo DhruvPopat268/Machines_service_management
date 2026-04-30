@@ -47,7 +47,7 @@ const toISTDateParam = (htmlDate: string) => {
   return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const LIMIT = 10;
+
 
 const InventoryLogsPage = () => {
   const navigate = useNavigate();
@@ -58,13 +58,90 @@ const InventoryLogsPage = () => {
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
+  const [pageSize, setPageSize]               = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [exportDialog, setExportDialog]       = useState(false);
+
+  // Filter options state
+  const [vendors, setVendors]       = useState<{ label: string; value: string }[]>([]);
+  const [customers, setCustomers]   = useState<{ label: string; value: string }[]>([]);
+  const [categories, setCategories] = useState<{ label: string; value: string }[]>([]);
+  const [divisions, setDivisions]   = useState<{ label: string; value: string }[]>([]);
+  const [machines, setMachines]     = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
+
+  // Fetch filter options on mount
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [vendorRes, customerRes, categoryRes, divisionRes, machineRes] = await Promise.all([
+          api.get("/admin/vendors", { params: { limit: 10 } }),
+          api.get("/admin/customers", { params: { limit: 10 } }),
+          api.get("/admin/machine-categories", { params: { limit: 10 } }),
+          api.get("/admin/machine-divisions", { params: { limit: 10 } }),
+          api.get("/admin/machines", { params: { limit: 10 } }),
+        ]);
+        setVendors(vendorRes.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
+        setCustomers(customerRes.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+        setCategories(categoryRes.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+        setDivisions(divisionRes.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+        setMachines(machineRes.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      } catch {
+        toast.error("Failed to load filter options");
+      }
+    };
+    fetchFilterOptions();
+  }, []);
+
+  // Search functions for SearchableSelect
+  const fetchVendors = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/vendors", { params });
+      setVendors(res.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchCustomers = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/customers", { params });
+      setCustomers(res.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchCategories = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-categories", { params });
+      setCategories(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchDivisions = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-divisions", { params });
+      setDivisions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+    } catch { /* silent */ }
+  }, []);
+
+  const fetchMachines = useCallback(async (searchQuery: string) => {
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machines", { params });
+      setMachines(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+    } catch { /* silent */ }
+  }, []);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -75,9 +152,14 @@ const InventoryLogsPage = () => {
 
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
+      const params: Record<string, string> = { page: String(page), limit: String(pageSize) };
       if (debouncedSearch) params.search = debouncedSearch;
-      if (filters.action && filters.action !== "all") params.action = filters.action;
+      if (filters.action && filters.action !== "all" && filters.action !== "") params.action = filters.action;
+      if (filters.vendor && filters.vendor !== "all" && filters.vendor !== "") params.vendorId = filters.vendor;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -94,7 +176,7 @@ const InventoryLogsPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [debouncedSearch, filters, fromDate, toDate]);
+  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
 
   useEffect(() => { fetchLogs(1); }, [fetchLogs]);
 
@@ -104,7 +186,12 @@ const InventoryLogsPage = () => {
     try {
       const params: Record<string, string> = {};
       if (debouncedSearch) params.search = debouncedSearch;
-      if (filters.action && filters.action !== "all") params.action = filters.action;
+      if (filters.action && filters.action !== "all" && filters.action !== "") params.action = filters.action;
+      if (filters.vendor && filters.vendor !== "all" && filters.vendor !== "") params.vendorId = filters.vendor;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
       const res = await api.get("/admin/inventory-logs/export", { params, responseType: "blob" });
@@ -120,7 +207,15 @@ const InventoryLogsPage = () => {
   const columns: Column<InventoryLog>[] = [
     {
       key: "_id", label: "No.",
-      render: (_l, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span>,
+      render: (_l, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * pageSize + i + 1}</span>,
+    },
+    {
+      key: "entity", label: "Entity",
+      render: (l) => (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+          l.action === "purchased" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
+        }`}>{l.action === "purchased" ? "Vendor" : "Customer"}</span>
+      ),
     },
     {
       key: "party", label: "Vendor / Customer",
@@ -130,6 +225,7 @@ const InventoryLogsPage = () => {
             <div>
               <p className="font-medium text-sm">{l.vendorInfo.companyName}</p>
               <p className="text-xs text-muted-foreground">{l.vendorInfo.name}</p>
+              <p className="text-xs text-muted-foreground">{l.vendorInfo.phone}</p>
             </div>
           );
         }
@@ -198,25 +294,55 @@ const InventoryLogsPage = () => {
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="Search by machine, vendor or customer..."
+            searchPlaceholder="Search by machine, model, vendor, customer, phone..."
+            searchTitle="Search with machine name, model no, vendor info or customer info"
+            searchableFilters={[
+              { key: "vendor", placeholder: "Vendor", searchPlaceholder: "Search vendors...", options: vendors, onSearch: fetchVendors, disabled: !!(filters.customer && filters.customer !== "all" && filters.customer !== "") },
+              { key: "customer", placeholder: "Customer", searchPlaceholder: "Search customers...", options: customers, onSearch: fetchCustomers, disabled: !!(filters.vendor && filters.vendor !== "all" && filters.vendor !== "") },
+              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categories, onSearch: fetchCategories },
+              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisions, onSearch: fetchDivisions },
+              { key: "machine", placeholder: "Machine", searchPlaceholder: "Search machines...", options: machines, onSearch: fetchMachines },
+            ]}
             filters={[
               { key: "action", label: "Action", options: [{ label: "Purchased", value: "purchased" }, { label: "Sold", value: "sold" }] },
             ]}
             filterValues={filters}
-            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            onFilterChange={(k, v) => {
+              const newFilters = { ...filters, [k]: v };
+              // Auto-set action based on vendor/customer selection
+              if (k === "vendor" && v && v !== "all" && v !== "") {
+                newFilters.action = "purchased";
+                newFilters.customer = ""; // Clear customer when vendor is selected
+              } else if (k === "customer" && v && v !== "all" && v !== "") {
+                newFilters.action = "sold";
+                newFilters.vendor = ""; // Clear vendor when customer is selected
+              } else if (k === "vendor" && (!v || v === "all" || v === "")) {
+                // Clear action when vendor is cleared
+                if (filters.action === "purchased") newFilters.action = "";
+              } else if (k === "customer" && (!v || v === "all" || v === "")) {
+                // Clear action when customer is cleared
+                if (filters.action === "sold") newFilters.action = "";
+              }
+              setFilters(newFilters);
+            }}
             showDateRange
             fromDate={fromDate}
             toDate={toDate}
             onFromDateChange={setFromDate}
             onToDateChange={setToDate}
             onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => { 
+              setPageSize(size);
+            }}
+            totalCount={pagination.total}
           />
-          <DataTable columns={columns} data={data} />
+          <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={LIMIT}
+            pageSize={pageSize}
             onPageChange={fetchLogs}
           />
 
