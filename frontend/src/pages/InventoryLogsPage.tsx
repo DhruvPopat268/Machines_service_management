@@ -99,51 +99,106 @@ const InventoryLogsPage = () => {
 
   // Search functions for SearchableSelect
   const fetchVendors = useCallback(async (searchQuery: string) => {
+    vendorAbortRef.current?.abort();
+    const controller = new AbortController();
+    vendorAbortRef.current = controller;
+
     try {
       const params: Record<string, string> = { limit: "100" };
       if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/vendors", { params });
-      setVendors(res.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
-    } catch { /* silent */ }
+      const res = await api.get("/admin/vendors", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setVendors(res.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch vendors", err);
+      }
+    }
   }, []);
 
   const fetchCustomers = useCallback(async (searchQuery: string) => {
+    customerAbortRef.current?.abort();
+    const controller = new AbortController();
+    customerAbortRef.current = controller;
+
     try {
       const params: Record<string, string> = { limit: "100" };
       if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/customers", { params });
-      setCustomers(res.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
-    } catch { /* silent */ }
+      const res = await api.get("/admin/customers", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setCustomers(res.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch customers", err);
+      }
+    }
   }, []);
 
   const fetchCategories = useCallback(async (searchQuery: string) => {
+    categoryAbortRef.current?.abort();
+    const controller = new AbortController();
+    categoryAbortRef.current = controller;
+
     try {
       const params: Record<string, string> = { limit: "100" };
       if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machine-categories", { params });
-      setCategories(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
-    } catch { /* silent */ }
+      const res = await api.get("/admin/machine-categories", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setCategories(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch categories", err);
+      }
+    }
   }, []);
 
   const fetchDivisions = useCallback(async (searchQuery: string) => {
+    divisionAbortRef.current?.abort();
+    const controller = new AbortController();
+    divisionAbortRef.current = controller;
+
     try {
       const params: Record<string, string> = { limit: "100" };
       if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machine-divisions", { params });
-      setDivisions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
-    } catch { /* silent */ }
+      const res = await api.get("/admin/machine-divisions", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setDivisions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch divisions", err);
+      }
+    }
   }, []);
 
   const fetchMachines = useCallback(async (searchQuery: string) => {
+    machineAbortRef.current?.abort();
+    const controller = new AbortController();
+    machineAbortRef.current = controller;
+
     try {
       const params: Record<string, string> = { limit: "100" };
       if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machines", { params });
-      setMachines(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
-    } catch { /* silent */ }
+      const res = await api.get("/admin/machines", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setMachines(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch machines", err);
+      }
+    }
   }, []);
 
   const abortRef = useRef<AbortController | null>(null);
+  const vendorAbortRef = useRef<AbortController | null>(null);
+  const customerAbortRef = useRef<AbortController | null>(null);
+  const categoryAbortRef = useRef<AbortController | null>(null);
+  const divisionAbortRef = useRef<AbortController | null>(null);
+  const machineAbortRef = useRef<AbortController | null>(null);
 
   const fetchLogs = useCallback(async (page = 1) => {
     abortRef.current?.abort();

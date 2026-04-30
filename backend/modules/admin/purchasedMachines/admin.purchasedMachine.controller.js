@@ -216,9 +216,12 @@ const createPurchase = async (req, res) => {
 
       if (logVariants.length) {
         logMachineEntries.push({
+          machineId:   machine._id,
           machineName: machine.name,
           modelNumber: machine.modelNumber || "",
+          categoryId:  machine.category?._id || null,
           category:    machine.category?.name || "",
+          divisionId:  machine.division?._id || null,
           division:    machine.division?.name || "",
           variants:    logVariants,
         });
@@ -351,7 +354,20 @@ const addToInventory = async (req, res) => {
 
       if (logVariants.length) {
         await InventoryLog.create(
-          [{ action: "purchased", vendorInfo: purchase.vendorInfo, machines: [{ machineName: machine.name, modelNumber: machine.modelNumber || "", category: machine.category?.name || "", division: machine.division?.name || "", variants: logVariants }] }],
+          [{ 
+            action: "purchased", 
+            vendorInfo: purchase.vendorInfo, 
+            machines: [{ 
+              machineId:   machine._id,
+              machineName: machine.name, 
+              modelNumber: machine.modelNumber || "", 
+              categoryId:  machine.category?._id || null,
+              category:    machine.category?.name || "", 
+              divisionId:  machine.division?._id || null,
+              division:    machine.division?.name || "", 
+              variants:    logVariants 
+            }] 
+          }],
           { session }
         );
       }

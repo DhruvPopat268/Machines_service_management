@@ -5,6 +5,8 @@ const { validateAndParseDate, parseIST } = require("../../../utils/dateValidatio
 const MachineCategory = require("../machineCategoryManagement/admin.machineCategory.model");
 const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
 const Machine = require("../inventoryManagement/admin.machine.model");
+const Vendor = require("../vendorManagement/admin.vendor.model");
+const Customer = require("../customerManagement/admin.customer.model");
 
 const getAll = async (req, res) => {
   try {
@@ -15,31 +17,68 @@ const getAll = async (req, res) => {
     if (action && ["purchased", "sold"].includes(action)) query.action = action;
 
     // Filter by vendor
-    if (vendorId && mongoose.isValidObjectId(vendorId)) {
-      query["vendorInfo.vendorId"] = vendorId;
+    if (vendorId) {
+      if (!mongoose.isValidObjectId(vendorId)) {
+        return res.status(400).json({ success: false, message: "Invalid vendorId format" });
+      }
+      const vendor = await Vendor.findById(vendorId);
+      if (!vendor) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["vendorInfo.vendorId"] = vendorId;
+      }
     }
 
     // Filter by customer
-    if (customerId && mongoose.isValidObjectId(customerId)) {
-      query["customerInfo.customerId"] = customerId;
+    if (customerId) {
+      if (!mongoose.isValidObjectId(customerId)) {
+        return res.status(400).json({ success: false, message: "Invalid customerId format" });
+      }
+      const customer = await Customer.findById(customerId);
+      if (!customer) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["customerInfo.customerId"] = customerId;
+      }
     }
 
-    // Filter by category
-    if (category && mongoose.isValidObjectId(category)) {
+    // Filter by category - using ID
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
       const cat = await MachineCategory.findById(category);
-      if (cat) query["machines.category"] = cat.name;
+      if (!cat) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.categoryId"] = category;
+      }
     }
 
-    // Filter by division
-    if (division && mongoose.isValidObjectId(division)) {
+    // Filter by division - using ID
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
       const div = await MachineDivision.findById(division);
-      if (div) query["machines.division"] = div.name;
+      if (!div) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.divisionId"] = division;
+      }
     }
 
-    // Filter by machine
-    if (machineId && mongoose.isValidObjectId(machineId)) {
+    // Filter by machine - using ID
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
       const machine = await Machine.findById(machineId);
-      if (machine) query["machines.machineName"] = machine.name;
+      if (!machine) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.machineId"] = machineId;
+      }
     }
 
     if (typeof search === "string") {
@@ -162,31 +201,68 @@ const exportInventoryLogs = async (req, res) => {
     if (action && ["purchased", "sold"].includes(action)) query.action = action;
 
     // Filter by vendor
-    if (vendorId && mongoose.isValidObjectId(vendorId)) {
-      query["vendorInfo.vendorId"] = vendorId;
+    if (vendorId) {
+      if (!mongoose.isValidObjectId(vendorId)) {
+        return res.status(400).json({ success: false, message: "Invalid vendorId format" });
+      }
+      const vendor = await Vendor.findById(vendorId);
+      if (!vendor) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["vendorInfo.vendorId"] = vendorId;
+      }
     }
 
     // Filter by customer
-    if (customerId && mongoose.isValidObjectId(customerId)) {
-      query["customerInfo.customerId"] = customerId;
+    if (customerId) {
+      if (!mongoose.isValidObjectId(customerId)) {
+        return res.status(400).json({ success: false, message: "Invalid customerId format" });
+      }
+      const customer = await Customer.findById(customerId);
+      if (!customer) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["customerInfo.customerId"] = customerId;
+      }
     }
 
-    // Filter by category
-    if (category && mongoose.isValidObjectId(category)) {
+    // Filter by category - using ID
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
       const cat = await MachineCategory.findById(category);
-      if (cat) query["machines.category"] = cat.name;
+      if (!cat) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.categoryId"] = category;
+      }
     }
 
-    // Filter by division
-    if (division && mongoose.isValidObjectId(division)) {
+    // Filter by division - using ID
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
       const div = await MachineDivision.findById(division);
-      if (div) query["machines.division"] = div.name;
+      if (!div) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.divisionId"] = division;
+      }
     }
 
-    // Filter by machine
-    if (machineId && mongoose.isValidObjectId(machineId)) {
+    // Filter by machine - using ID
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
       const machine = await Machine.findById(machineId);
-      if (machine) query["machines.machineName"] = machine.name;
+      if (!machine) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.machineId"] = machineId;
+      }
     }
 
     if (typeof search === "string") {

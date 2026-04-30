@@ -215,9 +215,12 @@ const createSale = async (req, res) => {
 
       if (logVariants.length) {
         logMachineEntries.push({
+          machineId:   machine._id,
           machineName: machine.name,
           modelNumber: machine.modelNumber || "",
+          categoryId:  machine.category?._id || null,
           category:    machine.category?.name || "",
+          divisionId:  machine.division?._id || null,
           division:    machine.division?.name || "",
           variants:    logVariants,
         });
