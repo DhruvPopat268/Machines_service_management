@@ -22,12 +22,14 @@ interface SearchableFilterConfig {
   searchPlaceholder?: string;
   options: FilterOption[];
   onSearch?: (query: string) => void;
+  disabled?: boolean;
 }
 
 interface FilterBarProps {
   searchValue: string;
   onSearchChange: (val: string) => void;
   searchPlaceholder?: string;
+  searchTitle?: string;
   filters?: FilterConfig[];
   searchableFilters?: SearchableFilterConfig[];
   filterValues?: Record<string, string>;
@@ -38,13 +40,19 @@ interface FilterBarProps {
   onFromDateChange?: (val: string) => void;
   onToDateChange?: (val: string) => void;
   onClear?: () => void;
+  pageSize?: number;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
+  totalCount?: number;
 }
 
 export function FilterBar({
-  searchValue, onSearchChange, searchPlaceholder = "Search...",
+  searchValue, onSearchChange, searchPlaceholder = "Search...", searchTitle,
   filters = [], searchableFilters = [], filterValues = {}, onFilterChange,
   showDateRange = false, fromDate = "", toDate = "",
   onFromDateChange, onToDateChange, onClear,
+  pageSize, onPageSizeChange, pageSizeOptions = [10, 25, 50, 100],
+  totalCount,
 }: FilterBarProps) {
   const hasActiveFilters = searchValue || 
     Object.values(filterValues).some(v => v && v !== "all") || 
@@ -61,6 +69,7 @@ export function FilterBar({
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9"
+            title={searchTitle}
           />
         </div>
         <div className="flex flex-wrap gap-3 items-center">
@@ -74,6 +83,7 @@ export function FilterBar({
               searchPlaceholder={f.searchPlaceholder ?? `Search ${f.placeholder.toLowerCase()}...`}
               className="w-[180px] h-9 text-sm"
               onSearchChange={f.onSearch}
+              disabled={f.disabled}
             />
           ))}
           {filters.map((f) => (
@@ -109,6 +119,28 @@ export function FilterBar({
           )}
         </div>
       </div>
+      {onPageSizeChange && pageSize && (
+        <div className="flex justify-between items-center">
+          {totalCount !== undefined && (
+            <div className="text-sm text-muted-foreground">
+              Total Records: <span className="font-medium text-foreground">{totalCount}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page:</Label>
+            <Select value={String(pageSize)} onValueChange={(v) => onPageSizeChange(Number(v))}>
+              <SelectTrigger className="h-9 w-[80px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map((size) => (
+                  <SelectItem key={size} value={String(size)}>{size}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

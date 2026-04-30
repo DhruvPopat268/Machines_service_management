@@ -11,9 +11,12 @@ const variantSchema = new mongoose.Schema(
 
 const machineEntrySchema = new mongoose.Schema(
   {
+    machineId:   { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
     machineName: { type: String, trim: true, required: true },
     modelNumber: { type: String, trim: true, default: "" },
+    categoryId:  { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
     category:    { type: String, trim: true, default: "" },
+    divisionId:  { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },
     division:    { type: String, trim: true, default: "" },
     variants:    { type: [variantSchema], required: true },
   },
@@ -51,6 +54,9 @@ const inventoryLogSchema = new mongoose.Schema(
 inventoryLogSchema.index({ action: 1 });
 inventoryLogSchema.index({ "vendorInfo.vendorId": 1 });
 inventoryLogSchema.index({ "customerInfo.customerId": 1 });
+inventoryLogSchema.index({ "machines.machineId": 1 });
+inventoryLogSchema.index({ "machines.categoryId": 1 });
+inventoryLogSchema.index({ "machines.divisionId": 1 });
 inventoryLogSchema.index({ "machines.machineName": 1 });
 inventoryLogSchema.index({ createdAt: -1 });
 
