@@ -82,7 +82,7 @@ const applyImageOrder = (imageOrder, uploadedUrls, keptImages = []) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, status, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, status, category, division, stockStatus, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -99,6 +99,7 @@ const getAll = async (req, res) => {
     if (status && ["Active", "Inactive"].includes(status)) query.status = status;
     if (category && mongoose.isValidObjectId(category)) query.category = category;
     if (division && mongoose.isValidObjectId(division)) query.division = division;
+    if (stockStatus && ["In Stock", "Low Stock", "Out of Stock"].includes(stockStatus)) query["variants.stockStatus"] = stockStatus;
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -556,7 +557,7 @@ const importMachines = async (req, res) => {
 
 const exportMachines = async (req, res) => {
   try {
-    const { search, status, category, division, fromDate, toDate } = req.query;
+    const { search, status, category, division, stockStatus, fromDate, toDate } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -573,6 +574,7 @@ const exportMachines = async (req, res) => {
     if (status && ["Active", "Inactive"].includes(status)) query.status = status;
     if (category && mongoose.isValidObjectId(category)) query.category = category;
     if (division && mongoose.isValidObjectId(division)) query.division = division;
+    if (stockStatus && ["In Stock", "Low Stock", "Out of Stock"].includes(stockStatus)) query["variants.stockStatus"] = stockStatus;
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {

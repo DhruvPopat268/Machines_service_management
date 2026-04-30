@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { PageHeader } from "@/components/PageHeader";
 import { ArrowLeft, Plus, Trash2, ImagePlus, X, Pencil, Crown } from "lucide-react";
 import { toast } from "sonner";
@@ -54,6 +56,14 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
 
   const [allImages,  setAllImages]  = useState<ImageItem[]>([]);
   const [dragIndex,  setDragIndex]  = useState<number | null>(null);
+
+  const [categoryDialog, setCategoryDialog] = useState(false);
+  const [categoryForm, setCategoryForm] = useState({ name: "", description: "", status: "Active" as "Active" | "Inactive" });
+  const [divisionDialog, setDivisionDialog] = useState(false);
+  const [divisionForm, setDivisionForm] = useState({ name: "", description: "", status: "Active" as "Active" | "Inactive" });
+  const [attributeDialog, setAttributeDialog] = useState(false);
+  const [attributeForm, setAttributeForm] = useState({ name: "", machineCategory: "", description: "", status: "Active" as "Active" | "Inactive" });
+  const [creatingNew, setCreatingNew] = useState(false);
 
   const totalImageCount = allImages.length;
 
@@ -126,6 +136,57 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     // Clear variants when category changes
     if (key === "category" && value !== form.category) {
       setVariants([emptyVariant()]);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!categoryForm.name.trim()) return toast.error("Category name is required");
+    setCreatingNew(true);
+    try {
+      const res = await api.post("/admin/machine-categories", categoryForm);
+      toast.success("Category created successfully");
+      setCategories((prev) => [...prev, res.data.data]);
+      setForm((p) => ({ ...p, category: res.data.data._id }));
+      setCategoryDialog(false);
+      setCategoryForm({ name: "", description: "", status: "Active" });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create category");
+    } finally {
+      setCreatingNew(false);
+    }
+  };
+
+  const handleCreateDivision = async () => {
+    if (!divisionForm.name.trim()) return toast.error("Division name is required");
+    setCreatingNew(true);
+    try {
+      const res = await api.post("/admin/machine-divisions", divisionForm);
+      toast.success("Division created successfully");
+      setDivisions((prev) => [...prev, res.data.data]);
+      setForm((p) => ({ ...p, division: res.data.data._id }));
+      setDivisionDialog(false);
+      setDivisionForm({ name: "", description: "", status: "Active" });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create division");
+    } finally {
+      setCreatingNew(false);
+    }
+  };
+
+  const handleCreateAttribute = async () => {
+    if (!attributeForm.name.trim()) return toast.error("Attribute name is required");
+    if (!attributeForm.machineCategory) return toast.error("Machine category is required");
+    setCreatingNew(true);
+    try {
+      const res = await api.post("/admin/attributes", attributeForm);
+      toast.success("Attribute created successfully");
+      setAttributes((prev) => [...prev, res.data.data]);
+      setAttributeDialog(false);
+      setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create attribute");
+    } finally {
+      setCreatingNew(false);
     }
   };
 
@@ -258,7 +319,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classification</p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Category <span className="text-destructive">*</span></Label>
+                <div className="flex items-center justify-between">
+                  <Label>Category <span className="text-destructive">*</span></Label>
+                  {!isReadOnly && <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setCategoryDialog(true)}><Plus className="h-3 w-3 mr-1" />Create New</Button>}
+                </div>
                 <Select value={form.category} onValueChange={(v) => setField("category", v)} disabled={isReadOnly}>
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>{categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
@@ -268,7 +332,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
                 )}
               </div>
               <div className="space-y-2">
-                <Label>Division</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Division</Label>
+                  {!isReadOnly && <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setDivisionDialog(true)}><Plus className="h-3 w-3 mr-1" />Create New</Button>}
+                </div>
                 <Select value={form.division} onValueChange={(v) => setField("division", v)} disabled={isReadOnly}>
                   <SelectTrigger><SelectValue placeholder="Select division" /></SelectTrigger>
                   <SelectContent>{divisions.map((d) => <SelectItem key={d._id} value={d._id}>{d.name}</SelectItem>)}</SelectContent>
@@ -285,7 +352,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variants</p>
                 {!form.category && <p className="text-xs text-amber-600">Please select a category first to add variants</p>}
               </div>
-              {!isReadOnly && form.category && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="h-3.5 w-3.5 mr-1" />Add Variant</Button>}
+              <div className="flex gap-2">
+                {!isReadOnly && form.category && <Button type="button" variant="ghost" size="sm" onClick={() => { setAttributeForm({ name: "", machineCategory: form.category, description: "", status: "Active" }); setAttributeDialog(true); }}><Plus className="h-3.5 w-3.5 mr-1" />Create Attribute</Button>}
+                {!isReadOnly && form.category && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="h-3.5 w-3.5 mr-1" />Add Variant</Button>}
+              </div>
             </div>
             {!form.category ? (
               <div className="border rounded-lg p-8 text-center">
@@ -394,6 +464,82 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
           </div>
         )}
       </form>
+
+      {/* Create Category Dialog */}
+      <Dialog open={categoryDialog} onOpenChange={(open) => { if (!open) { setCategoryDialog(false); setCategoryForm({ name: "", description: "", status: "Active" }); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create Category</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Category Name <span className="text-destructive">*</span></Label><Input placeholder="e.g. Heavy Machinery" value={categoryForm.name} onChange={(e) => setCategoryForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Types of machines in this category" value={categoryForm.description} onChange={(e) => setCategoryForm((p) => ({ ...p, description: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={categoryForm.status} onValueChange={(v) => setCategoryForm((p) => ({ ...p, status: v as "Active" | "Inactive" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCategoryDialog(false); setCategoryForm({ name: "", description: "", status: "Active" }); }}>Cancel</Button>
+            <Button onClick={handleCreateCategory} disabled={creatingNew}>{creatingNew ? "Creating..." : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Division Dialog */}
+      <Dialog open={divisionDialog} onOpenChange={(open) => { if (!open) { setDivisionDialog(false); setDivisionForm({ name: "", description: "", status: "Active" }); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create Division</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2"><Label>Division Name <span className="text-destructive">*</span></Label><Input placeholder="e.g. CNC Division" value={divisionForm.name} onChange={(e) => setDivisionForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Types of machines covered by this division" value={divisionForm.description} onChange={(e) => setDivisionForm((p) => ({ ...p, description: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={divisionForm.status} onValueChange={(v) => setDivisionForm((p) => ({ ...p, status: v as "Active" | "Inactive" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDivisionDialog(false); setDivisionForm({ name: "", description: "", status: "Active" }); }}>Cancel</Button>
+            <Button onClick={handleCreateDivision} disabled={creatingNew}>{creatingNew ? "Creating..." : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Attribute Dialog */}
+      <Dialog open={attributeDialog} onOpenChange={(open) => { if (!open) { setAttributeDialog(false); setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" }); } }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Create Attribute</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Machine Category <span className="text-destructive">*</span></Label>
+              <SearchableSelect 
+                options={categories.map((c) => ({ label: c.name, value: c._id }))} 
+                value={attributeForm.machineCategory} 
+                onChange={(v) => setAttributeForm((p) => ({ ...p, machineCategory: v }))} 
+                placeholder="Select category" 
+                searchPlaceholder="Search categories..." 
+              />
+            </div>
+            <div className="space-y-2"><Label>Attribute Name <span className="text-destructive">*</span></Label><Input placeholder="e.g. Color, Voltage, Power (kW)" value={attributeForm.name} onChange={(e) => setAttributeForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Brief description of this attribute" value={attributeForm.description} onChange={(e) => setAttributeForm((p) => ({ ...p, description: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={attributeForm.status} onValueChange={(v) => setAttributeForm((p) => ({ ...p, status: v as "Active" | "Inactive" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAttributeDialog(false); setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" }); }}>Cancel</Button>
+            <Button onClick={handleCreateAttribute} disabled={creatingNew}>{creatingNew ? "Creating..." : "Create"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

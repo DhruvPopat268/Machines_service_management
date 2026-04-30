@@ -555,10 +555,10 @@ const PurchaseMachinesPage = () => {
           />
           <div className="flex justify-end flex-wrap gap-3 items-center">
             <SearchableSelect
-              options={[{ label: "All Vendors", value: "" }, ...vendorOptions]}
+              options={vendorOptions}
               value={filters.vendorId || ""}
               onChange={(v) => setFilters((prev) => ({ ...prev, vendorId: v }))}
-              placeholder="All Vendors"
+              placeholder="Vendors"
               searchPlaceholder="Search vendor..."
               onSearchChange={setVendorSearch}
               className="w-[220px] h-9 text-sm"
