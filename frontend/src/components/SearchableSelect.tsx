@@ -33,11 +33,16 @@ export function SearchableSelect({
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = options.find((o) => o.value === value);
 
-  // Debounced search with 500ms delay
+  // Debounced search with 500ms delay - only when popover is open
   useEffect(() => {
+    // Don't schedule debounced calls when popover is closed
+    if (!open) {
+      return;
+    }
+
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -53,7 +58,7 @@ export function SearchableSelect({
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchQuery, onSearchChange]);
+  }, [searchQuery, onSearchChange, open]);
 
   const displayOptions = useMemo(() => {
     // Add "All" option at the top only if there are actual options
@@ -70,8 +75,14 @@ export function SearchableSelect({
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
     if (!isOpen) {
+      // Clear any pending debounced calls
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      // Reset search query
       setSearchQuery("");
-      // Reset to initial load when closing
+      // Immediately reset to initial load when closing
       if (onSearchChange) {
         onSearchChange("");
       }
