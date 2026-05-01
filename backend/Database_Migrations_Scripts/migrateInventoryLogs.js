@@ -6,9 +6,17 @@ const MachineDivision = require("./modules/admin/machineDivisionManagement/admin
 const Machine = require("./modules/admin/inventoryManagement/admin.machine.model");
 
 const migrateInventoryLogs = async () => {
+  // Validate MONGO_URI is set
+  if (!process.env.MONGO_URI) {
+    console.error("Error: MONGO_URI environment variable is not set");
+    console.error("Please set MONGO_URI before running this migration");
+    console.error("Example: MONGO_URI=\"mongodb://localhost:27017/your_db\" node migrateInventoryLogs.js");
+    process.exit(1);
+  }
+
   console.log(process.env.MONGO_URI)
   try {
-    await mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/your_database_name");
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("Connected to MongoDB");
 
     // Fetch all inventory logs

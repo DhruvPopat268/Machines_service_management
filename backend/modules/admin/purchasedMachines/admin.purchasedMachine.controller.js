@@ -1,10 +1,12 @@
 const mongoose = require("mongoose");
 const PurchasedMachine = require("./admin.purchasedMachine.model");
-const Machine          = require("../inventoryManagement/admin.machine.model");
-const Vendor           = require("../vendorManagement/admin.vendor.model");
-const Attribute        = require("../attributeManagement/admin.attribute.model");
+const Machine = require("../inventoryManagement/admin.machine.model");
+const Vendor = require("../vendorManagement/admin.vendor.model");
+const MachineCategory = require("../machineCategoryManagement/admin.machineCategory.model");
+const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
+const Attribute = require("../attributeManagement/admin.attribute.model");
 const { validateCreatePurchase } = require("./admin.purchasedMachine.validator");
-const InventoryLog     = require("../inventoryLogs/admin.inventoryLog.model");
+const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
 
 const resolveStockStatus = (currentStock, lowStockThreshold) => {
   if (currentStock === 0) return "Out of Stock";
@@ -14,25 +16,78 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, vendorId, category, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, vendorId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
+    // Search
     if (typeof search === "string") {
       const s = search.trim().slice(0, 100);
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
-          { "vendorInfo.name":      { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.name": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.companyName": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone": { $regex: escaped, $options: "i" } },
         ];
       }
     }
 
-    if (vendorId && mongoose.isValidObjectId(vendorId)) query["vendorInfo.vendorId"] = vendorId;
-    if (category && typeof category === "string" && category.trim())
-      query["machines.category"] = { $regex: `^${category.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+    // Filter by vendor
+    if (vendorId) {
+      if (!mongoose.isValidObjectId(vendorId)) {
+        return res.status(400).json({ success: false, message: "Invalid vendorId format" });
+      }
+      const vendor = await Vendor.findById(vendorId);
+      if (!vendor) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["vendorInfo.vendorId"] = vendorId;
+      }
+    }
 
+    // Filter by category - using ID
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
+      const cat = await MachineCategory.findById(category);
+      if (!cat) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.categoryId"] = category;
+      }
+    }
+
+    // Filter by division - using ID
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
+      const div = await MachineDivision.findById(division);
+      if (!div) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.divisionId"] = division;
+      }
+    }
+
+    // Filter by machine - using ID
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
+      const machine = await Machine.findById(machineId);
+      if (!machine) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["machines.machineId"] = machineId;
+      }
+    }
+
+    // Date range
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
         const [dd, mm, yy] = ddmmyy.split("/");
@@ -41,22 +96,23 @@ const getAll = async (req, res) => {
       };
       query.createdAt = {};
       if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (toDate) query.createdAt.$lte = parseIST(toDate, true);
     }
 
-    const pageNum  = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip     = (pageNum - 1) * limitNum;
-
+    const skip = (pageNum - 1) * limitNum;
+    console.log("Query:", JSON.stringify(query, null, 2))
     const [purchases, total] = await Promise.all([
+
       PurchasedMachine.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       PurchasedMachine.countDocuments(query),
     ]);
 
     const data = purchases.map((p) => {
       const obj = p.toObject();
-      obj.machinesCount  = p.machines.length;
-      obj.totalVariants  = p.machines.reduce((sum, m) => sum + m.variants.length, 0);
+      obj.machinesCount = p.machines.length;
+      obj.totalVariants = p.machines.reduce((sum, m) => sum + m.variants.length, 0);
       return obj;
     });
 
@@ -87,22 +143,22 @@ const createPurchase = async (req, res) => {
     if (validationError) return abort(400, validationError);
 
     const vendor = await Vendor.findById(vendorId).session(session);
-    if (!vendor)                     return abort(404, "Vendor not found");
+    if (!vendor) return abort(404, "Vendor not found");
     if (vendor.status === "Inactive") return abort(400, "Vendor is inactive");
 
     const vendorInfo = {
-      vendorId:    vendor._id,
-      name:        vendor.name,
-      phone:       vendor.phone,
-      email:       vendor.email,
+      vendorId: vendor._id,
+      name: vendor.name,
+      phone: vendor.phone,
+      email: vendor.email,
       companyName: vendor.companyName,
-      gstNumber:   vendor.gstNumber || "",
+      gstNumber: vendor.gstNumber || "",
     };
 
     // Collect all attribute IDs across all machines upfront
     const allAttributeIds = machines.flatMap((m) => m.variants.map((v) => v.attribute)).filter(Boolean);
-    const attributes      = await Attribute.find({ _id: { $in: allAttributeIds } }).session(session);
-    const attrMap         = Object.fromEntries(attributes.map((a) => [a._id.toString(), a]));
+    const attributes = await Attribute.find({ _id: { $in: allAttributeIds } }).session(session);
+    const attrMap = Object.fromEntries(attributes.map((a) => [a._id.toString(), a]));
 
     const purchaseMachineEntries = [];
     let grandTotal = 0;
@@ -114,10 +170,10 @@ const createPurchase = async (req, res) => {
         .populate("category", "name")
         .populate("division", "name")
         .session(session);
-      if (!machine)                     return abort(404, `Machine "${machineId}" not found`);
+      if (!machine) return abort(404, `Machine "${machineId}" not found`);
       if (machine.status === "Inactive") return abort(400, `Machine "${machine.name}" is inactive`);
 
-      const machineAttrIds  = new Set(machine.variants.map((mv) => mv.attribute.toString()));
+      const machineAttrIds = new Set(machine.variants.map((mv) => mv.attribute.toString()));
       const machineVariants = machine.variants;
       const purchaseVariants = [];
 
@@ -125,7 +181,7 @@ const createPurchase = async (req, res) => {
         const { attribute, value, quantity, price, discountedPrice, willAddToInventory } = v;
 
         const attrDoc = attrMap[attribute.toString()];
-        if (!attrDoc)                     return abort(404, `Attribute "${attribute}" not found`);
+        if (!attrDoc) return abort(404, `Attribute "${attribute}" not found`);
         if (attrDoc.status === "Inactive") return abort(400, `Attribute "${attrDoc.name}" is inactive`);
         if (!machineAttrIds.has(attribute.toString()))
           return abort(400, `Attribute "${attrDoc.name}" does not belong to machine "${machine.name}"`);
@@ -136,18 +192,18 @@ const createPurchase = async (req, res) => {
         if (!machineVariant) return abort(404, `Variant "${attrDoc.name}: ${value}" not found on machine "${machine.name}"`);
 
         const effectivePrice = discountedPrice !== null && discountedPrice !== undefined ? discountedPrice : price;
-        const total          = Math.round(effectivePrice * quantity * 100) / 100;
+        const total = Math.round(effectivePrice * quantity * 100) / 100;
 
         purchaseVariants.push({
-          attribute:          attrDoc._id,
-          name:               attrDoc.name,
-          value:              value.trim(),
+          attribute: attrDoc._id,
+          name: attrDoc.name,
+          value: value.trim(),
           quantity,
           price,
-          discountedPrice:    discountedPrice ?? null,
+          discountedPrice: discountedPrice ?? null,
           total,
           willAddToInventory: willAddToInventory !== false,
-          addedToInventory:   false,
+          addedToInventory: false,
         });
       }
 
@@ -155,13 +211,17 @@ const createPurchase = async (req, res) => {
       grandTotal = Math.round((grandTotal + machineTotalPurchased) * 100) / 100;
 
       purchaseMachineEntries.push({
-        machineId:             machine._id,
-        machineName:           machine.name,
-        category:              machine.category?.name || "",
-        variants:              purchaseVariants,
+        machineId: machine._id,
+        machineName: machine.name,
+        modelNumber: machine.modelNumber || "",
+        categoryId: machine.category?._id || null,
+        category: machine.category?.name || "",
+        divisionId: machine.division?._id || null,
+        division: machine.division?.name || "",
+        variants: purchaseVariants,
         machineTotalPurchased,
         // keep refs for stock update below
-        _machineDoc:           machine,
+        _machineDoc: machine,
       });
     }
 
@@ -176,7 +236,7 @@ const createPurchase = async (req, res) => {
     for (const entry of purchaseMachineEntries) {
       const { _machineDoc: machine, variants: purchaseVariants } = entry;
       const machineVariants = machine.variants;
-      const logVariants     = [];
+      const logVariants = [];
 
       for (const pv of purchaseVariants) {
         if (!pv.willAddToInventory) continue;
@@ -187,10 +247,10 @@ const createPurchase = async (req, res) => {
 
         // Atomic operation: increment stock
         const updated = await Machine.findOneAndUpdate(
-          { 
-            _id: machine._id, 
-            "variants.attribute": pv.attribute, 
-            "variants.value": machineVariant.value 
+          {
+            _id: machine._id,
+            "variants.attribute": pv.attribute,
+            "variants.value": machineVariant.value
           },
           { $inc: { "variants.$.currentStock": pv.quantity } },
           { new: true, session }
@@ -216,14 +276,14 @@ const createPurchase = async (req, res) => {
 
       if (logVariants.length) {
         logMachineEntries.push({
-          machineId:   machine._id,
+          machineId: machine._id,
           machineName: machine.name,
           modelNumber: machine.modelNumber || "",
-          categoryId:  machine.category?._id || null,
-          category:    machine.category?.name || "",
-          divisionId:  machine.division?._id || null,
-          division:    machine.division?.name || "",
-          variants:    logVariants,
+          categoryId: machine.category?._id || null,
+          category: machine.category?.name || "",
+          divisionId: machine.division?._id || null,
+          division: machine.division?.name || "",
+          variants: logVariants,
         });
       }
     }
@@ -306,11 +366,11 @@ const addToInventory = async (req, res) => {
         .populate("category", "name")
         .populate("division", "name")
         .session(session);
-      if (!machine)                     return abort(404, `Machine "${pm.machineName}" not found`);
+      if (!machine) return abort(404, `Machine "${pm.machineName}" not found`);
       if (machine.status === "Inactive") return abort(400, `Machine "${machine.name}" is inactive`);
 
       const machineVariants = machine.variants;
-      const logVariants     = [];
+      const logVariants = [];
 
       for (const vi of variantIndexes) {
         const pv = pm.variants[vi];
@@ -324,10 +384,10 @@ const addToInventory = async (req, res) => {
 
         // Atomic operation: increment stock
         const updated = await Machine.findOneAndUpdate(
-          { 
-            _id: machine._id, 
-            "variants.attribute": machineVariant.attribute, 
-            "variants.value": machineVariant.value 
+          {
+            _id: machine._id,
+            "variants.attribute": machineVariant.attribute,
+            "variants.value": machineVariant.value
           },
           { $inc: { "variants.$.currentStock": pv.quantity } },
           { new: true, session }
@@ -354,19 +414,19 @@ const addToInventory = async (req, res) => {
 
       if (logVariants.length) {
         await InventoryLog.create(
-          [{ 
-            action: "purchased", 
-            vendorInfo: purchase.vendorInfo, 
-            machines: [{ 
-              machineId:   machine._id,
-              machineName: machine.name, 
-              modelNumber: machine.modelNumber || "", 
-              categoryId:  machine.category?._id || null,
-              category:    machine.category?.name || "", 
-              divisionId:  machine.division?._id || null,
-              division:    machine.division?.name || "", 
-              variants:    logVariants 
-            }] 
+          [{
+            action: "purchased",
+            vendorInfo: purchase.vendorInfo,
+            machines: [{
+              machineId: machine._id,
+              machineName: machine.name,
+              modelNumber: machine.modelNumber || "",
+              categoryId: machine.category?._id || null,
+              category: machine.category?.name || "",
+              divisionId: machine.division?._id || null,
+              division: machine.division?.name || "",
+              variants: logVariants
+            }]
           }],
           { session }
         );
@@ -399,9 +459,9 @@ const getById = async (req, res) => {
     if (!purchase)
       return res.status(404).json({ success: false, message: "Purchase not found" });
 
-    const obj          = purchase.toObject();
-    obj.machinesCount  = purchase.machines.length;
-    obj.totalVariants  = purchase.machines.reduce((sum, m) => sum + m.variants.length, 0);
+    const obj = purchase.toObject();
+    obj.machinesCount = purchase.machines.length;
+    obj.totalVariants = purchase.machines.reduce((sum, m) => sum + m.variants.length, 0);
 
     res.status(200).json({ success: true, data: obj });
   } catch (err) {
