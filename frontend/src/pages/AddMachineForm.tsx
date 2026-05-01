@@ -131,10 +131,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     fetchMachine();
   }, [id, isEdit, isView]);
 
-  const setField = (key: string, value: string) => {
+  const setField = (key: string, value: string, skipVariantClear = false) => {
     setForm((p) => ({ ...p, [key]: value }));
-    // Clear variants when category changes
-    if (key === "category" && value !== form.category) {
+    // Clear variants when category changes (but not when programmatically setting)
+    if (key === "category" && value !== form.category && !skipVariantClear) {
       setVariants([emptyVariant()]);
     }
   };
@@ -146,7 +146,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       const res = await api.post("/admin/machine-categories", categoryForm);
       toast.success("Category created successfully");
       setCategories((prev) => [...prev, res.data.data]);
-      setForm((p) => ({ ...p, category: res.data.data._id }));
       setCategoryDialog(false);
       setCategoryForm({ name: "", description: "", status: "Active" });
     } catch (err: any) {
@@ -163,7 +162,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       const res = await api.post("/admin/machine-divisions", divisionForm);
       toast.success("Division created successfully");
       setDivisions((prev) => [...prev, res.data.data]);
-      setForm((p) => ({ ...p, division: res.data.data._id }));
       setDivisionDialog(false);
       setDivisionForm({ name: "", description: "", status: "Active" });
     } catch (err: any) {
