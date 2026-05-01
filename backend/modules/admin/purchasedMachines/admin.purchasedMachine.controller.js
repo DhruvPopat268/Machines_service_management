@@ -14,6 +14,18 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
   return lowStockThreshold < currentStock ? "In Stock" : "Low Stock";
 };
 
+// Helper function to build machine-level filters using $elemMatch
+const buildMachineFilter = (category, division, machineId) => {
+  const machineFilter = {};
+  
+  if (category) machineFilter.categoryId = category;
+  if (division) machineFilter.divisionId = division;
+  if (machineId) machineFilter.machineId = machineId;
+  
+  // Only return $elemMatch if there are machine-level filters
+  return Object.keys(machineFilter).length > 0 ? { $elemMatch: machineFilter } : null;
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, vendorId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -56,8 +68,11 @@ const getAll = async (req, res) => {
       const cat = await MachineCategory.findById(category);
       if (!cat) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.categoryId"] = category;
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 },
+        });
       }
     }
 
@@ -69,8 +84,11 @@ const getAll = async (req, res) => {
       const div = await MachineDivision.findById(division);
       if (!div) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.divisionId"] = division;
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 },
+        });
       }
     }
 
@@ -82,9 +100,18 @@ const getAll = async (req, res) => {
       const machine = await Machine.findById(machineId);
       if (!machine) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.machineId"] = machineId;
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 },
+        });
       }
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
     }
 
     // Date range

@@ -7,6 +7,18 @@ const MachineDivision = require("../machineDivisionManagement/admin.machineDivis
 const Machine = require("../inventoryManagement/admin.machine.model");
 const Vendor = require("../vendorManagement/admin.vendor.model");
 const Customer = require("../customerManagement/admin.customer.model");
+// Helper function to build machine-level filters using $elemMatch
+const buildMachineFilter = (category, division, machineId) => {
+  const machineFilter = {};
+  
+  if (category) machineFilter.categoryId = category;
+  if (division) machineFilter.divisionId = division;
+  if (machineId) machineFilter.machineId = machineId;
+  
+  // Only return $elemMatch if there are machine-level filters
+  return Object.keys(machineFilter).length > 0 ? { $elemMatch: machineFilter } : null;
+};
+
 
 const getAll = async (req, res) => {
   try {
@@ -50,8 +62,6 @@ const getAll = async (req, res) => {
       const cat = await MachineCategory.findById(category);
       if (!cat) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.categoryId"] = category;
       }
     }
 
@@ -63,8 +73,6 @@ const getAll = async (req, res) => {
       const div = await MachineDivision.findById(division);
       if (!div) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.divisionId"] = division;
       }
     }
 
@@ -76,9 +84,13 @@ const getAll = async (req, res) => {
       const machine = await Machine.findById(machineId);
       if (!machine) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.machineId"] = machineId;
       }
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
     }
 
     if (typeof search === "string") {
@@ -234,8 +246,6 @@ const exportInventoryLogs = async (req, res) => {
       const cat = await MachineCategory.findById(category);
       if (!cat) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.categoryId"] = category;
       }
     }
 
@@ -247,8 +257,6 @@ const exportInventoryLogs = async (req, res) => {
       const div = await MachineDivision.findById(division);
       if (!div) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.divisionId"] = division;
       }
     }
 
@@ -260,9 +268,13 @@ const exportInventoryLogs = async (req, res) => {
       const machine = await Machine.findById(machineId);
       if (!machine) {
         query._id = new mongoose.Types.ObjectId(); // Impossible match
-      } else {
-        query["machines.machineId"] = machineId;
       }
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
     }
 
     if (typeof search === "string") {

@@ -14,6 +14,18 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
   return lowStockThreshold < currentStock ? "In Stock" : "Low Stock";
 };
 
+// Helper function to build machine-level filters using $elemMatch
+const buildMachineFilter = (category, division, machineId) => {
+  const machineFilter = {};
+  
+  if (category) machineFilter.categoryId = category;
+  if (division) machineFilter.divisionId = division;
+  if (machineId) machineFilter.machineId = machineId;
+  
+  // Only return $elemMatch if there are machine-level filters
+  return Object.keys(machineFilter).length > 0 ? { $elemMatch: machineFilter } : null;
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -53,7 +65,6 @@ const getAll = async (req, res) => {
       if (!mongoose.isValidObjectId(category)) {
         return res.status(400).json({ success: false, message: "Invalid category format" });
       }
-      query["machines.categoryId"] = category;
     }
 
     // Filter by division - using ID
@@ -61,7 +72,6 @@ const getAll = async (req, res) => {
       if (!mongoose.isValidObjectId(division)) {
         return res.status(400).json({ success: false, message: "Invalid division format" });
       }
-      query["machines.divisionId"] = division;
     }
 
     // Filter by machine - using ID
@@ -69,7 +79,12 @@ const getAll = async (req, res) => {
       if (!mongoose.isValidObjectId(machineId)) {
         return res.status(400).json({ success: false, message: "Invalid machineId format" });
       }
-      query["machines.machineId"] = machineId;
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
     }
 
     if (fromDate || toDate) {
@@ -158,8 +173,10 @@ const createSale = async (req, res) => {
     const attributes      = await Attribute.find({ _id: { $in: allAttributeIds } }).session(session);
     const attrMap         = Object.fromEntries(attributes.map((a) => [a._id.toString(), a]));
 
-    // Collect all contract type IDs upfront
-    const allContractTypeIds = machines.flatMap((m) => m.variants.map((v) => v.contractTypeId)).filter(Boolean);
+    // Collect all contract type IDs upfront and filter to only valid ObjectIds
+    const allContractTypeIds = machines
+      .flatMap((m) => m.variants.map((v) => v.contractTypeId))
+      .filter((id) => id && mongoose.isValidObjectId(id));
     const contractTypes      = await ContractType.find({ _id: { $in: allContractTypeIds } }).session(session);
     const contractTypeMap    = Object.fromEntries(contractTypes.map((ct) => [ct._id.toString(), ct]));
 
@@ -410,7 +427,6 @@ const exportToExcel = async (req, res) => {
       if (!mongoose.isValidObjectId(category)) {
         return res.status(400).json({ success: false, message: "Invalid category format" });
       }
-      query["machines.categoryId"] = category;
     }
 
     // Filter by division
@@ -418,7 +434,6 @@ const exportToExcel = async (req, res) => {
       if (!mongoose.isValidObjectId(division)) {
         return res.status(400).json({ success: false, message: "Invalid division format" });
       }
-      query["machines.divisionId"] = division;
     }
 
     // Filter by machine
@@ -426,7 +441,12 @@ const exportToExcel = async (req, res) => {
       if (!mongoose.isValidObjectId(machineId)) {
         return res.status(400).json({ success: false, message: "Invalid machineId format" });
       }
-      query["machines.machineId"] = machineId;
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
     }
 
     if (fromDate || toDate) {

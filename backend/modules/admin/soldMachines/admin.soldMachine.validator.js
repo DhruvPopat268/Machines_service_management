@@ -20,7 +20,7 @@ const validateCreateSale = (body) => {
       return `${machineLabel}: variants array is required and must not be empty`;
 
     for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice } = variants[vi];
+      const { attribute, value, quantity, price, discountedPrice, contractTypeId, validFrom, validTo } = variants[vi];
       const label = `${machineLabel} Variant ${vi + 1}`;
 
       if (!attribute || !mongoose.isValidObjectId(attribute))
@@ -55,6 +55,24 @@ const validateCreateSale = (body) => {
         if (numDiscountedPrice > numPrice)
           return `${label}: discounted price cannot be greater than price`;
       }
+
+      // Validate contract type ID
+      if (!contractTypeId || !mongoose.isValidObjectId(contractTypeId))
+        return `${label}: invalid or missing contract type ID`;
+
+      // Validate dates
+      if (!validFrom || !validTo)
+        return `${label}: valid from and valid to dates are required`;
+      
+      const fromDate = new Date(validFrom);
+      const toDate = new Date(validTo);
+      
+      if (isNaN(fromDate.getTime()))
+        return `${label}: invalid valid from date`;
+      if (isNaN(toDate.getTime()))
+        return `${label}: invalid valid to date`;
+      if (toDate <= fromDate)
+        return `${label}: valid to date must be after valid from date`;
     }
   }
 
