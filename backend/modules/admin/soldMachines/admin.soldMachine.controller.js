@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
+const xlsx = require("xlsx");
 const SoldMachine = require("./admin.soldMachine.model");
 const Machine     = require("../inventoryManagement/admin.machine.model");
 const Customer    = require("../customerManagement/admin.customer.model");
 const Attribute   = require("../attributeManagement/admin.attribute.model");
+const ContractType = require("../contractTypesManagement/admin.contractType.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
 const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
 
@@ -14,24 +16,61 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, category, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
+    // Search
     if (typeof search === "string") {
       const s = search.trim().slice(0, 100);
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
-          { "customerInfo.name":    { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
+          { "customerInfo.email": { $regex: escaped, $options: "i" } },
         ];
       }
     }
 
-    if (customerId && mongoose.isValidObjectId(customerId)) query["customerInfo.customerId"] = customerId;
-    if (category && typeof category === "string" && category.trim())
-      query["machines.category"] = { $regex: `^${category.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" };
+    // Filter by customer
+    if (customerId) {
+      if (!mongoose.isValidObjectId(customerId)) {
+        return res.status(400).json({ success: false, message: "Invalid customerId format" });
+      }
+      const customer = await Customer.findById(customerId);
+      if (!customer) {
+        query._id = new mongoose.Types.ObjectId(); // Impossible match
+      } else {
+        query["customerInfo.customerId"] = customerId;
+      }
+    }
+
+    // Filter by category - using ID
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
+      query["machines.categoryId"] = category;
+    }
+
+    // Filter by division - using ID
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
+      query["machines.divisionId"] = division;
+    }
+
+    // Filter by machine - using ID
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
+      query["machines.machineId"] = machineId;
+    }
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -60,10 +99,24 @@ const getAll = async (req, res) => {
       return obj;
     });
 
+    // Calculate stats
+    const allSales = await SoldMachine.find(query);
+    const totalSalesCount = allSales.length;
+    const totalSales = allSales.reduce((sum, s) => sum + s.grandTotal, 0);
+    const totalMachinesSold = allSales.reduce((sum, s) => sum + s.machines.length, 0);
+    const totalVariantsSold = allSales.reduce((sum, s) => sum + s.machines.reduce((vSum, m) => vSum + m.variants.length, 0), 0);
+    const avgSaleValue = totalSalesCount > 0 ? Math.round((totalSales / totalSalesCount) * 100) / 100 : 0;
+
     res.status(200).json({
       success: true,
       data,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+      stats: {
+        totalSales: Math.round(totalSales * 100) / 100,
+        totalMachinesSold,
+        totalVariantsSold,
+        avgSaleValue,
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -105,6 +158,11 @@ const createSale = async (req, res) => {
     const attributes      = await Attribute.find({ _id: { $in: allAttributeIds } }).session(session);
     const attrMap         = Object.fromEntries(attributes.map((a) => [a._id.toString(), a]));
 
+    // Collect all contract type IDs upfront
+    const allContractTypeIds = machines.flatMap((m) => m.variants.map((v) => v.contractTypeId)).filter(Boolean);
+    const contractTypes      = await ContractType.find({ _id: { $in: allContractTypeIds } }).session(session);
+    const contractTypeMap    = Object.fromEntries(contractTypes.map((ct) => [ct._id.toString(), ct]));
+
     const saleMachineEntries = [];
     let grandTotal = 0;
 
@@ -123,7 +181,7 @@ const createSale = async (req, res) => {
       const saleVariants = [];
 
       for (const v of variants) {
-        const { attribute, value, quantity, price, discountedPrice } = v;
+        const { attribute, value, quantity, price, discountedPrice, contractTypeId, validFrom, validTo } = v;
 
         const attrDoc = attrMap[attribute.toString()];
         if (!attrDoc)                     return abort(404, `Attribute "${attribute}" not found`);
@@ -136,6 +194,20 @@ const createSale = async (req, res) => {
         );
         if (!machineVariant) return abort(404, `Variant "${attrDoc.name}: ${value}" not found on machine "${machine.name}"`);
 
+        // Validate contract type
+        if (!contractTypeId) return abort(400, `Contract type is required for variant "${attrDoc.name}: ${value}"`);
+        const contractTypeDoc = contractTypeMap[contractTypeId.toString()];
+        if (!contractTypeDoc) return abort(404, `Contract type "${contractTypeId}" not found`);
+        if (contractTypeDoc.status === "Inactive") return abort(400, `Contract type "${contractTypeDoc.name}" is inactive`);
+
+        // Validate dates
+        if (!validFrom || !validTo) return abort(400, `Valid from and valid to dates are required for variant "${attrDoc.name}: ${value}"`);
+        const fromDate = new Date(validFrom);
+        const toDate = new Date(validTo);
+        if (isNaN(fromDate.getTime())) return abort(400, `Invalid valid from date for variant "${attrDoc.name}: ${value}"`);
+        if (isNaN(toDate.getTime())) return abort(400, `Invalid valid to date for variant "${attrDoc.name}: ${value}"`);
+        if (toDate <= fromDate) return abort(400, `Valid to date must be after valid from date for variant "${attrDoc.name}: ${value}"`);
+
         const effectivePrice = discountedPrice !== null && discountedPrice !== undefined ? discountedPrice : price;
         const total          = Math.round(effectivePrice * quantity * 100) / 100;
 
@@ -147,6 +219,15 @@ const createSale = async (req, res) => {
           price,
           discountedPrice:       discountedPrice ?? null,
           total,
+          contractType: {
+            contractTypeId: contractTypeDoc._id,
+            name:           contractTypeDoc.name,
+            code:           contractTypeDoc.code,
+            freeService:    contractTypeDoc.freeService,
+            freeParts:      contractTypeDoc.freeParts,
+            validFrom:      fromDate,
+            validTo:        toDate,
+          },
           deductedFromInventory: false,
         });
       }
@@ -157,7 +238,11 @@ const createSale = async (req, res) => {
       saleMachineEntries.push({
         machineId:        machine._id,
         machineName:      machine.name,
+        modelNumber:      machine.modelNumber || "",
+        categoryId:       machine.category?._id || null,
         category:         machine.category?.name || "",
+        divisionId:       machine.division?._id || null,
+        division:         machine.division?.name || "",
         variants:         saleVariants,
         machineTotalSold,
         // keep refs for stock update below
@@ -286,4 +371,122 @@ const getById = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale };
+const exportToExcel = async (req, res) => {
+  try {
+    const { search, customerId, category, division, machineId, fromDate, toDate } = req.query;
+
+    const query = {};
+
+    // Search
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) {
+        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        query.$or = [
+          { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
+          { "customerInfo.email": { $regex: escaped, $options: "i" } },
+        ];
+      }
+    }
+
+    // Filter by customer
+    if (customerId) {
+      if (!mongoose.isValidObjectId(customerId)) {
+        return res.status(400).json({ success: false, message: "Invalid customerId format" });
+      }
+      const customer = await Customer.findById(customerId);
+      if (!customer) {
+        query._id = new mongoose.Types.ObjectId();
+      } else {
+        query["customerInfo.customerId"] = customerId;
+      }
+    }
+
+    // Filter by category
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
+      query["machines.categoryId"] = category;
+    }
+
+    // Filter by division
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
+      query["machines.divisionId"] = division;
+    }
+
+    // Filter by machine
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
+      query["machines.machineId"] = machineId;
+    }
+
+    if (fromDate || toDate) {
+      const parseIST = (ddmmyy, endOfDay = false) => {
+        const [dd, mm, yy] = ddmmyy.split("/");
+        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return new Date(base - 5.5 * 60 * 60 * 1000);
+      };
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
+      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+    }
+
+    const sales = await SoldMachine.find(query).sort({ createdAt: -1 }).lean();
+
+    const rows = [];
+    sales.forEach((sale) => {
+      const saleDate = new Date(sale.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+      const saleTime = new Date(sale.createdAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+      
+      sale.machines.forEach((machine) => {
+        machine.variants.forEach((variant) => {
+          rows.push({
+            "Customer Name": sale.customerInfo.name || "",
+            "Customer Phone": sale.customerInfo.phone || "",
+            "Customer GST": sale.customerInfo.gstNumber || "",
+            "Machine Name": machine.machineName || "",
+            "Model Number": machine.modelNumber || "",
+            "Category": machine.category || "",
+            "Division": machine.division || "",
+            "Variant Name": variant.name || "",
+            "Variant Value": variant.value || "",
+            "Quantity": variant.quantity || 0,
+            "Price": variant.price || 0,
+            "Discounted Price": variant.discountedPrice !== null && variant.discountedPrice !== undefined ? variant.discountedPrice : "",
+            "Total": variant.total || 0,
+            "Contract Type": variant.contractType?.name || "",
+            "Contract Code": variant.contractType?.code || "",
+            "Free Service": variant.contractType?.freeService ? "Yes" : "No",
+            "Free Parts": variant.contractType?.freeParts ? "Yes" : "No",
+            "Valid From": variant.contractType?.validFrom ? new Date(variant.contractType.validFrom).toLocaleDateString("en-IN") : "",
+            "Valid To": variant.contractType?.validTo ? new Date(variant.contractType.validTo).toLocaleDateString("en-IN") : "",
+            "Stock Deducted": variant.deductedFromInventory ? "Yes" : "No",
+            "Sale Date": saleDate,
+            "Sale Time": saleTime,
+          });
+        });
+      });
+    });
+
+    const ws = xlsx.utils.json_to_sheet(rows);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Sales");
+    const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", "attachment; filename=sales_export.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, exportToExcel };

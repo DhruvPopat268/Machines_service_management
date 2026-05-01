@@ -7,6 +7,16 @@ import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
 
+interface ContractTypeSnapshot {
+  contractTypeId: string;
+  name: string;
+  code: string;
+  freeService: boolean;
+  freeParts: boolean;
+  validFrom: string;
+  validTo: string;
+}
+
 interface SaleVariant {
   attribute: string;
   name: string;
@@ -15,6 +25,7 @@ interface SaleVariant {
   price: number;
   discountedPrice: number | null;
   total: number;
+  contractType: ContractTypeSnapshot;
   deductedFromInventory: boolean;
 }
 
@@ -52,6 +63,22 @@ const formatDateTime = (iso: string) => {
   const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
   const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
   return `${date} ${time}`;
+};
+
+const formatDate = (dateStr: string | undefined) => {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+};
+
+const getContractTypeBadge = (code: string) => {
+  const types: Record<string, { color: string }> = {
+    OUT: { color: "bg-blue-100 text-blue-700" },
+    RNT: { color: "bg-purple-100 text-purple-700" },
+    LSE: { color: "bg-orange-100 text-orange-700" },
+  };
+  
+  return types[code] || types.OUT;
 };
 
 const SellMachineDetailPage = () => {
@@ -153,25 +180,50 @@ const SellMachineDetailPage = () => {
                     <th className="text-right font-medium pb-2 pr-4">Price</th>
                     <th className="text-right font-medium pb-2 pr-4">Disc. Price</th>
                     <th className="text-right font-medium pb-2 pr-4">Total</th>
+                    <th className="text-center font-medium pb-2 pr-4">Contract</th>
+                    <th className="text-center font-medium pb-2 pr-4">Free Service</th>
+                    <th className="text-center font-medium pb-2 pr-4">Free Parts</th>
+                    <th className="text-center font-medium pb-2 pr-4">Valid From</th>
+                    <th className="text-center font-medium pb-2 pr-4">Valid To</th>
                     <th className="text-center font-medium pb-2">Stock Deducted</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {machine.variants.map((v, vi) => (
-                    <tr key={vi} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{v.name}</td>
-                      <td className="py-2 pr-4">{v.value}</td>
-                      <td className="py-2 pr-4 text-right">{v.quantity}</td>
-                      <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
-                      <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
-                      <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
-                      <td className="py-2 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.deductedFromInventory ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {v.deductedFromInventory ? "Yes" : "No"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {machine.variants.map((v, vi) => {
+                    const contractBadge = getContractTypeBadge(v.contractType.code);
+                    return (
+                      <tr key={vi} className="border-b last:border-0">
+                        <td className="py-2 pr-4">{v.name}</td>
+                        <td className="py-2 pr-4">{v.value}</td>
+                        <td className="py-2 pr-4 text-right">{v.quantity}</td>
+                        <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
+                        <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
+                        <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
+                        <td className="py-2 pr-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${contractBadge.color}`}>
+                            {v.contractType.name}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {v.contractType.freeService ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {v.contractType.freeParts ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType.validFrom)}</td>
+                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType.validTo)}</td>
+                        <td className="py-2 text-center">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.deductedFromInventory ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {v.deductedFromInventory ? "Yes" : "No"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </CardContent>
