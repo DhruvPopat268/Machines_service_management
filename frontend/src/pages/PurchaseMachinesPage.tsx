@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
+import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -83,8 +84,6 @@ const toISTDateParam = (htmlDate: string) => {
   return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const LIMIT = 10;
-
 // ─── Purchase Dialog ──────────────────────────────────────────────────────────
 
 const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialVendorId?: string }) => {
@@ -96,8 +95,11 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
   const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [entries, setEntries]               = useState<MachineEntry[]>([]);
   const [submitting, setSubmitting]         = useState(false);
+  const [createVendorDialog, setCreateVendorDialog] = useState(false);
+  const [vendorForm, setVendorForm]         = useState({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" });
   const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const machineInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMachines = async (search = "") => {
     setSearching(true);
@@ -113,15 +115,22 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     }
   };
 
+  const fetchVendors = async () => {
+    try {
+      const r = await api.get("/admin/vendors", { params: { status: "Active", limit: 100 } });
+      setVendors(r.data.data);
+    } catch {
+      toast.error("Failed to load vendors");
+    }
+  };
+
   // sync vendorId when initialVendorId changes (e.g. opened from vendor page)
   useEffect(() => { setVendorId(initialVendorId); }, [initialVendorId]);
 
   // fetch active vendors once on open
   useEffect(() => {
     if (!open) return;
-    api.get("/admin/vendors", { params: { status: "Active", limit: 100 } })
-      .then((r) => setVendors(r.data.data))
-      .catch(() => toast.error("Failed to load vendors"));
+    fetchVendors();
     fetchMachines();
   }, [open]);
 
@@ -156,6 +165,9 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       willAddToInventory: true,
     }));
     setEntries((prev) => [...prev, { machine, variants }]);
+    setMachineSearch("");
+    setDropdownOpen(false);
+    machineInputRef.current?.blur();
   };
 
   const removeMachine = (machineId: string) =>
@@ -229,6 +241,25 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     }
   };
 
+  const handleCreateVendor = async () => {
+    if (!vendorForm.name || !vendorForm.companyName || !vendorForm.phone || !vendorForm.email) {
+      toast.error("Name, company name, phone and email are required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post("/admin/vendors", { ...vendorForm, status: "Active" });
+      toast.success("Vendor created successfully");
+      await fetchVendors();
+      setCreateVendorDialog(false);
+      setVendorForm({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create vendor");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleClose = () => {
     setVendorId(initialVendorId);
     setMachineSearch("");
@@ -248,9 +279,20 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
         <div className="space-y-6 py-2 flex-1 overflow-y-auto">
           {/* Vendor */}
           <div className="space-y-1.5">
-            <Label>Vendor <span className="text-destructive">*</span></Label>
+            <div className="flex items-center justify-between">
+              <Label>Vendor <span className="text-destructive">*</span></Label>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-xs gap-1.5" 
+                onClick={() => setCreateVendorDialog(true)}
+              >
+                <Plus className="h-3 w-3" /> Create New Vendor
+              </Button>
+            </div>
             <Select value={vendorId} onValueChange={setVendorId}>
-              <SelectTrigger>
+              <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
                 <SelectValue placeholder="Select vendor" />
               </SelectTrigger>
               <SelectContent>
@@ -270,6 +312,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
+                  ref={machineInputRef}
                   className="pl-8"
                   placeholder="Search machine by name..."
                   value={machineSearch}
@@ -288,7 +331,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                             key={m._id}
                             type="button"
                             className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
-                            onClick={() => { addMachine(m); setDropdownOpen(false); }}
+                            onClick={() => { addMachine(m); }}
                             onMouseDown={(e) => e.preventDefault()}
                           >
                             <span>{m.name}</span>
@@ -409,6 +452,45 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Create Vendor Dialog */}
+      <Dialog open={createVendorDialog} onOpenChange={(o) => { if (!o) { setCreateVendorDialog(false); setVendorForm({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" }); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create New Vendor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name <span className="text-destructive">*</span></Label>
+              <Input placeholder="Contact person name" value={vendorForm.name} onChange={(e) => setVendorForm((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Company Name <span className="text-destructive">*</span></Label>
+              <Input placeholder="Company / firm name" value={vendorForm.companyName} onChange={(e) => setVendorForm((prev) => ({ ...prev, companyName: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone <span className="text-destructive">*</span></Label>
+              <Input placeholder="e.g. 9800000000" value={vendorForm.phone} onChange={(e) => setVendorForm((prev) => ({ ...prev, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" placeholder="vendor@company.com" value={vendorForm.email} onChange={(e) => setVendorForm((prev) => ({ ...prev, email: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input placeholder="Full address" value={vendorForm.address} onChange={(e) => setVendorForm((prev) => ({ ...prev, address: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>GST Number</Label>
+              <Input placeholder="e.g. 27AABCG1234A1Z5" value={vendorForm.gstNumber} onChange={(e) => setVendorForm((prev) => ({ ...prev, gstNumber: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateVendorDialog(false); setVendorForm({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" }); }} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleCreateVendor} disabled={submitting}>{submitting ? "Creating..." : "Create Vendor"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
@@ -419,16 +501,30 @@ const PurchaseMachinesPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData]                       = useState<Purchase[]>([]);
+  const [search, setSearch]                   = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters]                 = useState<Record<string, string>>({});
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
+  const [pageSize, setPageSize]               = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [initialVendorId, setInitialVendorId] = useState("");
   const [vendorOptions, setVendorOptions]     = useState<{ label: string; value: string }[]>([]);
-  const [vendorSearch, setVendorSearch]       = useState("");
-  const vendorSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
+  const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
+  const [machineOptions, setMachineOptions]   = useState<{ label: string; value: string }[]>([]);
+  const vendorAbortRef = useRef<AbortController | null>(null);
+  const categoryAbortRef = useRef<AbortController | null>(null);
+  const divisionAbortRef = useRef<AbortController | null>(null);
+  const machineAbortRef = useRef<AbortController | null>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // auto-open dialog if vendorId is in query params
   useEffect(() => {
@@ -439,25 +535,103 @@ const PurchaseMachinesPage = () => {
     }
   }, [searchParams]);
 
-  // fetch vendor options for filter dropdown with debounce
-  const fetchVendorOptions = useCallback(async (search = "") => {
-    try {
-      const params: Record<string, string> = { status: "Active", limit: "100" };
-      if (search.trim()) params.search = search.trim();
-      const r = await api.get("/admin/vendors", { params });
-      setVendorOptions(r.data.data.map((v: Vendor) => ({
-        label: `${v.companyName} — ${v.name}`,
-        value: v._id,
-      })));
-    } catch { /* silent */ }
+  // Fetch filter options on mount
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [vendorRes, categoryRes, divisionRes, machineRes] = await Promise.all([
+          api.get("/admin/vendors", { params: { limit: 10 } }),
+          api.get("/admin/machine-categories", { params: { limit: 10 } }),
+          api.get("/admin/machine-divisions", { params: { limit: 10 } }),
+          api.get("/admin/machines", { params: { limit: 10 } }),
+        ]);
+        setVendorOptions(vendorRes.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
+        setCategoryOptions(categoryRes.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+        setDivisionOptions(divisionRes.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+        setMachineOptions(machineRes.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      } catch {
+        toast.error("Failed to load filter options");
+      }
+    };
+    fetchFilterOptions();
   }, []);
 
-  useEffect(() => { fetchVendorOptions(); }, [fetchVendorOptions]);
+  // Search functions for SearchableSelect
+  const fetchVendors = useCallback(async (searchQuery: string) => {
+    vendorAbortRef.current?.abort();
+    const controller = new AbortController();
+    vendorAbortRef.current = controller;
 
-  useEffect(() => {
-    if (vendorSearchRef.current) clearTimeout(vendorSearchRef.current);
-    vendorSearchRef.current = setTimeout(() => fetchVendorOptions(vendorSearch), 400);
-  }, [vendorSearch, fetchVendorOptions]);
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/vendors", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setVendorOptions(res.data.data.map((v: any) => ({ label: `${v.companyName} - ${v.name}`, value: v._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch vendors", err);
+      }
+    }
+  }, []);
+
+  const fetchCategories = useCallback(async (searchQuery: string) => {
+    categoryAbortRef.current?.abort();
+    const controller = new AbortController();
+    categoryAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-categories", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setCategoryOptions(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch categories", err);
+      }
+    }
+  }, []);
+
+  const fetchDivisions = useCallback(async (searchQuery: string) => {
+    divisionAbortRef.current?.abort();
+    const controller = new AbortController();
+    divisionAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-divisions", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setDivisionOptions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch divisions", err);
+      }
+    }
+  }, []);
+
+  const fetchMachines = useCallback(async (searchQuery: string) => {
+    machineAbortRef.current?.abort();
+    const controller = new AbortController();
+    machineAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machines", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setMachineOptions(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch machines", err);
+      }
+    }
+  }, []);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -468,9 +642,12 @@ const PurchaseMachinesPage = () => {
 
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
-      if (filters.vendorId && filters.vendorId !== "all") params.vendorId = filters.vendorId;
-      if (filters.category && filters.category !== "all") params.category = filters.category;
+      const params: Record<string, string> = { page: String(page), limit: String(pageSize) };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filters.vendor && filters.vendor !== "all" && filters.vendor !== "") params.vendorId = filters.vendor;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -487,14 +664,14 @@ const PurchaseMachinesPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [filters, fromDate, toDate]);
+  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
 
   useEffect(() => { fetchPurchases(1); }, [fetchPurchases]);
 
   const columns: Column<Purchase>[] = [
     {
       key: "_id", label: "No.",
-      render: (_p, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span>,
+      render: (_p, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * pageSize + i + 1}</span>,
     },
     {
       key: "vendorInfo", label: "Vendor Info",
@@ -553,38 +730,37 @@ const PurchaseMachinesPage = () => {
             actionIcon={ShoppingBag}
             onAction={() => { setInitialVendorId(""); setDialogOpen(true); }}
           />
-          <div className="flex justify-end flex-wrap gap-3 items-center">
-            <SearchableSelect
-              options={vendorOptions}
-              value={filters.vendorId || ""}
-              onChange={(v) => setFilters((prev) => ({ ...prev, vendorId: v }))}
-              placeholder="Vendors"
-              searchPlaceholder="Search vendor..."
-              onSearchChange={setVendorSearch}
-              className="w-[220px] h-9 text-sm"
-            />
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
-            </div>
-            {(filters.vendorId || fromDate || toDate) && (
-              <Button variant="outline" size="sm" onClick={() => { setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
-                <X className="h-4 w-4 mr-1" /> Clear
-              </Button>
-            )}
-          </div>
+          <FilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by vendor, machine, model..."
+            searchTitle="Search with vendor name, company name, phone, machine name or model number"
+            searchableFilters={[
+              { key: "vendor", placeholder: "Vendor", searchPlaceholder: "Search vendors...", options: vendorOptions, onSearch: fetchVendors },
+              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categoryOptions, onSearch: fetchCategories },
+              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisionOptions, onSearch: fetchDivisions },
+              { key: "machine", placeholder: "Machine", searchPlaceholder: "Search machines...", options: machineOptions, onSearch: fetchMachines },
+            ]}
+            filterValues={filters}
+            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => setPageSize(size)}
+            totalCount={pagination.total}
+          />
           <div>
-            <DataTable columns={columns} data={data} />
+            <DataTable columns={columns} data={data} pageSize={999} />
           </div>
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={LIMIT}
+            pageSize={pageSize}
             onPageChange={fetchPurchases}
           />
         </>

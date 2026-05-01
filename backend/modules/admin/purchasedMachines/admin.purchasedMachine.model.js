@@ -19,7 +19,10 @@ const purchasedMachineEntrySchema = new mongoose.Schema(
   {
     machineId:            { type: mongoose.Schema.Types.ObjectId, ref: "Machine", default: null },
     machineName:          { type: String, trim: true, required: true },
+    categoryId:           { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory", default: null },
     category:             { type: String, trim: true, default: "" },
+    divisionId:           { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision", default: null },
+    division:             { type: String, trim: true, default: "" },
     variants:             { type: [variantSchema], required: true },
     machineTotalPurchased:{ type: Number, default: 0 },
   },
@@ -44,8 +47,11 @@ const purchasedMachineSchema = new mongoose.Schema(
 
 purchasedMachineSchema.index({ "vendorInfo.name": 1 });
 purchasedMachineSchema.index({ "vendorInfo.vendorId": 1 });
+purchasedMachineSchema.index({ "machines.machineId": 1 });
 purchasedMachineSchema.index({ "machines.machineName": 1 });
+purchasedMachineSchema.index({ "machines.categoryId": 1 });
 purchasedMachineSchema.index({ "machines.category": 1 });
+purchasedMachineSchema.index({ "machines.divisionId": 1 });
 purchasedMachineSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("PurchasedMachine", purchasedMachineSchema);
