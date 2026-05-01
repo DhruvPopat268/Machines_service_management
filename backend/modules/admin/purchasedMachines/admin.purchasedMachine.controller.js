@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const xlsx = require("xlsx");
 const PurchasedMachine = require("./admin.purchasedMachine.model");
 const Machine = require("../inventoryManagement/admin.machine.model");
 const Vendor = require("../vendorManagement/admin.vendor.model");
@@ -142,10 +143,24 @@ const getAll = async (req, res) => {
       return obj;
     });
 
+    // Calculate stats
+    const allPurchases = await PurchasedMachine.find(query);
+    const totalPurchasesCount = allPurchases.length;
+    const totalPurchased = allPurchases.reduce((sum, p) => sum + p.grandTotal, 0);
+    const totalMachinesPurchased = allPurchases.reduce((sum, p) => sum + p.machines.length, 0);
+    const totalVariantsPurchased = allPurchases.reduce((sum, p) => sum + p.machines.reduce((vSum, m) => vSum + m.variants.length, 0), 0);
+    const avgPurchaseValue = totalPurchasesCount > 0 ? Math.round((totalPurchased / totalPurchasesCount) * 100) / 100 : 0;
+
     res.status(200).json({
       success: true,
       data,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
+      stats: {
+        totalPurchased: Math.round(totalPurchased * 100) / 100,
+        totalMachinesPurchased,
+        totalVariantsPurchased,
+        avgPurchaseValue,
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -495,4 +510,133 @@ const getById = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createPurchase, addToInventory };
+const exportToExcel = async (req, res) => {
+  try {
+    const { search, vendorId, category, division, machineId, fromDate, toDate } = req.query;
+
+    const query = {};
+
+    // Search
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) {
+        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        query.$or = [
+          { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.name": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.companyName": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone": { $regex: escaped, $options: "i" } },
+        ];
+      }
+    }
+
+    // Filter by vendor
+    if (vendorId) {
+      if (!mongoose.isValidObjectId(vendorId)) {
+        return res.status(400).json({ success: false, message: "Invalid vendorId format" });
+      }
+      const vendor = await Vendor.findById(vendorId);
+      if (!vendor) {
+        query._id = new mongoose.Types.ObjectId();
+      } else {
+        query["vendorInfo.vendorId"] = vendorId;
+      }
+    }
+
+    // Filter by category
+    if (category) {
+      if (!mongoose.isValidObjectId(category)) {
+        return res.status(400).json({ success: false, message: "Invalid category format" });
+      }
+      const cat = await MachineCategory.findById(category);
+      if (!cat) {
+        query._id = new mongoose.Types.ObjectId();
+      }
+    }
+
+    // Filter by division
+    if (division) {
+      if (!mongoose.isValidObjectId(division)) {
+        return res.status(400).json({ success: false, message: "Invalid division format" });
+      }
+      const div = await MachineDivision.findById(division);
+      if (!div) {
+        query._id = new mongoose.Types.ObjectId();
+      }
+    }
+
+    // Filter by machine
+    if (machineId) {
+      if (!mongoose.isValidObjectId(machineId)) {
+        return res.status(400).json({ success: false, message: "Invalid machineId format" });
+      }
+      const machine = await Machine.findById(machineId);
+      if (!machine) {
+        query._id = new mongoose.Types.ObjectId();
+      }
+    }
+
+    // Apply machine-level filters using $elemMatch
+    const machineFilter = buildMachineFilter(category, division, machineId);
+    if (machineFilter) {
+      query.machines = machineFilter;
+    }
+
+    if (fromDate || toDate) {
+      const parseIST = (ddmmyy, endOfDay = false) => {
+        const [dd, mm, yy] = ddmmyy.split("/");
+        const base = Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+        return new Date(base - 5.5 * 60 * 60 * 1000);
+      };
+      query.createdAt = {};
+      if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
+      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+    }
+
+    const purchases = await PurchasedMachine.find(query).sort({ createdAt: -1 }).lean();
+
+    const rows = [];
+    purchases.forEach((purchase) => {
+      const purchaseDate = new Date(purchase.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
+      const purchaseTime = new Date(purchase.createdAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+      
+      purchase.machines.forEach((machine) => {
+        machine.variants.forEach((variant) => {
+          rows.push({
+            "Vendor Company": purchase.vendorInfo.companyName || "",
+            "Vendor Name": purchase.vendorInfo.name || "",
+            "Vendor Phone": purchase.vendorInfo.phone || "",
+            "Vendor GST": purchase.vendorInfo.gstNumber || "",
+            "Machine Name": machine.machineName || "",
+            "Model Number": machine.modelNumber || "",
+            "Category": machine.category || "",
+            "Division": machine.division || "",
+            "Variant Name": variant.name || "",
+            "Variant Value": variant.value || "",
+            "Quantity": variant.quantity || 0,
+            "Price": variant.price || 0,
+            "Discounted Price": variant.discountedPrice !== null && variant.discountedPrice !== undefined ? variant.discountedPrice : "",
+            "Total": variant.total || 0,
+            "Will Add To Inventory": variant.willAddToInventory ? "Yes" : "No",
+            "Added To Inventory": variant.addedToInventory ? "Yes" : "No",
+            "Purchase Date": purchaseDate,
+            "Purchase Time": purchaseTime,
+          });
+        });
+      });
+    });
+
+    const ws = xlsx.utils.json_to_sheet(rows);
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, "Purchases");
+    const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", "attachment; filename=purchases_export.xlsx");
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createPurchase, addToInventory, exportToExcel };

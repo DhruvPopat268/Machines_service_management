@@ -5,12 +5,13 @@ import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info } from "lucide-react";
+import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info, Package, Download } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -34,6 +35,13 @@ interface Purchase {
   totalVariants: number;
   grandTotal: number;
   createdAt: string;
+}
+
+interface Stats {
+  totalPurchased: number;
+  totalMachinesPurchased: number;
+  totalVariantsPurchased: number;
+  avgPurchaseValue: number;
 }
 
 interface Vendor {
@@ -501,6 +509,7 @@ const PurchaseMachinesPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData]                       = useState<Purchase[]>([]);
+  const [stats, setStats]                     = useState<Stats | null>(null);
   const [search, setSearch]                   = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters]                 = useState<Record<string, string>>({});
@@ -510,6 +519,7 @@ const PurchaseMachinesPage = () => {
   const [pageSize, setPageSize]               = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
+  const [exportDialog, setExportDialog]       = useState(false);
   const [initialVendorId, setInitialVendorId] = useState("");
   const [vendorOptions, setVendorOptions]     = useState<{ label: string; value: string }[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
@@ -653,6 +663,7 @@ const PurchaseMachinesPage = () => {
 
       const res = await api.get("/admin/purchases", { params, signal: controller.signal });
       setData(res.data.data);
+      setStats(res.data.stats || null);
       setPagination({
         page:       res.data.pagination.page,
         totalPages: res.data.pagination.totalPages,
@@ -665,6 +676,31 @@ const PurchaseMachinesPage = () => {
       if (!controller.signal.aborted) setLoading(false);
     }
   }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
+
+  const handleExport = async () => {
+    setExportDialog(false);
+    toast.success("Download starting...");
+    try {
+      const params: Record<string, string> = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filters.vendor && filters.vendor !== "all" && filters.vendor !== "") params.vendorId = filters.vendor;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+
+      const res = await api.get("/admin/purchases/export", { params, responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "purchases_export.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export failed");
+    }
+  };
 
   useEffect(() => { fetchPurchases(1); }, [fetchPurchases]);
 
@@ -729,7 +765,73 @@ const PurchaseMachinesPage = () => {
             actionLabel="Purchase Machine"
             actionIcon={ShoppingBag}
             onAction={() => { setInitialVendorId(""); setDialogOpen(true); }}
-          />
+          >
+            <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}>
+              <Download className="h-4 w-4" /> Export
+            </Button>
+          </PageHeader>
+
+          {/* Stats Cards */}
+          {stats && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Purchased</p>
+                      <p className="text-2xl font-bold mt-1">₹{stats.totalPurchased.toLocaleString()}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <ShoppingBag className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Machines Purchased</p>
+                      <p className="text-2xl font-bold mt-1">{stats.totalMachinesPurchased}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                      <Package className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Variants Purchased</p>
+                      <p className="text-2xl font-bold mt-1">{stats.totalVariantsPurchased}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+                      <Package className="h-6 w-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Avg Purchase Value</p>
+                      <p className="text-2xl font-bold mt-1">₹{stats.avgPurchaseValue.toLocaleString()}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+                      <ShoppingBag className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           <FilterBar
             searchValue={search}
             onSearchChange={setSearch}
@@ -772,6 +874,22 @@ const PurchaseMachinesPage = () => {
         onSuccess={() => fetchPurchases(1)}
         initialVendorId={initialVendorId}
       />
+
+      {/* Export Confirm Dialog */}
+      <Dialog open={exportDialog} onOpenChange={setExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Purchase Data</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-4">
+            Do you want to download all purchase data as an Excel file?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
+            <Button onClick={handleExport}>Yes, Download</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
