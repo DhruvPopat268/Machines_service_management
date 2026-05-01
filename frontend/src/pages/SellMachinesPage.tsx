@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
+import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -32,6 +35,13 @@ interface Sale {
   totalVariants: number;
   grandTotal: number;
   createdAt: string;
+}
+
+interface Stats {
+  totalSales: number;
+  totalMachinesSold: number;
+  totalVariantsSold: number;
+  avgSaleValue: number;
 }
 
 interface Customer {
@@ -61,7 +71,21 @@ interface VariantRow {
   quantity: string;
   price: string;
   discountedPrice: string;
+  contractType: string;
+  contractTypeId: string;
+  freeService: boolean;
+  freeParts: boolean;
+  validFrom: string;
+  validTo: string;
   availableStock: number;
+}
+
+interface ContractType {
+  _id: string;
+  name: string;
+  code: string;
+  freeService: boolean;
+  freeParts: boolean;
 }
 
 interface MachineEntry {
@@ -83,8 +107,6 @@ const toISTDateParam = (htmlDate: string) => {
   return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const LIMIT = 10;
-
 // ─── Sale Dialog ──────────────────────────────────────────────────────────────
 
 const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialCustomerId?: string }) => {
@@ -96,8 +118,13 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [dropdownOpen, setDropdownOpen]     = useState(false);
   const [entries, setEntries]               = useState<MachineEntry[]>([]);
   const [submitting, setSubmitting]         = useState(false);
+  const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
+  const [customerForm, setCustomerForm]     = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
+  const [contractTypes, setContractTypes]   = useState<ContractType[]>([]);
+  const contractTypesAbortRef = useRef<AbortController | null>(null);
   const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const machineInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMachines = async (search = "") => {
     setSearching(true);
@@ -113,15 +140,42 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
   };
 
+  const fetchCustomers = async () => {
+    try {
+      const r = await api.get("/admin/customers", { params: { status: "Active", limit: 100 } });
+      setCustomers(r.data.data);
+    } catch {
+      toast.error("Failed to load customers");
+    }
+  };
+
+  const fetchContractTypes = useCallback(async (searchQuery = "") => {
+    contractTypesAbortRef.current?.abort();
+    const controller = new AbortController();
+    contractTypesAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { status: "Active", limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const r = await api.get("/admin/contract-types", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setContractTypes(r.data.data);
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        toast.error("Failed to load contract types");
+      }
+    }
+  }, []);
+
   // sync customerId when initialCustomerId changes
   useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
 
   // fetch active customers once on open
   useEffect(() => {
     if (!open) return;
-    api.get("/admin/customers", { params: { status: "Active", limit: 100 } })
-      .then((r) => setCustomers(r.data.data))
-      .catch(() => toast.error("Failed to load customers"));
+    fetchCustomers();
+    fetchContractTypes();
     fetchMachines();
   }, [open]);
 
@@ -155,6 +209,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         quantity:        "",
         price:           "",
         discountedPrice: "",
+        contractType:    "",
+        contractTypeId:  "",
+        freeService:     false,
+        freeParts:       false,
+        validFrom:       "",
+        validTo:         "",
         availableStock:  v.currentStock,
       }));
     
@@ -164,20 +224,43 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
     
     setEntries((prev) => [...prev, { machine, variants }]);
+    setMachineSearch("");
+    setDropdownOpen(false);
+    machineInputRef.current?.blur();
   };
 
   const removeMachine = (machineId: string) =>
     setEntries((prev) => prev.filter((e) => e.machine._id !== machineId));
 
-  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string) =>
+  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string | boolean) => {
     setEntries((prev) =>
-      prev.map((e, i) =>
-        i !== mi ? e : {
+      prev.map((e, i) => {
+        if (i !== mi) return e;
+        return {
           ...e,
-          variants: e.variants.map((v, j) => j !== vi ? v : { ...v, [field]: value }),
-        }
-      )
+          variants: e.variants.map((v, j) => {
+            if (j !== vi) return v;
+            
+            // If contractType is being changed, update freeService and freeParts
+            if (field === "contractTypeId") {
+              const selectedContract = contractTypes.find(ct => ct._id === value);
+              if (selectedContract) {
+                return {
+                  ...v,
+                  contractTypeId: value as string,
+                  contractType: selectedContract.name,
+                  freeService: selectedContract.freeService,
+                  freeParts: selectedContract.freeParts,
+                };
+              }
+            }
+            
+            return { ...v, [field]: value };
+          }),
+        };
+      })
     );
+  };
 
   const handleSubmit = async () => {
     if (!customerId) { toast.error("Please select a customer"); return; }
@@ -187,6 +270,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       for (const v of entry.variants) {
         const hasQty   = v.quantity !== "" && Number(v.quantity) > 0;
         const hasPrice = v.price !== "";
+        
         if (hasQty && !hasPrice) {
           toast.error(`Enter price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
@@ -195,6 +279,29 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           toast.error(`Enter quantity for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
         }
+        
+        // Check if contract type is selected when qty and price are filled
+        if (hasQty && hasPrice && !v.contractTypeId) {
+          toast.error(`Select contract type for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        
+        // Check if date range is provided when contract type is selected
+        if (hasQty && hasPrice && v.contractTypeId) {
+          if (!v.validFrom || !v.validTo) {
+            toast.error(`Enter valid from and valid to dates for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+            return;
+          }
+          
+          // Validate that validTo is after validFrom
+          const fromDate = new Date(v.validFrom);
+          const toDate = new Date(v.validTo);
+          if (toDate <= fromDate) {
+            toast.error(`Valid to date must be after valid from date for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+            return;
+          }
+        }
+        
         if (hasQty && Number(v.quantity) > v.availableStock) {
           toast.error(`Insufficient stock for ${entry.machine.name} — ${v.attributeName}: ${v.value}. Available: ${v.availableStock}`);
           return;
@@ -211,19 +318,25 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       machines: entries.map((e) => ({
         machineId: e.machine._id,
         variants:  e.variants
-          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "")
+          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" && v.contractTypeId)
           .map((v) => ({
             attribute:       v.attributeId,
             value:           v.value,
             quantity:        Number(v.quantity),
             price:           Number(v.price),
             discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
+            contractTypeId:  v.contractTypeId,
+            contractType:    v.contractType,
+            freeService:     v.freeService,
+            freeParts:       v.freeParts,
+            validFrom:       v.validFrom,
+            validTo:         v.validTo,
           })),
       })).filter((m) => m.variants.length > 0),
     };
 
     if (payload.machines.length === 0) {
-      toast.error("Please fill quantity and price for at least one variant");
+      toast.error("Please fill quantity, price, contract type, and dates for at least one variant");
       return;
     }
 
@@ -240,6 +353,25 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
   };
 
+  const handleCreateCustomer = async () => {
+    if (!customerForm.name || !customerForm.phone || !customerForm.email) {
+      toast.error("Name, phone and email are required");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.post("/admin/customers", { ...customerForm, status: "Active" });
+      toast.success("Customer created successfully");
+      await fetchCustomers();
+      setCreateCustomerDialog(false);
+      setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create customer");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleClose = () => {
     setCustomerId(initialCustomerId);
     setMachineSearch("");
@@ -251,7 +383,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
+      <DialogContent className="max-w-[70vw] h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Sell Machine</DialogTitle>
         </DialogHeader>
@@ -259,14 +391,30 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         <div className="space-y-6 py-2 flex-1 overflow-y-auto">
           {/* Customer */}
           <div className="space-y-1.5">
-            <Label>Customer <span className="text-destructive">*</span></Label>
-            <SearchableSelect
-              options={customers.map((c) => ({ label: `${c.name} — ${c.phone}`, value: c._id }))}
-              value={customerId}
-              onChange={setCustomerId}
-              placeholder="Select customer"
-              searchPlaceholder="Search customer..."
-            />
+            <div className="flex items-center justify-between">
+              <Label>Customer <span className="text-destructive">*</span></Label>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-xs gap-1.5" 
+                onClick={() => setCreateCustomerDialog(true)}
+              >
+                <Plus className="h-3 w-3" /> Create New Customer
+              </Button>
+            </div>
+            <Select value={customerId} onValueChange={setCustomerId}>
+              <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
+                <SelectValue placeholder="Select customer" />
+              </SelectTrigger>
+              <SelectContent>
+                {customers.map((c) => (
+                  <SelectItem key={c._id} value={c._id}>
+                    {c.name} — {c.phone}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Machine search */}
@@ -276,6 +424,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
+                  ref={machineInputRef}
                   className="pl-8"
                   placeholder="Search machine by name..."
                   value={machineSearch}
@@ -294,7 +443,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             key={m._id}
                             type="button"
                             className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
-                            onClick={() => { addMachine(m); setDropdownOpen(false); }}
+                            onClick={() => { addMachine(m); }}
                             onMouseDown={(e) => e.preventDefault()}
                           >
                             <span>{m.name}</span>
@@ -312,7 +461,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             <div className="space-y-4">
               <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>Variants with empty quantity or price will be skipped. Stock will be automatically deducted.</span>
+                <span>Variants with empty quantity, price, or contract type will be skipped. Free Service and Free Parts are auto-populated based on selected contract type. Valid From and Valid To dates are required for contracts. Stock will be automatically deducted.</span>
               </div>
               {entries.map((entry, mi) => (
                 <div key={entry.machine._id} className="border rounded-lg p-4 space-y-3">
@@ -350,6 +499,11 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-36">Contract Type <span className="text-destructive">*</span></th>
+                            <th className="text-center font-medium pb-2 pr-3 w-24">Free Service</th>
+                            <th className="text-center font-medium pb-2 pr-3 w-24">Free Parts</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-32">Valid From</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-32">Valid To</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -391,6 +545,49 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   onChange={(e) => updateVariant(mi, vi, "discountedPrice", e.target.value)}
                                 />
                               </td>
+                              <td className="py-1.5 pr-3">
+                                <SearchableSelect
+                                  options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
+                                  value={v.contractTypeId}
+                                  onChange={(val) => updateVariant(mi, vi, "contractTypeId", val)}
+                                  onSearchChange={fetchContractTypes}
+                                  placeholder="Select contract"
+                                  searchPlaceholder="Search contracts..."
+                                  className="h-7 text-xs w-36"
+                                />
+                              </td>
+                              <td className="py-1.5 pr-3 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  v.freeService ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                }`}>
+                                  {v.freeService ? "Yes" : "No"}
+                                </span>
+                              </td>
+                              <td className="py-1.5 pr-3 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                  v.freeParts ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                }`}>
+                                  {v.freeParts ? "Yes" : "No"}
+                                </span>
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Input
+                                  type="date"
+                                  className="h-7 text-xs w-32"
+                                  value={v.validFrom}
+                                  onChange={(e) => updateVariant(mi, vi, "validFrom", e.target.value)}
+                                  disabled={!v.contractTypeId}
+                                />
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Input
+                                  type="date"
+                                  className="h-7 text-xs w-32"
+                                  value={v.validTo}
+                                  onChange={(e) => updateVariant(mi, vi, "validTo", e.target.value)}
+                                  disabled={!v.contractTypeId}
+                                />
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -411,6 +608,45 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Create Customer Dialog */}
+      <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create New Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name <span className="text-destructive">*</span></Label>
+              <Input placeholder="Customer name" value={customerForm.name} onChange={(e) => setCustomerForm((prev) => ({ ...prev, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone <span className="text-destructive">*</span></Label>
+              <Input placeholder="e.g. 9800000000" value={customerForm.phone} onChange={(e) => setCustomerForm((prev) => ({ ...prev, phone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input type="email" placeholder="customer@example.com" value={customerForm.email} onChange={(e) => setCustomerForm((prev) => ({ ...prev, email: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input placeholder="Full address" value={customerForm.address} onChange={(e) => setCustomerForm((prev) => ({ ...prev, address: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Zone</Label>
+              <Input placeholder="Zone/Area" value={customerForm.zone} onChange={(e) => setCustomerForm((prev) => ({ ...prev, zone: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>GST Number</Label>
+              <Input placeholder="e.g. 27AABCG1234A1Z5" value={customerForm.gstNumber} onChange={(e) => setCustomerForm((prev) => ({ ...prev, gstNumber: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); }} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleCreateCustomer} disabled={submitting}>{submitting ? "Creating..." : "Create Customer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };
@@ -421,16 +657,32 @@ const SellMachinesPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData]                       = useState<Sale[]>([]);
+  const [stats, setStats]                     = useState<Stats | null>(null);
+  const [search, setSearch]                   = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters]                 = useState<Record<string, string>>({});
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
+  const [pageSize, setPageSize]               = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
+  const [exportDialog, setExportDialog]       = useState(false);
   const [initialCustomerId, setInitialCustomerId] = useState("");
   const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
-  const [customerSearch, setCustomerSearch]   = useState("");
-  const customerSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
+  const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
+  const [machineOptions, setMachineOptions]   = useState<{ label: string; value: string }[]>([]);
+  const customerAbortRef = useRef<AbortController | null>(null);
+  const categoryAbortRef = useRef<AbortController | null>(null);
+  const divisionAbortRef = useRef<AbortController | null>(null);
+  const machineAbortRef = useRef<AbortController | null>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // auto-open dialog if customerId is in query params
   useEffect(() => {
@@ -441,25 +693,128 @@ const SellMachinesPage = () => {
     }
   }, [searchParams]);
 
-  // fetch customer options for filter dropdown with debounce
-  const fetchCustomerOptions = useCallback(async (search = "") => {
-    try {
-      const params: Record<string, string> = { status: "Active", limit: "100" };
-      if (search.trim()) params.search = search.trim();
-      const r = await api.get("/admin/customers", { params });
-      setCustomerOptions(r.data.data.map((c: Customer) => ({
-        label: `${c.name} — ${c.phone}`,
-        value: c._id,
-      })));
-    } catch { /* silent */ }
+  // Fetch filter options on mount
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const [customerRes, categoryRes, divisionRes, machineRes] = await Promise.all([
+          api.get("/admin/customers", { params: { limit: 10 } }),
+          api.get("/admin/machine-categories", { params: { limit: 10 } }),
+          api.get("/admin/machine-divisions", { params: { limit: 10 } }),
+          api.get("/admin/machines", { params: { limit: 10 } }),
+        ]);
+        setCustomerOptions(customerRes.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+        setCategoryOptions(categoryRes.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+        setDivisionOptions(divisionRes.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+        setMachineOptions(machineRes.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      } catch {
+        toast.error("Failed to load filter options");
+      }
+    };
+    fetchFilterOptions();
   }, []);
 
-  useEffect(() => { fetchCustomerOptions(); }, [fetchCustomerOptions]);
+  // Search functions for SearchableSelect
+  const fetchCustomers = useCallback(async (searchQuery: string) => {
+    customerAbortRef.current?.abort();
+    const controller = new AbortController();
+    customerAbortRef.current = controller;
 
-  useEffect(() => {
-    if (customerSearchRef.current) clearTimeout(customerSearchRef.current);
-    customerSearchRef.current = setTimeout(() => fetchCustomerOptions(customerSearch), 400);
-  }, [customerSearch, fetchCustomerOptions]);
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/customers", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setCustomerOptions(res.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch customers", err);
+      }
+    }
+  }, []);
+
+  const fetchCategories = useCallback(async (searchQuery: string) => {
+    categoryAbortRef.current?.abort();
+    const controller = new AbortController();
+    categoryAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-categories", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setCategoryOptions(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch categories", err);
+      }
+    }
+  }, []);
+
+  const fetchDivisions = useCallback(async (searchQuery: string) => {
+    divisionAbortRef.current?.abort();
+    const controller = new AbortController();
+    divisionAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machine-divisions", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setDivisionOptions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch divisions", err);
+      }
+    }
+  }, []);
+
+  const fetchMachines = useCallback(async (searchQuery: string) => {
+    machineAbortRef.current?.abort();
+    const controller = new AbortController();
+    machineAbortRef.current = controller;
+
+    try {
+      const params: Record<string, string> = { limit: "100" };
+      if (searchQuery) params.search = searchQuery;
+      const res = await api.get("/admin/machines", { params, signal: controller.signal });
+      if (!controller.signal.aborted) {
+        setMachineOptions(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      }
+    } catch (err: any) {
+      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+        console.error("Failed to fetch machines", err);
+      }
+    }
+  }, []);
+
+  const handleExport = async () => {
+    setExportDialog(false);
+    toast.success("Download starting...");
+    try {
+      const params: Record<string, string> = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
+      if (fromDate) params.fromDate = toISTDateParam(fromDate);
+      if (toDate)   params.toDate   = toISTDateParam(toDate);
+
+      const res = await api.get("/admin/sales/export", { params, responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "sales_export.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Export failed");
+    }
+  };
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -470,14 +825,18 @@ const SellMachinesPage = () => {
 
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
-      if (filters.customerId && filters.customerId !== "all") params.customerId = filters.customerId;
-      if (filters.category && filters.category !== "all") params.category = filters.category;
+      const params: Record<string, string> = { page: String(page), limit: String(pageSize) };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
       const res = await api.get("/admin/sales", { params, signal: controller.signal });
       setData(res.data.data);
+      setStats(res.data.stats || null);
       setPagination({
         page:       res.data.pagination.page,
         totalPages: res.data.pagination.totalPages,
@@ -489,14 +848,14 @@ const SellMachinesPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [filters, fromDate, toDate]);
+  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
 
   const columns: Column<Sale>[] = [
     {
       key: "_id", label: "No.",
-      render: (_s, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span>,
+      render: (_s, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * pageSize + i + 1}</span>,
     },
     {
       key: "customerInfo", label: "Customer Info",
@@ -554,39 +913,104 @@ const SellMachinesPage = () => {
             actionLabel="Sell Machine"
             actionIcon={ShoppingCart}
             onAction={() => { setInitialCustomerId(""); setDialogOpen(true); }}
+          >
+            <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}>
+              <Download className="h-4 w-4" /> Export
+            </Button>
+          </PageHeader>
+
+          {/* Stats Cards */}
+          {stats && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Sales</p>
+                      <p className="text-2xl font-bold mt-1">₹{stats.totalSales.toLocaleString()}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                      <ShoppingCart className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Machines Sold</p>
+                      <p className="text-2xl font-bold mt-1">{stats.totalMachinesSold}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
+                      <Package className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total Variants Sold</p>
+                      <p className="text-2xl font-bold mt-1">{stats.totalVariantsSold}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
+                      <Package className="h-6 w-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Avg Sale Value</p>
+                      <p className="text-2xl font-bold mt-1">₹{stats.avgSaleValue.toLocaleString()}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
+                      <ShoppingCart className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <FilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Search by customer, machine, model..."
+            searchTitle="Search with customer name, phone, email, machine name or model number"
+            searchableFilters={[
+              { key: "customer", placeholder: "Customer", searchPlaceholder: "Search customers...", options: customerOptions, onSearch: fetchCustomers },
+              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categoryOptions, onSearch: fetchCategories },
+              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisionOptions, onSearch: fetchDivisions },
+              { key: "machine", placeholder: "Machine", searchPlaceholder: "Search machines...", options: machineOptions, onSearch: fetchMachines },
+            ]}
+            filterValues={filters}
+            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
+            showDateRange
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => setPageSize(size)}
+            totalCount={pagination.total}
           />
-          <div className="flex justify-end flex-wrap gap-3 items-center">
-            <SearchableSelect
-              options={customerOptions}
-              value={filters.customerId || ""}
-              onChange={(v) => setFilters((prev) => ({ ...prev, customerId: v }))}
-              placeholder="Customers"
-              searchPlaceholder="Search customer..."
-              onSearchChange={setCustomerSearch}
-              className="w-[220px] h-9 text-sm"
-            />
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
-            </div>
-            {(filters.customerId || fromDate || toDate) && (
-              <Button variant="outline" size="sm" onClick={() => { setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
-                <X className="h-4 w-4 mr-1" /> Clear
-              </Button>
-            )}
-          </div>
           <div>
-            <DataTable columns={columns} data={data} />
+            <DataTable columns={columns} data={data} pageSize={999} />
           </div>
           <Pagination
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={LIMIT}
+            pageSize={pageSize}
             onPageChange={fetchSales}
           />
         </>
@@ -598,6 +1022,22 @@ const SellMachinesPage = () => {
         onSuccess={() => fetchSales(1)}
         initialCustomerId={initialCustomerId}
       />
+
+      {/* Export Confirm Dialog */}
+      <Dialog open={exportDialog} onOpenChange={setExportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Export Sales Data</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-4">
+            Do you want to download all sales data as an Excel file?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
+            <Button onClick={handleExport}>Yes, Download</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
