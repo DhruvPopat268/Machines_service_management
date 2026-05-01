@@ -4,8 +4,16 @@ const PurchasedMachine = require("../modules/admin/purchasedMachines/admin.purch
 const MachineDivision = require("../modules/admin/machineDivisionManagement/admin.machineDivision.model");
 
 const assignRandomDivisions = async () => {
+  // Validate MONGO_URI is set
+  if (!process.env.MONGO_URI) {
+    console.error("Error: MONGO_URI environment variable is not set");
+    console.error("Please set MONGO_URI before running this migration");
+    console.error("Example: MONGO_URI=\"mongodb://localhost:27017/your_db\" node assignRandomDivisionsToPurchases.js");
+    process.exit(1);
+  }
+
   try {
-    await mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/your_database_name");
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("Connected to MongoDB");
 
     // The two division IDs to randomly assign

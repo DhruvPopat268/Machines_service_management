@@ -102,6 +102,7 @@ const getAll = async (req, res) => {
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip = (pageNum - 1) * limitNum;
+    console.log("Query:", JSON.stringify(query, null, 2))
     const [purchases, total] = await Promise.all([
 
       PurchasedMachine.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
@@ -212,6 +213,7 @@ const createPurchase = async (req, res) => {
       purchaseMachineEntries.push({
         machineId: machine._id,
         machineName: machine.name,
+        modelNumber: machine.modelNumber || "",
         categoryId: machine.category?._id || null,
         category: machine.category?.name || "",
         divisionId: machine.division?._id || null,
