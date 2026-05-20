@@ -24,8 +24,7 @@ const variantSchema = new mongoose.Schema(
     total:              { type: Number, required: true },
     contractType:       { type: contractTypeSnapshotSchema, required: true },
     deductedFromInventory: { type: Boolean, default: false },
-  },
-  { _id: false }
+  }
 );
 
 const soldMachineEntrySchema = new mongoose.Schema(
