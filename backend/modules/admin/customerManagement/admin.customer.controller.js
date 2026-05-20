@@ -1,9 +1,11 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 const xlsx = require("xlsx");
 const Customer = require("./admin.customer.model");
 const Zone = require("../zoneManagement/admin.zone.model");
 const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRow, validateGST } = require("./admin.customer.validator");
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
+const { sendWelcomeCredentials } = require("../../../utils/emailService");
 
 const getAll = async (req, res) => {
   try {
@@ -103,11 +105,17 @@ const create = async (req, res) => {
       zoneId = zone;
     }
 
+    const defaultPassword = "Customer@123";
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
     const customer = await Customer.create({
       name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
       address: address ? String(address).trim() : "",
       zone: zoneId, gstNumber, status, source: "manual",
+      password: hashedPassword,
     });
+
+    await sendWelcomeCredentials(customer.name, customer.email, defaultPassword);
 
     const populated = await customer.populate("zone", "name code");
     res.status(201).json({ success: true, data: populated });
@@ -280,11 +288,17 @@ const importCustomers = async (req, res) => {
           if (zone) zoneId = zone._id;
         }
 
-        await Customer.create({
+        const defaultPassword = "Customer@123";
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+        const newCustomer = await Customer.create({
           name: doc.name, phone: doc.phone, email: doc.email,
           address: doc.address, zone: zoneId,
           gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status, source: "imported",
+          password: hashedPassword,
         });
+
+        await sendWelcomeCredentials(newCustomer.name, newCustomer.email, defaultPassword);
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }

@@ -394,7 +394,7 @@ const changePassword = async (req, res) => {
 
     const isPasswordValid = await customer.comparePassword(currentPassword);
     if (!isPasswordValid)
-      return res.status(401).json({ success: false, message: "Current password is incorrect" });
+      return res.status(400).json({ success: false, message: "Current password is incorrect" });
 
     if (currentPassword === newPassword)
       return res.status(400).json({ success: false, message: "New password must be different from current password" });

@@ -8,6 +8,8 @@ const adminUserSchema = new mongoose.Schema(
     lastLoginAt: { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
+    changePasswordOtp: { type: String },
+    changePasswordOtpExpires: { type: Date },
   },
   { timestamps: true }
 );

@@ -20,6 +20,7 @@ const sendForgotPasswordEmail = async (customerName, customerEmail, otp, expiryM
     htmlTemplate = htmlTemplate.replace("{{customerName}}", customerName);
     htmlTemplate = htmlTemplate.replace("{{otp}}", otp);
     htmlTemplate = htmlTemplate.replace("{{expiryMinutes}}", expiryMinutes);
+    htmlTemplate = htmlTemplate.replace("{{customerPortalUrl}}", process.env.CUSTOMER_FRONTEND_URL || "#");
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
@@ -52,6 +53,7 @@ const sendPasswordResetSuccessEmail = async (customerName, customerEmail) => {
 
     htmlTemplate = htmlTemplate.replace("{{customerName}}", customerName);
     htmlTemplate = htmlTemplate.replace("{{resetDate}}", resetDate);
+    htmlTemplate = htmlTemplate.replace("{{customerPortalUrl}}", process.env.CUSTOMER_FRONTEND_URL || "#");
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
@@ -78,6 +80,7 @@ const sendChangeEmailOtp = async (customerName, newEmail, otp, expiryMinutes, ol
     htmlTemplate = htmlTemplate.replace("{{expiryMinutes}}", expiryMinutes);
     htmlTemplate = htmlTemplate.replace("{{oldEmail}}", oldEmail);
     htmlTemplate = htmlTemplate.replace("{{newEmail}}", newEmail);
+    htmlTemplate = htmlTemplate.replace("{{customerPortalUrl}}", process.env.CUSTOMER_FRONTEND_URL || "#");
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
@@ -112,6 +115,7 @@ const sendEmailChangeSuccessNotification = async (customerName, oldEmail, newEma
     htmlTemplate = htmlTemplate.replace(/{{oldEmail}}/g, oldEmail);
     htmlTemplate = htmlTemplate.replace(/{{newEmail}}/g, newEmail);
     htmlTemplate = htmlTemplate.replace("{{changeDate}}", changeDate);
+    htmlTemplate = htmlTemplate.replace("{{customerPortalUrl}}", process.env.CUSTOMER_FRONTEND_URL || "#");
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
@@ -128,4 +132,85 @@ const sendEmailChangeSuccessNotification = async (customerName, oldEmail, newEma
   }
 };
 
-module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification };
+const sendAdminChangePasswordOtp = async (adminEmail, otp, expiryMinutes) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/changePasswordOtp.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    htmlTemplate = htmlTemplate.replace("{{otp}}", otp);
+    htmlTemplate = htmlTemplate.replace("{{expiryMinutes}}", expiryMinutes);
+    htmlTemplate = htmlTemplate.replace("{{adminPortalUrl}}", process.env.ADMIN_FRONTEND_URL || "#");
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: adminEmail,
+      subject: "Admin Password Change OTP",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendAdminPasswordChangeSuccess = async (adminEmail) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/passwordChangeSuccess.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    const changeDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+
+    htmlTemplate = htmlTemplate.replace("{{changeDate}}", changeDate);
+    htmlTemplate = htmlTemplate.replace("{{adminPortalUrl}}", process.env.ADMIN_FRONTEND_URL || "#");
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: adminEmail,
+      subject: "Admin Password Changed Successfully",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendWelcomeCredentials = async (customerName, customerEmail, password) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/customer/emailTemplates/welcomeCredentials.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    htmlTemplate = htmlTemplate.replace("{{customerName}}", customerName);
+    htmlTemplate = htmlTemplate.replace("{{customerEmail}}", customerEmail);
+    htmlTemplate = htmlTemplate.replace("{{password}}", password);
+    htmlTemplate = htmlTemplate.replace("{{customerPortalUrl}}", process.env.CUSTOMER_FRONTEND_URL || "#");
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: customerEmail,
+      subject: "Welcome - Your Account Credentials",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendWelcomeCredentials };

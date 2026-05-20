@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const AdminUser = require("./admin.user.model");
 const AdminUserSession = require("./admin.user.session.model");
 const { validateCreateUser } = require("./admin.user.validator");
+const { sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess } = require("../../../utils/emailService");
 
 const getAllUsers = async (req, res) => {
   try {
@@ -36,39 +37,15 @@ const createUser = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, password } = req.body;
+    const { status } = req.body;
 
-    const update = {};
+    if (status === undefined)
+      return res.status(400).json({ success: false, message: "Status is required" });
 
-    if (password !== undefined) {
-      const { isValid, errors } = validateCreateUser({ email: "placeholder@x.com", password });
-      if (!isValid)
-        return res.status(400).json({ success: false, errors });
-      
-      const user = await AdminUser.findById(id);
-      if (!user)
-        return res.status(404).json({ success: false, message: "User not found" });
-      
-      user.password = await bcrypt.hash(password, 10);
-      await user.save();
-      
-      if (status !== undefined)
-        user.status = status;
-      
-      const updatedUser = await AdminUser.findById(id).select("-password");
-      return res.status(200).json({ success: true, data: updatedUser });
-    }
+    if (!["Active", "Inactive"].includes(status))
+      return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
 
-    if (status !== undefined) {
-      if (!["Active", "Inactive"].includes(status))
-        return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
-      update.status = status;
-    }
-
-    if (Object.keys(update).length === 0)
-      return res.status(400).json({ success: false, message: "Nothing to update" });
-
-    const user = await AdminUser.findByIdAndUpdate(id, update, { new: true }).select("-password");
+    const user = await AdminUser.findByIdAndUpdate(id, { status }, { new: true }).select("-password");
 
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
@@ -148,4 +125,78 @@ const logout = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, createUser, updateUser, deleteUser, login, logout };
+const sendChangePasswordOtp = async (req, res) => {
+  try {
+    const userId = req.adminUser.id;
+
+    const user = await AdminUser.findById(userId);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    if (user.status === "Inactive")
+      return res.status(403).json({ success: false, message: "Account is inactive" });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiryMinutes = parseInt(process.env.ADMIN_CHANGE_PASSWORD_OTP_EXPIRY) || 10;
+    const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
+
+    user.changePasswordOtp = otp;
+    user.changePasswordOtpExpires = expiresAt;
+    await user.save();
+
+    const emailResult = await sendAdminChangePasswordOtp(user.email, otp, expiryMinutes);
+    if (!emailResult.success)
+      return res.status(500).json({ success: false, message: "Failed to send email" });
+
+    res.status(200).json({ success: true, message: "OTP sent to your email" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const verifyOtpAndChangePassword = async (req, res) => {
+  try {
+    const userId = req.adminUser.id;
+    const { otp, newPassword } = req.body;
+
+    if (!otp || !newPassword)
+      return res.status(400).json({ success: false, message: "OTP and new password are required" });
+
+    if (newPassword.length < 8)
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+
+    const user = await AdminUser.findById(userId);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    if (user.status === "Inactive")
+      return res.status(403).json({ success: false, message: "Account is inactive" });
+
+    if (!user.changePasswordOtp || !user.changePasswordOtpExpires)
+      return res.status(400).json({ success: false, message: "No password change request found" });
+
+    if (user.changePasswordOtp !== otp.trim())
+      return res.status(401).json({ success: false, message: "Invalid OTP" });
+
+    if (new Date() > user.changePasswordOtpExpires)
+      return res.status(401).json({ success: false, message: "OTP has expired" });
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    await AdminUser.updateOne(
+      { _id: user._id },
+      { $unset: { changePasswordOtp: "", changePasswordOtpExpires: "" } }
+    );
+
+    await AdminUserSession.deleteMany({ userId: user._id });
+
+    await sendAdminPasswordChangeSuccess(user.email);
+
+    res.status(200).json({ success: true, message: "Password changed successfully. Please login with your new password" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAllUsers, createUser, updateUser, deleteUser, login, logout, sendChangePasswordOtp, verifyOtpAndChangePassword };
