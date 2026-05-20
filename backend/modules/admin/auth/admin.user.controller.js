@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 const AdminUser = require("./admin.user.model");
 const AdminUserSession = require("./admin.user.session.model");
 const { validateCreateUser } = require("./admin.user.validator");
@@ -24,7 +25,7 @@ const createUser = async (req, res) => {
     if (existing)
       return res.status(409).json({ success: false, message: "User already exists" });
 
-    const user = await AdminUser.create({ email, password });
+    const user = await AdminUser.create({ email, password: await bcrypt.hash(password, 10) });
     const { password: _, ...data } = user.toObject();
     res.status(201).json({ success: true, data });
   } catch (err) {
@@ -39,17 +40,29 @@ const updateUser = async (req, res) => {
 
     const update = {};
 
-    if (status !== undefined) {
-      if (!["Active", "Inactive"].includes(status))
-        return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
-      update.status = status;
-    }
-
     if (password !== undefined) {
       const { isValid, errors } = validateCreateUser({ email: "placeholder@x.com", password });
       if (!isValid)
         return res.status(400).json({ success: false, errors });
-      update.password = password;
+      
+      const user = await AdminUser.findById(id);
+      if (!user)
+        return res.status(404).json({ success: false, message: "User not found" });
+      
+      user.password = await bcrypt.hash(password, 10);
+      await user.save();
+      
+      if (status !== undefined)
+        user.status = status;
+      
+      const updatedUser = await AdminUser.findById(id).select("-password");
+      return res.status(200).json({ success: true, data: updatedUser });
+    }
+
+    if (status !== undefined) {
+      if (!["Active", "Inactive"].includes(status))
+        return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
+      update.status = status;
     }
 
     if (Object.keys(update).length === 0)
@@ -88,7 +101,7 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     const user = await AdminUser.findOne({ email });
-    if (!user || user.password !== password)
+    if (!user || !(await user.comparePassword(password)))
       return res.status(401).json({ success: false, message: "Invalid credentials" });
 
     if (user.status === "Inactive")
@@ -102,7 +115,7 @@ const login = async (req, res) => {
       await AdminUserSession.deleteMany({ _id: { $in: oldest.map((s) => s._id) } });
     }
 
-    const token = jwt.sign({ id: user._id, email: user.email }, process.env.JWT_SECRET, {
+    const token = jwt.sign({ id: user._id, email: user.email }, process.env.ADMIN_JWT_SECRET, {
       expiresIn: process.env.ADMIN_JWT_EXPIRES_IN || "7d",
     });
 

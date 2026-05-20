@@ -11,7 +11,7 @@ const adminAuthMiddleware = async (req, res, next) => {
     if (!token)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.ADMIN_JWT_SECRET);
 
     const session = await AdminUserSession.findOne({ token, userId: decoded.id });
     if (!session)

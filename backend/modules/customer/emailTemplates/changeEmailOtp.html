@@ -1,0 +1,114 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Verify Your New Email</title>
+</head>
+
+<body style="margin:0; padding:0; background:#f4f7fb; font-family:Arial, Helvetica, sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f7fb; padding:40px 15px;">
+    <tr>
+      <td align="center">
+
+        <!-- Main Container -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0"
+          style="max-width:600px; background:#ffffff; border-radius:18px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td
+              style="background:linear-gradient(135deg, #4f46e5, #7c3aed); padding:40px 30px; text-align:center;">
+
+              <h1 style="margin:0; color:#ffffff; font-size:30px; font-weight:700;">
+                Verify Your New Email
+              </h1>
+
+              <p style="margin:12px 0 0; color:#e0e7ff; font-size:16px;">
+                Email Change Verification
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 35px;">
+
+              <p style="margin:0; font-size:16px; color:#374151; line-height:28px;">
+                Hello <strong>{{customerName}}</strong>,
+              </p>
+
+              <p style="margin:20px 0 0; font-size:16px; color:#6b7280; line-height:28px;">
+                You have requested to change your email address. Please use the following One-Time Password (OTP) to verify your new email:
+              </p>
+
+              <!-- OTP Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:35px 0;">
+                <tr>
+                  <td align="center">
+
+                    <div style="
+                      display:inline-block;
+                      background:#f3f4f6;
+                      padding:20px 40px;
+                      border-radius:14px;
+                      border:2px dashed #c7d2fe;
+                      font-size:38px;
+                      letter-spacing:10px;
+                      font-weight:700;
+                      color:#4f46e5;
+                    ">
+                      {{otp}}
+                    </div>
+
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0; font-size:15px; color:#6b7280; line-height:26px;">
+                This OTP is valid for
+                <strong style="color:#111827;">{{expiryMinutes}} minutes</strong>.
+              </p>
+
+              <p style="margin:20px 0 0; font-size:15px; color:#6b7280; line-height:26px;">
+                If you did not request this email change, please ignore this email and contact support immediately.
+              </p>
+
+              <!-- Info Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:30px 0;">
+                <tr>
+                  <td style="background:#dbeafe; border-left:4px solid #3b82f6; padding:20px; border-radius:4px;">
+                    <p style="margin:0 0 10px; color:#1e40af; font-size:15px; font-weight:600;">
+                      📧 Email Change Details
+                    </p>
+                    <p style="margin:0; color:#1e3a8a; font-size:14px; line-height:24px;">
+                      <strong>Current Email:</strong> {{oldEmail}}<br>
+                      <strong>New Email:</strong> {{newEmail}}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <hr style="border:none; border-top:1px solid #e5e7eb; margin:35px 0;">
+
+              <!-- Footer -->
+              <p style="margin:0; font-size:14px; color:#9ca3af; line-height:24px; text-align:center;">
+                © 2025 Machine Service Management <br>
+                Secure Authentication System
+              </p>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
