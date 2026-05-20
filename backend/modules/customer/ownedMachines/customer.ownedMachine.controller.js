@@ -1,6 +1,6 @@
 const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
 const Machine = require("../../admin/inventoryManagement/admin.machine.model");
-const { utcToZonedTime } = require("date-fns-tz");
+const { toZonedTime } = require("date-fns-tz");
 
 const getOwnedMachines = async (req, res) => {
   try {
@@ -32,7 +32,7 @@ const getOwnedMachines = async (req, res) => {
     const customerInfo = soldRecords[0].customerInfo;
     
     // Get current date in IST (UTC + 5:30)
-    const currentDateIST = utcToZonedTime(new Date(), 'Asia/Kolkata');
+    const currentDateIST = toZonedTime(new Date(), 'Asia/Kolkata');
 
     // Collect all unique machineIds
     const machineIds = [...new Set(
@@ -51,7 +51,7 @@ const getOwnedMachines = async (req, res) => {
           const contractType = variant.contractType.toObject();
           
           // Convert validTo to IST for comparison
-          const validToIST = utcToZonedTime(contractType.validTo, 'Asia/Kolkata');
+          const validToIST = toZonedTime(contractType.validTo, 'Asia/Kolkata');
           contractType.isContractExpired = validToIST < currentDateIST;
           
           return {
@@ -120,7 +120,7 @@ const getVariantDetail = async (req, res) => {
     let machineDetail = null;
     
     // Get current date in IST (UTC + 5:30)
-    const currentDateIST = utcToZonedTime(new Date(), 'Asia/Kolkata');
+    const currentDateIST = toZonedTime(new Date(), 'Asia/Kolkata');
 
     for (const machine of soldRecord.machines) {
       const variant = machine.variants.find(v => v._id.toString() === variantId);
@@ -129,7 +129,7 @@ const getVariantDetail = async (req, res) => {
         const contractType = variantObj.contractType;
         
         // Convert validTo to IST for comparison
-        const validToIST = utcToZonedTime(contractType.validTo, 'Asia/Kolkata');
+        const validToIST = toZonedTime(contractType.validTo, 'Asia/Kolkata');
         contractType.isContractExpired = validToIST < currentDateIST;
         
         variantDetail = {
