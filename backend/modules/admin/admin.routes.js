@@ -13,5 +13,6 @@ router.use("/machines",  require("./inventoryManagement/admin.machine.routes"));
 router.use("/purchases", require("./purchasedMachines/admin.purchasedMachine.routes"));
 router.use("/sales", require("./soldMachines/admin.soldMachine.routes"));
 router.use("/inventory-logs", require("./inventoryLogs/admin.inventoryLog.routes"));
+router.use("/service-calls", require("./calls/admin.serviceCall.routes"));
 
 module.exports = router;

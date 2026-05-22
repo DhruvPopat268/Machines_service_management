@@ -5,6 +5,7 @@ const { toZonedTime } = require("date-fns-tz");
 const getOwnedMachines = async (req, res) => {
   try {
     const customerId = req.customer.id;
+    const isAllRoute = req.path === '/all';
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
@@ -20,12 +21,14 @@ const getOwnedMachines = async (req, res) => {
           customerInfo: null,
           machines: []
         },
-        pagination: {
-          total: 0,
-          page,
-          limit,
-          totalPages: 0
-        }
+        ...(!isAllRoute && {
+          pagination: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0
+          }
+        })
       });
     }
 
@@ -75,20 +78,22 @@ const getOwnedMachines = async (req, res) => {
     );
 
     const total = allVariants.length;
-    const paginatedVariants = allVariants.slice(skip, skip + limit);
+    const resultVariants = isAllRoute ? allVariants : allVariants.slice(skip, skip + limit);
 
     return res.status(200).json({
       success: true,
       data: {
         customerInfo,
-        machines: paginatedVariants
+        machines: resultVariants
       },
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit)
-      }
+      ...(!isAllRoute && {
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit)
+        }
+      })
     });
   } catch (error) {
     console.error("Error fetching owned machines:", error);

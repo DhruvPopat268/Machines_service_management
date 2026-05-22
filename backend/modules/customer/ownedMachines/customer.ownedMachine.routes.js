@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.use(customerAuthMiddleware);
 
+router.get("/all", getOwnedMachines);
 router.get("/", getOwnedMachines);
 router.get("/:variantId", validateVariantId, getVariantDetail);
 
