@@ -28,8 +28,8 @@ const machineVariantSchema = new mongoose.Schema(
     attributeValue: { type: String, trim: true, default: "" },
     contractType: { type: contractTypeSnapshotSchema, required: true },
     issueDescription: { type: String, trim: true, required: true },
-    problemTypeId: { type: mongoose.Schema.Types.ObjectId, ref: "ProblemType" },
-    problemType: { type: String, trim: true, default: "" },
+    problemTypeIds: { type: [mongoose.Schema.Types.ObjectId], ref: "ProblemType", default: [] },
+    problemTypes: { type: [String], default: [] },
     images: { type: [String], default: [] }
   },
   { _id: false }

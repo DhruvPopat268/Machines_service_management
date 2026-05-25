@@ -7,6 +7,29 @@ const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRo
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 const { sendWelcomeCredentials } = require("../../../utils/emailService");
 
+const generatePassword = () => {
+  const upper  = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower  = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const rand = (str) => str[Math.floor(Math.random() * str.length)];
+  const chars = [
+    rand(upper),
+    rand(upper),
+    rand(lower),
+    rand(lower),
+    rand(lower),
+    rand(lower),
+    "@",
+    rand(digits),
+    rand(digits),
+    rand(digits),
+    rand(digits),
+  ];
+  // shuffle the non-@ part for unpredictability
+  const prefix = chars.slice(0, 6).sort(() => Math.random() - 0.5);
+  return [...prefix, "@", ...chars.slice(7)].join("");
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -105,7 +128,7 @@ const create = async (req, res) => {
       zoneId = zone;
     }
 
-    const defaultPassword = "Customer@123";
+    const defaultPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     const customer = await Customer.create({
@@ -288,7 +311,7 @@ const importCustomers = async (req, res) => {
           if (zone) zoneId = zone._id;
         }
 
-        const defaultPassword = "Customer@123";
+        const defaultPassword = generatePassword();
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
         const newCustomer = await Customer.create({

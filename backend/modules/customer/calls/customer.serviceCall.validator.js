@@ -52,11 +52,17 @@ const validateRaiseServiceCall = (req, res, next) => {
       });
     }
 
-    if (serviceCall.problemTypeId && !mongoose.Types.ObjectId.isValid(serviceCall.problemTypeId)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid problem type ID format at index ${i}: ${serviceCall.problemTypeId}`
-      });
+    const ptIds = Array.isArray(serviceCall.problemTypeIds)
+      ? serviceCall.problemTypeIds
+      : serviceCall.problemTypeId ? [serviceCall.problemTypeId] : [];
+
+    for (const ptId of ptIds) {
+      if (!mongoose.Types.ObjectId.isValid(ptId)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid problem type ID format at index ${i}: ${ptId}`
+        });
+      }
     }
   }
 

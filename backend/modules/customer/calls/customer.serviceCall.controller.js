@@ -72,12 +72,12 @@ const raiseServiceCall = async (req, res) => {
       });
     }
 
-    const problemTypeIds = parsedServiceCalls
-      .map(sc => sc.problemTypeId)
-      .filter(id => id);
-    
-    const problemTypes = problemTypeIds.length > 0
-      ? await ProblemType.find({ _id: { $in: problemTypeIds } })
+    const allProblemTypeIds = parsedServiceCalls
+      .flatMap(sc => (Array.isArray(sc.problemTypeIds) ? sc.problemTypeIds : sc.problemTypeId ? [sc.problemTypeId] : []))
+      .filter(Boolean);
+
+    const problemTypes = allProblemTypeIds.length > 0
+      ? await ProblemType.find({ _id: { $in: allProblemTypeIds } })
       : [];
     const problemTypeMap = new Map(problemTypes.map(pt => [pt._id.toString(), pt]));
 
@@ -123,14 +123,19 @@ const raiseServiceCall = async (req, res) => {
         for (const machine of record.machines) {
           const variant = machine.variants.find(v => v._id.toString() === serviceCall.variantId);
           if (variant) {
-            if (serviceCall.problemTypeId && !problemTypeMap.has(serviceCall.problemTypeId)) {
-              return res.status(404).json({
-                success: false,
-                message: `Problem type not found for ID: ${serviceCall.problemTypeId}`
-              });
+            const scProblemTypeIds = Array.isArray(serviceCall.problemTypeIds)
+              ? serviceCall.problemTypeIds
+              : serviceCall.problemTypeId ? [serviceCall.problemTypeId] : [];
+
+            for (const ptId of scProblemTypeIds) {
+              if (!problemTypeMap.has(ptId)) {
+                return res.status(404).json({
+                  success: false,
+                  message: `Problem type not found for ID: ${ptId}`
+                });
+              }
             }
 
-            // Get images for this variant based on its index
             const variantImages = variantImagesMap.get(i) || [];
 
             machines.push({
@@ -147,8 +152,8 @@ const raiseServiceCall = async (req, res) => {
               attributeValue: variant.value,
               contractType: variant.contractType,
               issueDescription: serviceCall.issueDescription,
-              problemTypeId: serviceCall.problemTypeId,
-              problemType: serviceCall.problemTypeId ? problemTypeMap.get(serviceCall.problemTypeId).name : "",
+              problemTypeIds: scProblemTypeIds,
+              problemTypes: scProblemTypeIds.map(id => problemTypeMap.get(id).name),
               images: variantImages
             });
             found = true;

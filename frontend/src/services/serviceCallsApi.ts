@@ -34,8 +34,8 @@ export interface ServiceCall {
       validTo: string;
     };
     issueDescription: string;
-    problemTypeId?: string;
-    problemType: string;
+    problemTypeIds: string[];
+    problemTypes: string[];
     images: string[];
   }>;
   status: string;
@@ -56,45 +56,37 @@ export interface ServiceCall {
   updatedAt: string;
 }
 
+export interface CallStats {
+  total: number;
+  open: number;
+  assigned: number;
+  inProgress: number;
+  onHold: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface CallsParams {
+  status?: string;
+  search?: string;
+  problemType?: string;
+  machineName?: string;
+  customerName?: string;
+  engineerName?: string;
+  category?: string;
+  division?: string;
+  fromDate?: string;
+  toDate?: string;
+  page?: string;
+  limit?: string;
+}
+
 export const serviceCallsApi = {
-  // Get all calls
-  getAllCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/all");
-    return response.data.data;
+  getCalls: async (params: CallsParams = {}): Promise<{ data: ServiceCall[]; stats?: CallStats; pagination: { total: number; page: number; limit: number; totalPages: number } }> => {
+    const response = await api.get("/admin/service-calls", { params });
+    return { data: response.data.data, stats: response.data.stats, pagination: response.data.pagination };
   },
 
-  // Get calls by status
-  getOpenCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/open");
-    return response.data.data;
-  },
-
-  getAssignedCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/assigned");
-    return response.data.data;
-  },
-
-  getInProgressCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/in-progress");
-    return response.data.data;
-  },
-
-  getOnHoldCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/on-hold");
-    return response.data.data;
-  },
-
-  getCompletedCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/completed");
-    return response.data.data;
-  },
-
-  getCancelledCalls: async (): Promise<ServiceCall[]> => {
-    const response = await api.get("/admin/service-calls/cancelled");
-    return response.data.data;
-  },
-
-  // Get call detail
   getCallDetail: async (id: string): Promise<ServiceCall> => {
     const response = await api.get(`/admin/service-calls/${id}`);
     return response.data.data;

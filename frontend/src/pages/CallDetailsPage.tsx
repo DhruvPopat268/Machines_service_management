@@ -9,7 +9,9 @@ import { StatusTimeline } from "@/components/StatusTimeline";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, User, Wrench, FileText, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import Spinner from "@/components/Spinner";
@@ -24,13 +26,22 @@ const CallDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  const [attachmentsDialog, setAttachmentsDialog] = useState<{ machineName: string; images: string[] } | null>(null);
+  const [assignDialog, setAssignDialog] = useState(false);
+  const [noteDialog, setNoteDialog] = useState(false);
+  const [priorityDialog, setPriorityDialog] = useState(false);
+  const [statusDialog, setStatusDialog] = useState(false);
+  const [selectedEngineer, setSelectedEngineer] = useState("");
   const [note, setNote] = useState("");
+  const [selectedPriority, setSelectedPriority] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
 
   const { data: call, isLoading, isFetching } = useQuery({
     queryKey: ["serviceCall", id],
     queryFn: () => serviceCallsApi.getCallDetail(id!),
     enabled: !!id,
-    staleTime: 0, // Always fetch fresh data
+    staleTime: 0,
   });
 
   if (isLoading || isFetching) return <Spinner />;
@@ -46,6 +57,7 @@ const CallDetailsPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Header row */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
@@ -55,12 +67,28 @@ const CallDetailsPage = () => {
             <h1 className="text-2xl font-bold text-foreground">{call.callId}</h1>
             <StatusBadge status={call.status} />
           </div>
-          <p className="text-muted-foreground text-sm">{call.machines[0]?.issueDescription}</p>
+        </div>
+        {/* Quick action buttons */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineer(call.engineerInfo?.name || ""); setAssignDialog(true); }}>
+            {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
+            {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setNoteDialog(true)}>
+            <StickyNote className="h-4 w-4" /> Add Note
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedPriority(call.priority || ""); setPriorityDialog(true); }}>
+            <Flag className="h-4 w-4" /> Set Priority
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedStatus(call.status); setStatusDialog(true); }}>
+            <RefreshCw className="h-4 w-4" /> Update Status
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      {/* Top section: Customer Info + Quick Info + Status Timeline */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-3 space-y-6">
           <Card className="border-0 shadow-sm">
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><User className="h-5 w-5" /> Customer Info</CardTitle></CardHeader>
             <CardContent>
@@ -75,113 +103,28 @@ const CallDetailsPage = () => {
             </CardContent>
           </Card>
 
-          {call.machines.map((machine, index) => (
-            <Card key={index} className="border-0 shadow-sm">
-              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Wrench className="h-5 w-5" /> Machine Details {call.machines.length > 1 && `#${index + 1}`}</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div><p className="text-muted-foreground">Machine</p><p className="font-medium">{machine.machineName}</p></div>
-                  <div><p className="text-muted-foreground">Model</p><p className="font-medium">{machine.modelNumber || "N/A"}</p></div>
-                  <div><p className="text-muted-foreground">Serial No.</p><p className="font-medium">{machine.serialNumber || "N/A"}</p></div>
-                  <div><p className="text-muted-foreground">Division</p><p className="font-medium">{machine.division}</p></div>
-                  <div><p className="text-muted-foreground">Category</p><p className="font-medium">{machine.category}</p></div>
-                  <div><p className="text-muted-foreground">Problem Type</p><p className="font-medium">{machine.problemType || "N/A"}</p></div>
-                  <div><p className="text-muted-foreground">Attribute</p><p className="font-medium">{machine.attributeName}: {machine.attributeValue}</p></div>
-                  <div><p className="text-muted-foreground">Contract Type</p><p className="font-medium">{machine.contractType.name}</p></div>
-                  <div><p className="text-muted-foreground">Contract Code</p><p className="font-medium">{machine.contractType.code}</p></div>
-                  <div><p className="text-muted-foreground">Free Service</p><p className="font-medium">{machine.contractType.freeService ? "Yes" : "No"}</p></div>
-                  <div><p className="text-muted-foreground">Free Parts</p><p className="font-medium">{machine.contractType.freeParts ? "Yes" : "No"}</p></div>
+          <Card className="border-0 shadow-sm">
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><UserCog className="h-5 w-5" /> Engineer Info</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Assigned Engineer</p>
+                  <p className={`font-medium ${!call.engineerInfo ? "text-muted-foreground italic" : ""}`}>
+                    {call.engineerInfo?.name || "Not Assigned"}
+                  </p>
                 </div>
-                {machine.images && machine.images.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-sm font-medium text-muted-foreground mb-2">Images:</p>
-                    <div className="flex gap-2 flex-wrap">
-                      {machine.images.map((img, i) => (
-                        <img key={i} src={img} alt={`Machine ${i + 1}`} className="h-20 w-20 object-cover rounded border" />
-                      ))}
-                    </div>
+                {call.engineerInfo && (
+                  <div>
+                    <p className="text-muted-foreground">Engineer ID</p>
+                    <p className="font-medium">{call.engineerInfo.engineerId}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          ))}
-
-          <Card className="border-0 shadow-sm">
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><FileText className="h-5 w-5" /> Issue Descriptions</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {call.machines.map((machine, index) => (
-                <div key={index}>
-                  {call.machines.length > 1 && <p className="text-sm font-medium text-muted-foreground mb-1">Machine #{index + 1} - {machine.machineName}</p>}
-                  <p className="text-sm">{machine.issueDescription}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-0 shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Actions</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Assign Engineer</Label>
-                  <Select defaultValue={call.engineerInfo?.name}>
-                    <SelectTrigger><SelectValue placeholder="Select engineer" /></SelectTrigger>
-                    <SelectContent>
-                      {engineers.map((e) => <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Update Status</Label>
-                  <Select defaultValue={call.status}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Open">Open</SelectItem>
-                      <SelectItem value="Assigned">Assigned</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="On Hold">On Hold</SelectItem>
-                      <SelectItem value="Completed">Completed</SelectItem>
-                      <SelectItem value="Cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {call.priority && (
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select defaultValue={call.priority}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Low">Low</SelectItem>
-                        <SelectItem value="Medium">Medium</SelectItem>
-                        <SelectItem value="High">High</SelectItem>
-                        <SelectItem value="Critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label>Add Note</Label>
-                <Textarea placeholder="Enter note..." value={note} onChange={(e) => setNote(e.target.value)} />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={() => toast({ title: "Updated", description: "Call details saved" })}>Save Changes</Button>
-                <Button variant="outline" className="gap-2">
-                  <Upload className="h-4 w-4" /> Upload Images
-                </Button>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card className="border-0 shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Status Timeline</CardTitle></CardHeader>
-            <CardContent>
-              <StatusTimeline steps={timelineSteps} />
-            </CardContent>
-          </Card>
-
+        <div className="lg:col-span-1">
           <Card className="border-0 shadow-sm">
             <CardHeader><CardTitle className="text-lg">Quick Info</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -197,7 +140,205 @@ const CallDetailsPage = () => {
             </CardContent>
           </Card>
         </div>
+
+        <div className="lg:col-span-1">
+          <Card className="border-0 shadow-sm">
+            <CardHeader><CardTitle className="text-lg">Status Timeline</CardTitle></CardHeader>
+            <CardContent>
+              <StatusTimeline steps={timelineSteps} />
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      {/* Full-width Machines Table */}
+      <Card className="border-0 shadow-sm">
+        <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Wrench className="h-5 w-5" /> Machines</CardTitle></CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">#</TableHead>
+                  <TableHead>Machine Name</TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Division</TableHead>
+                  <TableHead>Variant</TableHead>
+                  <TableHead>Contract Type</TableHead>
+                  <TableHead>Problem Type</TableHead>
+                  <TableHead>Issue Description</TableHead>
+                  <TableHead>Customer Attachments</TableHead>
+                  <TableHead>Engineer Attachments</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {call.machines.map((machine, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">{index + 1}</TableCell>
+                    <TableCell className="font-medium">{machine.machineName}</TableCell>
+                    <TableCell>{machine.modelNumber || "N/A"}</TableCell>
+                    <TableCell>{machine.category || "N/A"}</TableCell>
+                    <TableCell>{machine.division || "N/A"}</TableCell>
+                    <TableCell>{machine.attributeName}: {machine.attributeValue}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1 text-sm min-w-[160px]">
+                        <p className="font-medium">{machine.contractType.name} ({machine.contractType.code})</p>
+                        <p className="text-muted-foreground">Free Service: {machine.contractType.freeService ? "Yes" : "No"}</p>
+                        <p className="text-muted-foreground">Free Parts: {machine.contractType.freeParts ? "Yes" : "No"}</p>
+                        <p className="text-muted-foreground">From: {formatDate(machine.contractType.validFrom)}</p>
+                        <p className="text-muted-foreground">To: {formatDate(machine.contractType.validTo)}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {machine.problemTypes && machine.problemTypes.length > 0 ? (
+                        <span className="text-sm">{machine.problemTypes.join(", ")}</span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">N/A</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <p className="text-sm">{machine.issueDescription}</p>
+                    </TableCell>
+                    <TableCell>
+                      {machine.images && machine.images.length > 0 ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs"
+                          onClick={() => setAttachmentsDialog({ machineName: machine.machineName, images: machine.images })}
+                        >
+                          <Paperclip className="h-3 w-3" />
+                          {machine.images.length} attachment{machine.images.length > 1 ? "s" : ""}
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">None</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {call.status !== "Open" ? (
+                        <span className="text-muted-foreground text-sm italic">No attachments</span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Attachments Dialog */}
+      <Dialog open={!!attachmentsDialog} onOpenChange={() => setAttachmentsDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4" />
+              Attachments — {attachmentsDialog?.machineName}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
+            {attachmentsDialog?.images.map((img, i) => (
+              <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                <img src={img} alt={`Attachment ${i + 1}`} className="w-full h-40 object-cover rounded border hover:opacity-90 transition-opacity" />
+              </a>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Engineer Dialog */}
+      <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"} — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>Select Engineer</Label>
+            <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+              <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
+              <SelectContent>
+                {engineers.map((e) => <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialog(false)}>Cancel</Button>
+            <Button onClick={() => { toast({ title: "Engineer Assigned", description: `${selectedEngineer} assigned to ${call.callId}` }); setAssignDialog(false); }}>Assign</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Note Dialog */}
+      <Dialog open={noteDialog} onOpenChange={setNoteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Note — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>Note</Label>
+            <Textarea placeholder="Enter note..." value={note} onChange={(e) => setNote(e.target.value)} rows={4} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNoteDialog(false)}>Cancel</Button>
+            <Button onClick={() => { toast({ title: "Note Added", description: "Note saved successfully" }); setNoteDialog(false); setNote(""); }}>Save Note</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set Priority Dialog */}
+      <Dialog open={priorityDialog} onOpenChange={setPriorityDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Priority — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>Priority</Label>
+            <Select value={selectedPriority} onValueChange={setSelectedPriority}>
+              <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Low">Low</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="High">High</SelectItem>
+                <SelectItem value="Critical">Critical</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPriorityDialog(false)}>Cancel</Button>
+            <Button onClick={() => { toast({ title: "Priority Set", description: `Priority set to ${selectedPriority}` }); setPriorityDialog(false); }}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Status Dialog */}
+      <Dialog open={statusDialog} onOpenChange={setStatusDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Status — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>Status</Label>
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Open">Open</SelectItem>
+                <SelectItem value="Assigned">Assigned</SelectItem>
+                <SelectItem value="In Progress">In Progress</SelectItem>
+                <SelectItem value="On Hold">On Hold</SelectItem>
+                <SelectItem value="Completed">Completed</SelectItem>
+                <SelectItem value="Cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStatusDialog(false)}>Cancel</Button>
+            <Button onClick={() => { toast({ title: "Status Updated", description: `Status updated to ${selectedStatus}` }); setStatusDialog(false); }}>Update</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
