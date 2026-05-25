@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
-import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
@@ -383,7 +382,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-[70vw] h-[85vh] flex flex-col">
+      <DialogContent className="max-w-[80vw] h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Sell Machine</DialogTitle>
         </DialogHeader>
@@ -980,29 +979,41 @@ const SellMachinesPage = () => {
             </div>
           )}
 
-          <FilterBar
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search by customer, machine, model..."
-            searchTitle="Search with customer name, phone, email, machine name or model number"
-            searchableFilters={[
-              { key: "customer", placeholder: "Customer", searchPlaceholder: "Search customers...", options: customerOptions, onSearch: fetchCustomers },
-              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categoryOptions, onSearch: fetchCategories },
-              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisionOptions, onSearch: fetchDivisions },
-              { key: "machine", placeholder: "Machine", searchPlaceholder: "Search machines...", options: machineOptions, onSearch: fetchMachines },
-            ]}
-            filterValues={filters}
-            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
-            showDateRange
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
-            pageSize={pageSize}
-            onPageSizeChange={(size) => setPageSize(size)}
-            totalCount={pagination.total}
-          />
+          {/* Row 1: Search + Date Range + Clear */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by customer, machine, model..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
+              </div>
+              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+                  <X className="h-4 w-4 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Filters right-aligned */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customer: v }))} onSearchChange={fetchCustomers} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machine: v }))} onSearchChange={fetchMachines} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
+          </div>
           <div>
             <DataTable columns={columns} data={data} pageSize={999} />
           </div>

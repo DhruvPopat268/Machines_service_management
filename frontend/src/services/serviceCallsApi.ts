@@ -69,7 +69,7 @@ export interface CallStats {
 export interface CallsParams {
   status?: string;
   search?: string;
-  problemType?: string;
+  problemTypeId?: string;
   machineName?: string;
   customerName?: string;
   engineerName?: string;

@@ -5,7 +5,7 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getCalls = async (req, res) => {
   try {
-    const { status, search, problemType, machineName, customerName, engineerName, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { status, search, problemTypeId, machineName, customerName, engineerName, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
@@ -21,7 +21,7 @@ const getCalls = async (req, res) => {
       ];
     }
 
-    if (problemType)  query["machines.problemType"] = { $regex: escapeRegex(problemType), $options: "i" };
+    if (problemTypeId && mongoose.isValidObjectId(problemTypeId)) query["machines.problemTypeIds"] = new mongoose.Types.ObjectId(problemTypeId);
     if (machineName)  query["machines.machineName"] = { $regex: escapeRegex(machineName), $options: "i" };
     if (customerName) query["customerInfo.name"]    = { $regex: escapeRegex(customerName), $options: "i" };
     if (engineerName) query["engineerInfo.name"]    = { $regex: escapeRegex(engineerName), $options: "i" };
@@ -66,7 +66,7 @@ const getCalls = async (req, res) => {
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     };
 
-    if (!status && !search && !problemType && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate) {
+    if (!status && !search && !problemTypeId && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate) {
       const statusCounts = await ServiceCall.aggregate([
         { $group: { _id: "$status", count: { $sum: 1 } } }
       ]);

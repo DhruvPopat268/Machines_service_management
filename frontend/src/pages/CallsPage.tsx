@@ -165,7 +165,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       const params: CallsParams = { page: String(page), limit: String(LIMIT) };
       if (statusFilter)                                                params.status       = statusFilter;
       if (debouncedSearch)                                             params.search       = debouncedSearch;
-      if (filters.problemType  && filters.problemType  !== "all")     params.problemType  = filters.problemType;
+      if (filters.problemTypeId && filters.problemTypeId !== "all")     params.problemTypeId = filters.problemTypeId;
       if (filters.machineName  && filters.machineName  !== "all")     params.machineName  = filters.machineName;
       if (filters.customerName && filters.customerName !== "all")     params.customerName = filters.customerName;
       if (filters.engineerName && filters.engineerName !== "all")     params.engineerName = filters.engineerName;
@@ -238,7 +238,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           </PageHeader>
 
           {!statusFilter && stats && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <StatsCard label="Total Calls"  value={stats.total}      icon={PhoneCall}    colorClass="text-primary bg-accent" />
               <StatsCard label="Open"         value={stats.open}       icon={FolderOpen}   colorClass="text-orange-500 bg-orange-50" />
               <StatsCard label="Assigned"     value={stats.assigned}   icon={UserPlus}     colorClass="text-blue-500 bg-blue-50" />
@@ -295,7 +295,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p.name }))} value={filters.problemType ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemType: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />
           </div>
 
           <DataTable columns={columns} data={data} />

@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DataTable, Column } from "@/components/DataTable";
-import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useNavigate } from "react-router-dom";
-import { Plus, Eye, Edit, Trash2, Upload, Download } from "lucide-react";
+import { Plus, Eye, Edit, Trash2, Upload, Download, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -262,7 +265,7 @@ const MachinesPage = () => {
       ),
     },
     {
-      key: "currentStock", label: "Current Stock", className: "text-center", render: (m) => (
+      key: "currentStock", label: "Current Stock", className: "text-center w-[250px]", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
             <div key={i} className="text-xs font-medium py-0.5 flex items-center justify-center">{v.currentStock}</div>
@@ -271,7 +274,7 @@ const MachinesPage = () => {
       ),
     },
     {
-      key: "stockStatus", label: "Stock Status", className: "text-center", render: (m) => (
+      key: "stockStatus", label: "Stock Status", className: "text-center w-[300px]", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
             <div key={i} className="py-0.5 flex items-center justify-center">
@@ -286,7 +289,7 @@ const MachinesPage = () => {
       ),
     },
     {
-      key: "lowStockThreshold", label: "Low Stock Alert", className: "text-center", render: (m) => (
+      key: "lowStockThreshold", label: "Low Stock Alert", className: "text-center w-[350px]", render: (m) => (
         <div className="space-y-1">
           {m.variants?.length > 0 ? m.variants.map((v, i) => (
             <div key={i} className="text-xs py-0.5 flex items-center justify-center">
@@ -314,13 +317,13 @@ const MachinesPage = () => {
       ),
     },
     {
-      key: "createdAt", label: "Created At", render: (m) => {
+      key: "createdAt", label: "Created At", className: "w-[150px]", render: (m) => {
         const { date, time } = formatDateTime(m.createdAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
     },
     {
-      key: "updatedAt", label: "Updated At", render: (m) => {
+      key: "updatedAt", label: "Updated At", className: "w-[150px]", render: (m) => {
         const { date, time } = formatDateTime(m.updatedAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
@@ -350,27 +353,57 @@ const MachinesPage = () => {
             <Button variant="outline" className="gap-2" onClick={() => { setImportStep("menu"); setImportFile(null); setImportDialog(true); }}><Upload className="h-4 w-4" /> Import</Button>
             <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
-          <FilterBar
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search by name or model number..."
-            searchableFilters={[
-              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categories.map((c) => ({ label: c.name, value: c._id })), onSearch: fetchCategories },
-              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisions.map((d) => ({ label: d.name, value: d._id })), onSearch: fetchDivisions },
-            ]}
-            filters={[
-              { key: "stockStatus", label: "Stock Status", options: [{ label: "In Stock", value: "In Stock" }, { label: "Low Stock", value: "Low Stock" }, { label: "Out of Stock", value: "Out of Stock" }] },
-              { key: "status",   label: "Status",    options: [{ label: "Active", value: "Active" }, { label: "Inactive", value: "Inactive" }] },
-            ]}
-            filterValues={filters}
-            onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
-            showDateRange
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
-          />
+
+          {/* Row 1: Search + Date Range + Clear */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or model number..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
+                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
+              </div>
+              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+                  <X className="h-4 w-4 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Filters right-aligned */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
+            <Select value={filters.stockStatus || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, stockStatus: v }))}>
+              <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Stock Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Stock</SelectItem>
+                <SelectItem value="In Stock">In Stock</SelectItem>
+                <SelectItem value="Low Stock">Low Stock</SelectItem>
+                <SelectItem value="Out of Stock">Out of Stock</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filters.status || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}>
+              <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Active">Active</SelectItem>
+                <SelectItem value="Inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <DataTable columns={columns} data={data} />
           <Pagination
             page={pagination.page}
