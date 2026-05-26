@@ -194,7 +194,7 @@ const changePassword = async (req, res) => {
     const passwordError = validatePassword(newPassword);
     if (passwordError) return res.status(400).json({ success: false, message: passwordError });
 
-    engineer.password = await bcrypt.hash(newPassword, 10);
+    engineer.password = newPassword;
     await engineer.save();
 
     await EngineerSession.deleteMany({ engineerId: engineer._id });
