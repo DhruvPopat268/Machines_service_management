@@ -1,10 +1,44 @@
 const mongoose = require("mongoose");
+const path = require("path");
+const fs = require("fs/promises");
+const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const AdminUser = require("../auth/admin.user.model");
 const AdminUserSession = require("../auth/admin.user.session.model");
 const validatePassword = require("../../../utils/validatePassword");
 const { validateCreateSystemUser, validateUpdateSystemUser } = require("./admin.systemUser.validator");
 const { sendAdminChangePasswordOtp, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendSystemUserPasswordResetSuccess } = require("../../../utils/emailService");
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images"
+  : path.join(__dirname, "../../../cloud/images");
+
+const uploadProfilePhoto = async (fileBuffer) => {
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  const filename = `profile_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+  await sharp(fileBuffer)
+    .resize({ width: 400, withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/${filename}`;
+};
+
+const deleteProfilePhoto = async (url) => {
+  try {
+    const filename = url.split("/app/cloud/images/")[1];
+    if (!filename) return;
+    await fs.unlink(path.join(IMAGES_DIR, filename));
+  } catch (_) {}
+};
+
+const generateEngineerId = async (name) => {
+  const parts = name.trim().split(/\s+/);
+  const first = (parts[0]?.[0] || "").toUpperCase();
+  const second = (parts[1]?.[0] || "").toUpperCase();
+  const initials = first + second;
+  const count = await AdminUser.countDocuments({ role: "Engineer" });
+  return `${initials}-${count + 1}`;
+};
 
 const getAllSystemUsers = async (req, res) => {
   try {
@@ -69,7 +103,7 @@ const getSystemUserById = async (req, res) => {
 
 const createSystemUser = async (req, res) => {
   try {
-    const { name, email, phone, password, role, status } = req.body;
+    const { name, email, phone, password, role, status, address } = req.body;
 
     const error = validateCreateSystemUser({ name, email, phone, password, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -86,14 +120,35 @@ const createSystemUser = async (req, res) => {
       return res.status(409).json({ success: false, message: "Phone number already exists" });
     }
 
-    const user = await AdminUser.create({ name: name.trim(), email: email.trim().toLowerCase(), phone, password, role, status });
+    let profilePhoto;
+    if (req.file) {
+      try {
+        profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    }
+
+    let engineerId;
+    if (role === "Engineer") engineerId = await generateEngineerId(name);
+
+    const user = await AdminUser.create({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      password,
+      role,
+      status,
+      ...(address   !== undefined && { address: address.trim() }),
+      ...(profilePhoto               && { profilePhoto }),
+      ...(engineerId                 && { engineerId }),
+    });
 
     const result = user.toObject();
     delete result.password;
     delete result.changePasswordOtp;
     delete result.changePasswordOtpExpires;
 
-    // Send welcome email (non-blocking)
     sendSystemUserWelcome(name.trim(), email.trim().toLowerCase(), password, role).catch(() => {});
 
     res.status(201).json({ success: true, data: result });
@@ -111,17 +166,26 @@ const updateSystemUser = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid user ID" });
 
-    const { name, email, phone, role, status } = req.body;
+    const { name, email, phone, role, status, address } = req.body;
 
     const error = validateUpdateSystemUser({ name, email, phone, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const update = {};
-    if (name   !== undefined) update.name   = name.trim();
-    if (email  !== undefined) update.email  = email.trim().toLowerCase();
-    if (phone  !== undefined) update.phone  = phone.trim();
-    if (role   !== undefined) update.role   = role;
-    if (status !== undefined) update.status = status;
+    if (name    !== undefined) update.name    = name.trim();
+    if (email   !== undefined) update.email   = email.trim().toLowerCase();
+    if (phone   !== undefined) update.phone   = phone.trim();
+    if (role    !== undefined) update.role    = role;
+    if (status  !== undefined) update.status  = status;
+    if (address !== undefined) update.address = address.trim();
+
+    if (req.file) {
+      try {
+        update.profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    }
 
     if (Object.keys(update).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
@@ -138,7 +202,7 @@ const updateSystemUser = async (req, res) => {
       }
     }
 
-    const existing = await AdminUser.findById(id).select("role");
+    const existing = await AdminUser.findById(id).select("role profilePhoto");
     if (!existing) return res.status(404).json({ success: false, message: "User not found" });
 
     const user = await AdminUser.findByIdAndUpdate(id, update, { new: true, runValidators: true })
@@ -146,6 +210,10 @@ const updateSystemUser = async (req, res) => {
 
     if (update.role && update.role !== existing.role)
       await AdminUserSession.deleteMany({ userId: id });
+
+    // delete old profile photo from disk after successful update
+    if (update.profilePhoto && existing.profilePhoto)
+      await deleteProfilePhoto(existing.profilePhoto);
 
     res.status(200).json({ success: true, data: user });
   } catch (err) {
@@ -234,6 +302,7 @@ const deleteSystemUser = async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
     await AdminUserSession.deleteMany({ userId: id });
+    if (user.profilePhoto) await deleteProfilePhoto(user.profilePhoto);
 
     res.status(200).json({ success: true, message: "User deleted successfully" });
   } catch (err) {

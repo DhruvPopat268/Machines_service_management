@@ -1,9 +1,34 @@
 const jwt = require("jsonwebtoken");
+const path = require("path");
+const fs = require("fs/promises");
+const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const AdminUser = require("../../admin/auth/admin.user.model");
 const EngineerSession = require("./engineer.session.model");
 const { validateLogin, validateUpdateProfile, validatePassword } = require("./engineer.validator");
 const { sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess } = require("../../../utils/emailService");
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images"
+  : path.join(__dirname, "../../../cloud/images");
+
+const uploadProfilePhoto = async (fileBuffer) => {
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  const filename = `profile_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+  await sharp(fileBuffer)
+    .resize({ width: 400, withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/${filename}`;
+};
+
+const deleteProfilePhoto = async (url) => {
+  try {
+    const filename = url.split("/app/cloud/images/")[1];
+    if (!filename) return;
+    await fs.unlink(path.join(IMAGES_DIR, filename));
+  } catch (_) {}
+};
 
 const login = async (req, res) => {
   try {
@@ -57,7 +82,7 @@ const logout = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const engineer = await AdminUser.findById(req.engineer.id)
-      .select("name phone email role");
+      .select("name phone email role engineerId address profilePhoto _id");
     if (!engineer) return res.status(404).json({ success: false, message: "Engineer not found" });
 
     res.status(200).json({ success: true, data: engineer });
@@ -68,15 +93,24 @@ const getProfile = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const { name, phone, email } = req.body;
+    const { name, phone, email, address } = req.body;
 
     const error = validateUpdateProfile({ name, phone, email });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const update = {};
-    if (name  !== undefined) update.name  = name.trim();
-    if (phone !== undefined) update.phone = phone.trim();
-    if (email !== undefined) update.email = email.trim().toLowerCase();
+    if (name    !== undefined) update.name    = name.trim();
+    if (phone   !== undefined) update.phone   = phone.trim();
+    if (email   !== undefined) update.email   = email.trim().toLowerCase();
+    if (address !== undefined) update.address = address.trim();
+
+    if (req.file) {
+      try {
+        update.profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    }
 
     if (Object.keys(update).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
@@ -93,10 +127,14 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    const engineer = await AdminUser.findByIdAndUpdate(req.engineer.id, update, { new: true, runValidators: true })
-      .select("name phone email role");
+    const existing = await AdminUser.findById(req.engineer.id).select("profilePhoto");
+    if (!existing) return res.status(404).json({ success: false, message: "Engineer not found" });
 
-    if (!engineer) return res.status(404).json({ success: false, message: "Engineer not found" });
+    const engineer = await AdminUser.findByIdAndUpdate(req.engineer.id, update, { new: true, runValidators: true })
+      .select("name phone email role address profilePhoto engineerId");
+
+    if (update.profilePhoto && existing.profilePhoto)
+      await deleteProfilePhoto(existing.profilePhoto);
 
     res.status(200).json({ success: true, data: engineer });
   } catch (err) {
