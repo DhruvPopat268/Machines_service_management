@@ -32,7 +32,7 @@ const sendForgotPasswordEmail = async (customerName, customerEmail, otp, expiryM
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -65,7 +65,7 @@ const sendPasswordResetSuccessEmail = async (customerName, customerEmail) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -92,7 +92,7 @@ const sendChangeEmailOtp = async (customerName, newEmail, otp, expiryMinutes, ol
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -127,7 +127,7 @@ const sendEmailChangeSuccessNotification = async (customerName, oldEmail, newEma
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -151,7 +151,7 @@ const sendAdminChangePasswordOtp = async (adminEmail, otp, expiryMinutes) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -183,7 +183,7 @@ const sendAdminPasswordChangeSuccess = async (adminEmail) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -208,7 +208,7 @@ const sendWelcomeCredentials = async (customerName, customerEmail, password) => 
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -234,7 +234,7 @@ const sendAdminResetPasswordOtp = async (userName, userEmail, otp, expiryMinutes
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -264,7 +264,7 @@ const sendSystemUserWelcome = async (userName, userEmail, password, role) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
@@ -303,9 +303,65 @@ const sendSystemUserPasswordResetSuccess = async (userName, userEmail, role) => 
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (error) {
-    console.error("Email sending error:", error);
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
     return { success: false, error: error.message };
   }
 };
 
-module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess };
+const sendEngineerForgotPasswordOtp = async (engineerName, engineerEmail, otp, expiryMinutes) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/engineer/emailTemplates/forgotPassword.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    htmlTemplate = htmlTemplate.replace("{{engineerName}}", engineerName || "Engineer");
+    htmlTemplate = htmlTemplate.replace("{{otp}}", otp);
+    htmlTemplate = htmlTemplate.replace(/{{expiryMinutes}}/g, expiryMinutes);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: engineerEmail,
+      subject: "Engineer App — Password Reset OTP",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
+    return { success: false, error: error.message };
+  }
+};
+
+const sendEngineerPasswordResetSuccess = async (engineerName, engineerEmail) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/engineer/emailTemplates/passwordResetSuccess.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    const resetDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+
+    htmlTemplate = htmlTemplate.replace("{{engineerName}}", engineerName || "Engineer");
+    htmlTemplate = htmlTemplate.replace("{{resetDate}}", resetDate);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: engineerEmail,
+      subject: "Engineer App — Password Reset Successful",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", { message: error.message, code: error.code, status: error.status });
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess };
