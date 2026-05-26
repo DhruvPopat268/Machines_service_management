@@ -31,13 +31,19 @@ const deleteProfilePhoto = async (url) => {
   } catch (_) {}
 };
 
+const Counter = require("../auth/counter.model");
+
 const generateEngineerId = async (name) => {
   const parts = name.trim().split(/\s+/);
-  const first = (parts[0]?.[0] || "").toUpperCase();
+  const first  = (parts[0]?.[0] || "").toUpperCase();
   const second = (parts[1]?.[0] || "").toUpperCase();
   const initials = first + second;
-  const count = await AdminUser.countDocuments({ role: "Engineer" });
-  return `${initials}-${count + 1}`;
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "engineerId" },
+    { $inc: { seq: 1 } },
+    { upsert: true, new: true }
+  );
+  return `${initials}-${counter.seq}`;
 };
 
 const getAllSystemUsers = async (req, res) => {
@@ -132,17 +138,25 @@ const createSystemUser = async (req, res) => {
     let engineerId;
     if (role === "Engineer") engineerId = await generateEngineerId(name);
 
-    const user = await AdminUser.create({
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
-      password,
-      role,
-      status,
-      ...(address   !== undefined && { address: address.trim() }),
-      ...(profilePhoto               && { profilePhoto }),
-      ...(engineerId                 && { engineerId }),
-    });
+    let user;
+    try {
+      user = await AdminUser.create({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        password,
+        role,
+        status,
+        ...(address    !== undefined && { address: address.trim() }),
+        ...(profilePhoto             && { profilePhoto }),
+        ...(engineerId               && { engineerId }),
+      });
+    } catch (dbErr) {
+      if (profilePhoto) await deleteProfilePhoto(profilePhoto);
+      if (dbErr.code === 11000)
+        return res.status(409).json({ success: false, message: "Email already exists" });
+      return res.status(500).json({ success: false, message: dbErr.message });
+    }
 
     const result = user.toObject();
     delete result.password;
@@ -153,9 +167,6 @@ const createSystemUser = async (req, res) => {
 
     res.status(201).json({ success: true, data: result });
   } catch (err) {
-    console.error("Error creating system user:", err);
-    if (err.code === 11000)
-      return res.status(409).json({ success: false, message: "Email already exists" });
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -196,22 +207,35 @@ const updateSystemUser = async (req, res) => {
       if (update.phone) orConditions.push({ phone: update.phone });
       const conflict = await AdminUser.findOne({ $or: orConditions, _id: { $ne: id } });
       if (conflict) {
+        if (update.profilePhoto) await deleteProfilePhoto(update.profilePhoto);
         if (update.email && conflict.email === update.email)
           return res.status(409).json({ success: false, message: "Email already exists" });
         return res.status(409).json({ success: false, message: "Phone number already exists" });
       }
     }
 
-    const existing = await AdminUser.findById(id).select("role profilePhoto");
-    if (!existing) return res.status(404).json({ success: false, message: "User not found" });
+    const existing = await AdminUser.findById(id).select("role profilePhoto engineerId name");
+    if (!existing) {
+      if (update.profilePhoto) await deleteProfilePhoto(update.profilePhoto);
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
 
-    const user = await AdminUser.findByIdAndUpdate(id, update, { new: true, runValidators: true })
-      .select("-password -changePasswordOtp -changePasswordOtpExpires");
+    if (update.role === "Engineer" && !existing.engineerId)
+      update.engineerId = await generateEngineerId(update.name || existing.name);
+    let user;
+    try {
+      user = await AdminUser.findByIdAndUpdate(id, update, { new: true, runValidators: true })
+        .select("-password -changePasswordOtp -changePasswordOtpExpires");
+    } catch (dbErr) {
+      if (update.profilePhoto) await deleteProfilePhoto(update.profilePhoto);
+      if (dbErr.code === 11000)
+        return res.status(409).json({ success: false, message: "Email already exists" });
+      return res.status(500).json({ success: false, message: dbErr.message });
+    }
 
     if (update.role && update.role !== existing.role)
       await AdminUserSession.deleteMany({ userId: id });
 
-    // delete old profile photo from disk after successful update
     if (update.profilePhoto && existing.profilePhoto)
       await deleteProfilePhoto(existing.profilePhoto);
 
