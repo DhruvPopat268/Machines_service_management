@@ -213,4 +213,99 @@ const sendWelcomeCredentials = async (customerName, customerEmail, password) => 
   }
 };
 
-module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendWelcomeCredentials };
+const sendAdminResetPasswordOtp = async (userName, userEmail, otp, expiryMinutes) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/resetPasswordOtp.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    htmlTemplate = htmlTemplate.replace("{{userName}}", userName || "Admin");
+    htmlTemplate = htmlTemplate.replace("{{userEmail}}", userEmail);
+    htmlTemplate = htmlTemplate.replace("{{otp}}", otp);
+    htmlTemplate = htmlTemplate.replace(/{{expiryMinutes}}/g, expiryMinutes);
+    htmlTemplate = htmlTemplate.replace("{{adminPortalUrl}}", process.env.ADMIN_FRONTEND_URL || "#");
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: "Admin Password Reset OTP",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendSystemUserWelcome = async (userName, userEmail, password, role) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/systemUserWelcome.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    const accessUrl = role === "Engineer"
+      ? (process.env.ENGINEER_APP_URL || "#")
+      : (process.env.ADMIN_FRONTEND_URL || "#");
+
+    htmlTemplate = htmlTemplate.replace("{{userName}}", userName || "User");
+    htmlTemplate = htmlTemplate.replace("{{userEmail}}", userEmail);
+    htmlTemplate = htmlTemplate.replace("{{password}}", password);
+    htmlTemplate = htmlTemplate.replace("{{userRole}}", role);
+    htmlTemplate = htmlTemplate.replace(/{{accessUrl}}/g, accessUrl);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: "Welcome - Your Account Credentials",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendSystemUserPasswordResetSuccess = async (userName, userEmail, role) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/systemUserPasswordResetSuccess.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    const resetDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+
+    const portalUrl = role === "Engineer"
+      ? (process.env.ENGINEER_APP_URL || "#")
+      : (process.env.ADMIN_FRONTEND_URL || "#");
+    const portalLabel = role === "Engineer" ? "Engineer App" : "Admin Portal";
+
+    htmlTemplate = htmlTemplate.replace("{{userName}}", userName || "User");
+    htmlTemplate = htmlTemplate.replace("{{resetDate}}", resetDate);
+    htmlTemplate = htmlTemplate.replace("{{portalUrl}}", portalUrl);
+    htmlTemplate = htmlTemplate.replace("{{portalLabel}}", portalLabel);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: "Your Password Has Been Reset",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess };

@@ -1,3 +1,5 @@
+const validatePassword = require("../../../utils/validatePassword");
+
 const validateSignup = ({ name, phone, email, password, address, zone }) => {
   const errors = {};
   if (!name || typeof name !== "string" || !name.trim())
@@ -10,10 +12,8 @@ const validateSignup = ({ name, phone, email, password, address, zone }) => {
     errors.email = "Email is required";
   else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
     errors.email = "Invalid email format";
-  if (!password || typeof password !== "string" || !password.trim())
-    errors.password = "Password is required";
-  else if (password.trim().length < 6)
-    errors.password = "Password must be at least 6 characters";
+  const passwordError = validatePassword(password);
+  if (passwordError) errors.password = passwordError;
   if (!address || typeof address !== "string" || !address.trim())
     errors.address = "Address is required";
   if (!zone)
@@ -34,28 +34,4 @@ const validateLogin = ({ email, phone, password }) => {
   return { isValid: Object.keys(errors).length === 0, errors };
 };
 
-const validatePassword = (password) => {
-  if (!password || typeof password !== "string")
-    return "Password is required";
-  
-  const errors = [];
-  
-  if (password.length < 8)
-    errors.push("Password must be at least 8 characters");
-  
-  if (!/[A-Z]/.test(password))
-    errors.push("Password must contain at least one uppercase letter");
-  
-  if (!/[a-z]/.test(password))
-    errors.push("Password must contain at least one lowercase letter");
-  
-  if (!/[0-9]/.test(password))
-    errors.push("Password must contain at least one number");
-  
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password))
-    errors.push("Password must contain at least one special character");
-  
-  return errors.length > 0 ? errors.join(", ") : null;
-};
-
-module.exports = { validateSignup, validateLogin, validatePassword };
+module.exports = { validateSignup, validateLogin };

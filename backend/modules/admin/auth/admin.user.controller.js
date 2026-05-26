@@ -2,80 +2,15 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const AdminUser = require("./admin.user.model");
 const AdminUserSession = require("./admin.user.session.model");
-const { validateCreateUser } = require("./admin.user.validator");
+const validatePassword = require("../../../utils/validatePassword");
 const { sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess } = require("../../../utils/emailService");
-
-const getAllUsers = async (req, res) => {
-  try {
-    const users = await AdminUser.find().select("-password");
-    res.status(200).json({ success: true, data: users });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const createUser = async (req, res) => {
-  try {
-    const { isValid, errors } = validateCreateUser(req.body);
-    if (!isValid)
-      return res.status(400).json({ success: false, errors });
-
-    const { email, password } = req.body;
-
-    const existing = await AdminUser.findOne({ email });
-    if (existing)
-      return res.status(409).json({ success: false, message: "User already exists" });
-
-    const user = await AdminUser.create({ email, password: await bcrypt.hash(password, 10) });
-    const { password: _, ...data } = user.toObject();
-    res.status(201).json({ success: true, data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const updateUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    if (status === undefined)
-      return res.status(400).json({ success: false, message: "Status is required" });
-
-    if (!["Active", "Inactive"].includes(status))
-      return res.status(400).json({ success: false, message: "Status must be Active or Inactive" });
-
-    const user = await AdminUser.findByIdAndUpdate(id, { status }, { new: true }).select("-password");
-
-    if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
-
-    res.status(200).json({ success: true, data: user });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const deleteUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await AdminUser.findByIdAndDelete(id);
-    if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
-
-    res.status(200).json({ success: true, message: "User deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
 
 const login = async (req, res) => {
   try {
-    const { isValid, errors } = validateCreateUser(req.body);
-    if (!isValid)
-      return res.status(400).json({ success: false, errors });
-
     const { email, password } = req.body;
+
+    if (!email || !password)
+      return res.status(400).json({ success: false, message: "Email and password are required" });
 
     const user = await AdminUser.findOne({ email });
     if (!user || !(await user.comparePassword(password)))
@@ -83,6 +18,9 @@ const login = async (req, res) => {
 
     if (user.status === "Inactive")
       return res.status(403).json({ success: false, message: "Account is inactive" });
+
+    if (user.role === "Engineer")
+      return res.status(403).json({ success: false, message: "Access denied" });
 
     const maxSessions = parseInt(process.env.ADMIN_MAX_SESSIONS) || 1;
 
@@ -162,8 +100,9 @@ const verifyOtpAndChangePassword = async (req, res) => {
     if (!otp || !newPassword)
       return res.status(400).json({ success: false, message: "OTP and new password are required" });
 
-    if (newPassword.length < 8)
-      return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
+    const passwordError = validatePassword(newPassword);
+    if (passwordError)
+      return res.status(400).json({ success: false, message: passwordError });
 
     const user = await AdminUser.findById(userId);
     if (!user)
@@ -199,4 +138,4 @@ const verifyOtpAndChangePassword = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, createUser, updateUser, deleteUser, login, logout, sendChangePasswordOtp, verifyOtpAndChangePassword };
+module.exports = { login, logout, sendChangePasswordOtp, verifyOtpAndChangePassword };

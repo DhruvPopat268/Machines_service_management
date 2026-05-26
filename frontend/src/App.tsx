@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import AdminLayout from "./components/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import UsersPage from "./pages/UsersPage";
+import UserRolesPage from "./pages/UserRolesPage";
 import EngineersPage from "./pages/EngineersPage";
 import CallsPage from "./pages/CallsPage";
 import CallDetailsPage from "./pages/CallDetailsPage";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="/calls/cancelled" element={<CallsPage statusFilter="Cancelled" title="Cancelled Calls" description="Calls cancelled by customer or admin" />} />
             <Route path="/calls/:id" element={<CallDetailsPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/user-roles" element={<UserRolesPage />} />
             <Route path="/engineers" element={<EngineersPage />} />
             <Route path="/machines" element={<MachinesPage />} />
             <Route path="/machines/add" element={<AddMachineForm type="Machine" />} />
