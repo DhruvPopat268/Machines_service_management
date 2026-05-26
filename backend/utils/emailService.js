@@ -308,4 +308,60 @@ const sendSystemUserPasswordResetSuccess = async (userName, userEmail, role) => 
   }
 };
 
-module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess };
+const sendEngineerForgotPasswordOtp = async (engineerName, engineerEmail, otp, expiryMinutes) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/engineer/emailTemplates/forgotPassword.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    htmlTemplate = htmlTemplate.replace("{{engineerName}}", engineerName || "Engineer");
+    htmlTemplate = htmlTemplate.replace("{{otp}}", otp);
+    htmlTemplate = htmlTemplate.replace(/{{expiryMinutes}}/g, expiryMinutes);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: engineerEmail,
+      subject: "Engineer App — Password Reset OTP",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendEngineerPasswordResetSuccess = async (engineerName, engineerEmail) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/engineer/emailTemplates/passwordResetSuccess.html");
+    let htmlTemplate = fs.readFileSync(templatePath, "utf8");
+
+    const resetDate = new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    });
+
+    htmlTemplate = htmlTemplate.replace("{{engineerName}}", engineerName || "Engineer");
+    htmlTemplate = htmlTemplate.replace("{{resetDate}}", resetDate);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: engineerEmail,
+      subject: "Engineer App — Password Reset Successful",
+      html: htmlTemplate,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Email sending error:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess };
