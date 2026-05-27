@@ -39,7 +39,7 @@ const processImages = async (files) => {
 const raiseServiceCall = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { serviceCalls } = req.body;
+    const { serviceCalls, customerLocation } = req.body;
 
     let parsedServiceCalls;
     try {
@@ -49,6 +49,22 @@ const raiseServiceCall = async (req, res) => {
         success: false,
         message: "Invalid serviceCalls format"
       });
+    }
+
+    let parsedCustomerLocation;
+    if (customerLocation) {
+      try {
+        parsedCustomerLocation = typeof customerLocation === "string" ? JSON.parse(customerLocation) : customerLocation;
+      } catch (_) {
+        return res.status(400).json({ success: false, message: "Invalid customerLocation format" });
+      }
+      const { address: locAddr, latitude: lat, longitude: lng } = parsedCustomerLocation;
+      if (!locAddr || typeof locAddr !== "string" || !locAddr.trim())
+        return res.status(400).json({ success: false, message: "customerLocation.address must be a non-empty string" });
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90)
+        return res.status(400).json({ success: false, message: "customerLocation.latitude must be a number between -90 and 90" });
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180)
+        return res.status(400).json({ success: false, message: "customerLocation.longitude must be a number between -180 and 180" });
     }
 
     const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
@@ -189,9 +205,16 @@ const raiseServiceCall = async (req, res) => {
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
-        address: customer.address,
+        address: customer.address || customer.userLocation?.address || "",
         zone: customer.zone?.name || "",
-        gstNumber: customer.gstNumber || ""
+        gstNumber: customer.gstNumber || "",
+        ...(parsedCustomerLocation && {
+          location: {
+            address:   parsedCustomerLocation.address,
+            latitude:  parsedCustomerLocation.latitude,
+            longitude: parsedCustomerLocation.longitude,
+          }
+        })
       },
       machines
     });

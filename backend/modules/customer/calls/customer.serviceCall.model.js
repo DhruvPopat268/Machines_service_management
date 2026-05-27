@@ -45,7 +45,12 @@ const serviceCallSchema = new mongoose.Schema(
       email: { type: String, trim: true, lowercase: true, required: true },
       address: { type: String, trim: true, required: true },
       zone: { type: String, trim: true, default: "" },
-      gstNumber: { type: String, trim: true, uppercase: true, default: "" }
+      gstNumber: { type: String, trim: true, uppercase: true, default: "" },
+      location: {
+        address:   { type: String, trim: true },
+        latitude:  { type: Number, min: [-90,  "Latitude must be between -90 and 90"],  max: [90,  "Latitude must be between -90 and 90"] },
+        longitude: { type: Number, min: [-180, "Longitude must be between -180 and 180"], max: [180, "Longitude must be between -180 and 180"] },
+      }
     },
     machines: {
       type: [machineVariantSchema],
@@ -83,7 +88,6 @@ const serviceCallSchema = new mongoose.Schema(
 );
 
 // Indexes for efficient querying
-serviceCallSchema.index({ callId: 1 });
 serviceCallSchema.index({ "customerInfo.customerId": 1 });
 serviceCallSchema.index({ "machines.variantId": 1 });
 serviceCallSchema.index({ "machines.machineId": 1 });
