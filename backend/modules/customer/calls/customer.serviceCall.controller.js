@@ -39,7 +39,7 @@ const processImages = async (files) => {
 const raiseServiceCall = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { serviceCalls } = req.body;
+    const { serviceCalls, customerLocation } = req.body;
 
     let parsedServiceCalls;
     try {
@@ -49,6 +49,15 @@ const raiseServiceCall = async (req, res) => {
         success: false,
         message: "Invalid serviceCalls format"
       });
+    }
+
+    let parsedCustomerLocation;
+    if (customerLocation) {
+      try {
+        parsedCustomerLocation = typeof customerLocation === "string" ? JSON.parse(customerLocation) : customerLocation;
+      } catch (_) {
+        parsedCustomerLocation = undefined;
+      }
     }
 
     const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
@@ -189,9 +198,16 @@ const raiseServiceCall = async (req, res) => {
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
-        address: customer.address,
+        address: customer.address || customer.userLocation?.address || "",
         zone: customer.zone?.name || "",
-        gstNumber: customer.gstNumber || ""
+        gstNumber: customer.gstNumber || "",
+        ...(parsedCustomerLocation && {
+          location: {
+            address:   parsedCustomerLocation.address,
+            latitude:  parsedCustomerLocation.latitude,
+            longitude: parsedCustomerLocation.longitude,
+          }
+        })
       },
       machines
     });
