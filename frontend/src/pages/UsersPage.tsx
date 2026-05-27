@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { UserPlus, Edit, Trash2, Search, X, Eye, EyeOff, KeyRound } from "lucide-react";
+import { UserPlus, Edit, Trash2, Search, X, Eye, EyeOff, KeyRound, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -21,6 +21,9 @@ interface SystemUser {
   phone: string;
   role: "Admin" | "Engineer" | "Support";
   status: "Active" | "Inactive";
+  profilePhoto?: string;
+  address?: string;
+  engineerId?: string;
   lastLoginAt: string | null;
   lastActivityAt: string | null;
   createdAt: string;
@@ -37,7 +40,7 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"] };
+const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], address: "", profilePhoto: null as File | null };
 
 // ─── Reset Password Popup ─────────────────────────────────────────────────────
 const ResetPasswordPopup = ({ open, onClose, userId, userEmail }: { open: boolean; onClose: () => void; userId: string; userEmail: string }) => {
@@ -148,10 +151,12 @@ const UsersPage = () => {
   const [addDialog, setAddDialog]             = useState(false);
   const [addForm, setAddForm]                 = useState(emptyForm);
   const [showAddPassword, setShowAddPassword] = useState(false);
+  const addPhotoRef                           = useRef<HTMLInputElement>(null);
 
   const [editDialog, setEditDialog]           = useState<SystemUser | null>(null);
-  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"] });
+  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], address: "", profilePhoto: null as File | null });
   const [resetPopup, setResetPopup]           = useState(false);
+  const editPhotoRef                          = useRef<HTMLInputElement>(null);
 
   const [deleteDialog, setDeleteDialog]       = useState<SystemUser | null>(null);
 
@@ -190,7 +195,20 @@ const UsersPage = () => {
       return toast.error("Name, email, password and role are required");
     setSubmitting(true);
     try {
-      await api.post("/admin/system-users", addForm);
+      let payload: any = addForm;
+      if (addForm.role === "Engineer" && addForm.profilePhoto) {
+        const fd = new FormData();
+        fd.append("name", addForm.name);
+        fd.append("email", addForm.email);
+        fd.append("phone", addForm.phone);
+        fd.append("password", addForm.password);
+        fd.append("role", addForm.role);
+        fd.append("status", addForm.status);
+        if (addForm.address) fd.append("address", addForm.address);
+        fd.append("profilePhoto", addForm.profilePhoto);
+        payload = fd;
+      }
+      await api.post("/admin/system-users", payload);
       toast.success("User added successfully");
       setAddDialog(false);
       setAddForm(emptyForm);
@@ -206,7 +224,22 @@ const UsersPage = () => {
     if (!editDialog) return;
     setSubmitting(true);
     try {
-      await api.patch(`/admin/system-users/${editDialog._id}`, editForm);
+      let payload: any;
+      if (editForm.profilePhoto) {
+        const fd = new FormData();
+        fd.append("name", editForm.name);
+        fd.append("email", editForm.email);
+        fd.append("phone", editForm.phone);
+        fd.append("role", editForm.role);
+        fd.append("status", editForm.status);
+        if (editForm.address) fd.append("address", editForm.address);
+        fd.append("profilePhoto", editForm.profilePhoto);
+        payload = fd;
+      } else {
+        const { profilePhoto: _p, ...rest } = editForm;
+        payload = rest;
+      }
+      await api.patch(`/admin/system-users/${editDialog._id}`, payload);
       toast.success("User updated successfully");
       setEditDialog(null);
       fetchUsers(pagination.page);
@@ -246,10 +279,19 @@ const UsersPage = () => {
 
   const columns: Column<SystemUser>[] = [
     { key: "_id",   label: "No.",   render: (_u, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    {
+      key: "profilePhoto", label: "Photo", render: (u) => u.role === "Engineer"
+        ? u.profilePhoto
+          ? <img src={u.profilePhoto} alt={u.name} className="h-8 w-8 rounded-full object-cover" />
+          : <UserCircle className="h-8 w-8 text-muted-foreground" />
+        : <span className="text-muted-foreground text-sm">—</span>,
+    },
     { key: "name",  label: "Name",  render: (u) => <span className="font-medium">{u.name || "—"}</span> },
     { key: "email", label: "Email", render: (u) => <span className="text-sm">{u.email}</span> },
     { key: "phone", label: "Phone", render: (u) => <span className="text-sm">{u.phone || "—"}</span> },
     { key: "role",  label: "Role",  render: (u) => <StatusBadge status={u.role} /> },
+    { key: "engineerId", label: "Engineer ID", render: (u) => u.role === "Engineer" ? <span className="text-sm font-medium">{u.engineerId || "—"}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "address", label: "Address", render: (u) => u.role === "Engineer" ? <span className="text-sm">{u.address || "—"}</span> : <span className="text-muted-foreground text-sm">—</span> },
     {
       key: "status", label: "Status", render: (u) => (
         <div className="flex items-center gap-2">
@@ -275,9 +317,9 @@ const UsersPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: (u) => (
+      key: "actions", label: "Actions", sticky: true, render: (u) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status }); setResetPopup(false); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status, address: u.address ?? "", profilePhoto: null }); setResetPopup(false); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete" onClick={() => setDeleteDialog(u)}>
@@ -356,15 +398,40 @@ const UsersPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
-              <Select value={addForm.role} onValueChange={(v) => setAddForm(p => ({ ...p, role: v as SystemUser["role"] }))}>
+              <Select value={addForm.role} onValueChange={(v) => setAddForm(p => ({ ...p, role: v as SystemUser["role"], address: "", profilePhoto: null }))}>
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Engineer">Engineer</SelectItem>
-                  <SelectItem value="Admin" >Admin</SelectItem>
+                  <SelectItem value="Admin">Admin</SelectItem>
                   <SelectItem value="Support" disabled>Support</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {addForm.role === "Engineer" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Address</Label>
+                  <Input placeholder="Engineer's address" value={addForm.address} onChange={(e) => setAddForm(p => ({ ...p, address: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Profile Photo</Label>
+                  <div className="flex items-center gap-2">
+                    <input ref={addPhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => setAddForm(p => ({ ...p, profilePhoto: e.target.files?.[0] ?? null }))} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => addPhotoRef.current?.click()}>
+                      {addForm.profilePhoto ? "Change Photo" : "Upload Photo"}
+                    </Button>
+                    {addForm.profilePhoto && (
+                      <>
+                        <span className="text-sm text-muted-foreground truncate max-w-[160px]">{addForm.profilePhoto.name}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setAddForm(p => ({ ...p, profilePhoto: null })); if (addPhotoRef.current) addPhotoRef.current.value = ""; }}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={addForm.status} onValueChange={(v) => setAddForm(p => ({ ...p, status: v as SystemUser["status"] }))}>
@@ -414,11 +481,39 @@ const UsersPage = () => {
 
             <div className="space-y-2">
               <Label>Role</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm(p => ({ ...p, role: v as SystemUser["role"] }))}>
+              <Select value={editForm.role} onValueChange={(v) => setEditForm(p => ({ ...p, role: v as SystemUser["role"], address: "", profilePhoto: null }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} disabled={r !== "Engineer"}>{r}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+            {editForm.role === "Engineer" && (
+              <>
+                <div className="space-y-2">
+                  <Label>Address</Label>
+                  <Input placeholder="Engineer's address" value={editForm.address} onChange={(e) => setEditForm(p => ({ ...p, address: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Profile Photo</Label>
+                  <div className="flex items-center gap-2">
+                    {editDialog?.profilePhoto && !editForm.profilePhoto && (
+                      <img src={editDialog.profilePhoto} alt="current" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                    )}
+                    <input ref={editPhotoRef} type="file" accept="image/*" className="hidden" onChange={(e) => setEditForm(p => ({ ...p, profilePhoto: e.target.files?.[0] ?? null }))} />
+                    <Button type="button" variant="outline" size="sm" onClick={() => editPhotoRef.current?.click()}>
+                      {editDialog?.profilePhoto || editForm.profilePhoto ? "Change Photo" : "Upload Photo"}
+                    </Button>
+                    {editForm.profilePhoto && (
+                      <>
+                        <span className="text-sm text-muted-foreground truncate max-w-[160px]">{editForm.profilePhoto.name}</span>
+                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditForm(p => ({ ...p, profilePhoto: null })); if (editPhotoRef.current) editPhotoRef.current.value = ""; }}>
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
             <div className="space-y-2">
               <Label>Status</Label>
               <Select value={editForm.status} onValueChange={(v) => setEditForm(p => ({ ...p, status: v as SystemUser["status"] }))}>

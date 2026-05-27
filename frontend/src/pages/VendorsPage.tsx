@@ -287,7 +287,7 @@ const VendorsPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: (v) => (
+      key: "actions", label: "Actions", sticky: true, render: (v) => (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Purchase Machine" onClick={() => navigate(`/purchase-machines?vendorId=${v._id}`)}>
             <ShoppingBag className="h-4 w-4" />

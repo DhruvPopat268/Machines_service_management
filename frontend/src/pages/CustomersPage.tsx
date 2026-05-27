@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect } from "@/components/SearchableSelect";
-import { UserPlus, ShoppingCart, Edit, Trash2, Upload, Download } from "lucide-react";
+import { UserPlus, ShoppingCart, Edit, Trash2, Upload, Download, UserCircle, X } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
@@ -33,6 +34,8 @@ interface Customer {
   totalPurchases: number;
   status: "Active" | "Inactive";
   source: "manual" | "imported";
+  profilePhoto?: string;
+  userLocation?: { address?: string; latitude?: number; longitude?: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -49,38 +52,170 @@ const toISTDateParam = (htmlDate: string) => {
   return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const emptyForm = { name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", status: "Active" as Customer["status"] };
+const GMAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+
+// Load Google Maps JS SDK once
+let gmapsLoaded = false;
+const loadGMaps = () => new Promise<void>((resolve) => {
+  if (gmapsLoaded || (window as any).google?.maps?.places) { gmapsLoaded = true; resolve(); return; }
+  const script = document.createElement("script");
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places`;
+  script.async = true;
+  script.onload = () => { gmapsLoaded = true; resolve(); };
+  document.head.appendChild(script);
+});
+
+const emptyForm = { name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", status: "Active" as Customer["status"], profilePhoto: null as File | null, userLocation: null as { address: string; latitude?: number; longitude?: number } | null };
 const LIMIT = 10;
+
+interface Suggestion { place_id: string; description: string; }
 
 interface CustomerFormProps {
   form: typeof emptyForm;
   setForm: React.Dispatch<React.SetStateAction<typeof emptyForm>>;
   zoneOptions: { label: string; value: string }[];
+  existingPhoto?: string;
 }
 
-const CustomerForm = ({ form, setForm, zoneOptions }: CustomerFormProps) => (
-  <div className="space-y-4 py-4">
-    <div className="space-y-2"><Label htmlFor="cust-name">Name</Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
-    <div className="space-y-2"><Label htmlFor="cust-phone">Phone</Label><Input id="cust-phone" placeholder="e.g. 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
-    <div className="space-y-2"><Label htmlFor="cust-email">Email</Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
-    <div className="space-y-2"><Label htmlFor="cust-address">Address</Label><Input id="cust-address" placeholder="Full address" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} /></div>
-    <div className="space-y-2">
-      <Label>Zone</Label>
-      <SearchableSelect options={zoneOptions} value={form.zone} onChange={(v) => setForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
+const getLatLng = (placeId: string): Promise<{ latitude: number; longitude: number } | null> =>
+  new Promise((resolve) => {
+    const map = new (window as any).google.maps.Map(document.createElement("div"));
+    const service = new (window as any).google.maps.places.PlacesService(map);
+    service.getDetails({ placeId, fields: ["geometry"] }, (place: any, status: string) => {
+      if (status === "OK" && place?.geometry?.location) {
+        resolve({ latitude: place.geometry.location.lat(), longitude: place.geometry.location.lng() });
+      } else {
+        resolve(null);
+      }
+    });
+  });
+
+const CustomerForm = ({ form, setForm, zoneOptions, existingPhoto }: CustomerFormProps) => {
+  const photoRef                                  = useRef<HTMLInputElement>(null);
+  const [suggestions, setSuggestions]             = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions]     = useState(false);
+  const debounceRef                               = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsRef                            = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node))
+        setShowSuggestions(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const fetchSuggestions = (value: string) => {
+    if (!GMAPS_KEY || value.trim().length < 3) { setSuggestions([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await loadGMaps();
+        const service = new (window as any).google.maps.places.AutocompleteService();
+        service.getPlacePredictions({ input: value, language: "en", componentRestrictions: { country: "in" } }, (predictions: any[], status: string) => {
+          if (status === "OK" && predictions) {
+            setSuggestions(predictions.map((p: any) => ({ place_id: p.place_id, description: p.description })));
+            setShowSuggestions(true);
+          } else {
+            setSuggestions([]);
+          }
+        });
+      } catch { setSuggestions([]); }
+    }, 400);
+  };
+
+  const handleAddressChange = (value: string) => {
+    setForm((p) => ({ ...p, address: value, userLocation: null }));
+    fetchSuggestions(value);
+  };
+
+  const handleSuggestionClick = async (description: string, placeId: string) => {
+    setForm((p) => ({ ...p, address: description, userLocation: { address: description } }));
+    setSuggestions([]);
+    setShowSuggestions(false);
+    try {
+      await loadGMaps();
+      const coords = await getLatLng(placeId);
+      if (coords) setForm((p) => ({ ...p, userLocation: { address: description, ...coords } }));
+    } catch { /* coords optional */ }
+  };
+
+  return (
+    <div className="space-y-4 py-4">
+      {/* Profile Photo */}
+      <div className="space-y-2">
+        <Label>Profile Photo</Label>
+        <div className="flex items-center gap-3">
+          {form.profilePhoto
+            ? <img src={URL.createObjectURL(form.profilePhoto)} alt="preview" className="h-12 w-12 rounded-full object-cover shrink-0" />
+            : existingPhoto
+              ? <img src={existingPhoto} alt="current" className="h-12 w-12 rounded-full object-cover shrink-0" />
+              : <UserCircle className="h-12 w-12 text-muted-foreground shrink-0" />
+          }
+          <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={(e) => setForm((p) => ({ ...p, profilePhoto: e.target.files?.[0] ?? null }))} />
+          <Button type="button" variant="outline" size="sm" onClick={() => photoRef.current?.click()}>
+            {existingPhoto || form.profilePhoto ? "Change Photo" : "Upload Photo"}
+          </Button>
+          {form.profilePhoto && (
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm((p) => ({ ...p, profilePhoto: null })); if (photoRef.current) photoRef.current.value = ""; }}>
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2"><Label htmlFor="cust-name">Name <span className="text-destructive">*</span></Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-phone">Phone <span className="text-destructive">*</span></Label><Input id="cust-phone" placeholder="e.g. 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-email">Email <span className="text-destructive">*</span></Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
+
+      {/* Address with Google Places autocomplete */}
+      <div className="space-y-2">
+        <Label htmlFor="cust-address">Address</Label>
+        <div className="relative" ref={suggestionsRef}>
+          <Input
+            id="cust-address"
+            placeholder="Start typing an address..."
+            value={form.address}
+            onChange={(e) => handleAddressChange(e.target.value)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            autoComplete="off"
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-52 overflow-y-auto">
+              {suggestions.map((s) => (
+                <button
+                  key={s.place_id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                  onMouseDown={(e) => { e.preventDefault(); handleSuggestionClick(s.description, s.place_id); }}
+                >
+                  {s.description}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Zone</Label>
+        <SearchableSelect options={zoneOptions} value={form.zone} onChange={(v) => setForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
+      </div>
+      <div className="space-y-2"><Label htmlFor="cust-gst">GST Number</Label><Input id="cust-gst" placeholder="e.g. 27AABCA1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
+      <div className="space-y-2">
+        <Label htmlFor="cust-status">Status</Label>
+        <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Customer["status"] }))}>
+          <SelectTrigger id="cust-status"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Active">Active</SelectItem>
+            <SelectItem value="Inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
-    <div className="space-y-2"><Label htmlFor="cust-gst">GST Number</Label><Input id="cust-gst" placeholder="e.g. 27AABCA1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
-    <div className="space-y-2">
-      <Label htmlFor="cust-status">Status</Label>
-      <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Customer["status"] }))}>
-        <SelectTrigger id="cust-status"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="Active">Active</SelectItem>
-          <SelectItem value="Inactive">Inactive</SelectItem>
-        </SelectContent>
-      </Select>
-    </div>
-  </div>
-);
+  );
+};
 
 const CustomersPage = () => {
   const navigate = useNavigate();
@@ -173,11 +308,23 @@ const CustomersPage = () => {
     if (!addForm.email) return toast.error("Email is required");
     setSubmitting(true);
     try {
-      const payload = {
-        ...addForm,
-        gstNumber: addForm.gstNumber.toUpperCase(),
-        zone: addForm.zone || undefined,
-      };
+      let payload: any;
+      if (addForm.profilePhoto) {
+        const fd = new FormData();
+        fd.append("name", addForm.name);
+        fd.append("phone", addForm.phone);
+        fd.append("email", addForm.email);
+        if (addForm.userLocation) fd.append("userLocation", JSON.stringify(addForm.userLocation));
+        if (addForm.zone) fd.append("zone", addForm.zone);
+        if (addForm.gstNumber) fd.append("gstNumber", addForm.gstNumber.toUpperCase());
+        fd.append("status", addForm.status);
+        fd.append("profilePhoto", addForm.profilePhoto);
+        payload = fd;
+      } else {
+        const { address: _a, profilePhoto: _p, ...rest } = addForm;
+        payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || undefined };
+        if (!addForm.userLocation) delete payload.userLocation;
+      }
       await api.post("/admin/customers", payload);
       toast.success("Customer added successfully");
       setAddDialog(false);
@@ -197,11 +344,23 @@ const CustomersPage = () => {
     if (!editForm.email) return toast.error("Email is required");
     setSubmitting(true);
     try {
-      const payload = {
-        ...editForm,
-        gstNumber: editForm.gstNumber.toUpperCase(),
-        zone: editForm.zone || null,
-      };
+      let payload: any;
+      if (editForm.profilePhoto) {
+        const fd = new FormData();
+        fd.append("name", editForm.name);
+        fd.append("phone", editForm.phone);
+        fd.append("email", editForm.email);
+        if (editForm.userLocation) fd.append("userLocation", JSON.stringify(editForm.userLocation));
+        fd.append("zone", editForm.zone || "");
+        if (editForm.gstNumber) fd.append("gstNumber", editForm.gstNumber.toUpperCase());
+        fd.append("status", editForm.status);
+        fd.append("profilePhoto", editForm.profilePhoto);
+        payload = fd;
+      } else {
+        const { address: _a, profilePhoto: _p, ...rest } = editForm;
+        payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || null };
+        if (!editForm.userLocation) delete payload.userLocation;
+      }
       await api.patch(`/admin/customers/${editDialog._id}`, payload);
       toast.success("Customer updated successfully");
       setEditDialog(null);
@@ -294,10 +453,27 @@ const CustomersPage = () => {
 
   const columns: Column<Customer>[] = [
     { key: "_id", label: "No.", render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    {
+      key: "profilePhoto", label: "Photo", render: (c) => c.profilePhoto
+        ? <img src={c.profilePhoto} alt={c.name} className="h-8 w-8 rounded-full object-cover" />
+        : <UserCircle className="h-8 w-8 text-muted-foreground" />,
+    },
     { key: "name", label: "Name", render: (c) => <span className="font-medium">{c.name}</span> },
     { key: "phone", label: "Phone", render: (c) => <span className="text-sm">{c.phone}</span> },
     { key: "email", label: "Email", render: (c) => <span className="text-sm">{c.email}</span> },
-    { key: "address", label: "Address", render: (c) => <span className="max-w-[180px] truncate block text-sm">{c.address || "—"}</span> },
+    { key: "address", label: "Address", render: (c) => {
+      const addr = c.userLocation?.address || c.address || "";
+      return addr ? (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="max-w-[180px] truncate block text-sm cursor-default">{addr}</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs whitespace-normal">{addr}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : <span className="text-muted-foreground text-sm">—</span>;
+    } },
     { key: "zone", label: "Zone", render: (c) => c.zone ? <span className="text-sm">{c.zone.name}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "gstNumber", label: "GST Number", render: (c) => c.gstNumber ? <span className="font-mono text-sm">{c.gstNumber}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "totalPurchases", label: "Purchases", render: (c) => <span className="font-medium text-sm">{c.totalPurchases}</span> },
@@ -329,10 +505,10 @@ const CustomersPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: (c) => (
+      key: "actions", label: "Actions", sticky: true, render: (c) => (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Sell Machine" onClick={() => navigate(`/sell-machines?customerId=${c._id}`)}><ShoppingCart className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${c.name}`} onClick={() => { setEditDialog(c); setEditForm({ name: c.name, phone: c.phone, email: c.email, address: c.address, zone: c.zone?._id || "", gstNumber: c.gstNumber, status: c.status }); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${c.name}`} onClick={() => { setEditDialog(c); setEditForm({ name: c.name, phone: c.phone, email: c.email, address: c.userLocation?.address || c.address || "", zone: c.zone?._id || "", gstNumber: c.gstNumber, status: c.status, profilePhoto: null, userLocation: c.userLocation ? { address: c.userLocation.address || "", latitude: c.userLocation.latitude, longitude: c.userLocation.longitude } : null }); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${c.name}`} onClick={() => setDeleteDialog(c)}>
@@ -385,7 +561,7 @@ const CustomersPage = () => {
       <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Edit Customer</DialogTitle></DialogHeader>
-          <CustomerForm form={editForm} setForm={setEditForm} zoneOptions={zoneOptions} />
+          <CustomerForm form={editForm} setForm={setEditForm} zoneOptions={zoneOptions} existingPhoto={editDialog?.profilePhoto} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialog(null)}>Cancel</Button>
             <Button onClick={handleEdit} disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>

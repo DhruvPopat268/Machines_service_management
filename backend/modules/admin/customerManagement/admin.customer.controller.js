@@ -1,4 +1,7 @@
 const mongoose = require("mongoose");
+const path = require("path");
+const fs = require("fs/promises");
+const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const xlsx = require("xlsx");
 const Customer = require("./admin.customer.model");
@@ -6,6 +9,29 @@ const Zone = require("../zoneManagement/admin.zone.model");
 const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRow, validateGST } = require("./admin.customer.validator");
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 const { sendWelcomeCredentials } = require("../../../utils/emailService");
+const generateAvatar = require("../../../utils/generateAvatar");
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images"
+  : path.join(__dirname, "../../../cloud/images");
+
+const uploadProfilePhoto = async (fileBuffer) => {
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  const filename = `profile_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+  await sharp(fileBuffer)
+    .resize({ width: 400, withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/${filename}`;
+};
+
+const deleteProfilePhoto = async (url) => {
+  try {
+    const filename = url.split("/app/cloud/images/")[1];
+    if (!filename) return;
+    await fs.unlink(path.join(IMAGES_DIR, filename));
+  } catch (_) {}
+};
 
 const generatePassword = () => {
   const upper  = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -99,10 +125,13 @@ const getAll = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, phone, email, address, zone, status } = req.body;
+    const { name, phone, email, zone, status } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
+    const userLocation = req.body.userLocation
+      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
+      : undefined;
 
-    const error = validateCreateCustomer({ name, phone, email, address, zone, status });
+    const error = validateCreateCustomer({ name, phone, email, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     if (gstNumber) {
@@ -128,15 +157,40 @@ const create = async (req, res) => {
       zoneId = zone;
     }
 
+    let profilePhoto;
+    if (req.file) {
+      try {
+        profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    } else {
+      try {
+        profilePhoto = await generateAvatar(name.trim());
+      } catch (_) {}
+    }
+
     const defaultPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
-    const customer = await Customer.create({
-      name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
-      address: address ? String(address).trim() : "",
-      zone: zoneId, gstNumber, status, source: "manual",
-      password: hashedPassword,
-    });
+    let customer;
+    try {
+      customer = await Customer.create({
+        name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
+        zone: zoneId, gstNumber, status, source: "manual",
+        password: hashedPassword,
+        ...(profilePhoto  && { profilePhoto }),
+        ...(userLocation  && { userLocation }),
+      });
+    } catch (dbErr) {
+      if (profilePhoto) await deleteProfilePhoto(profilePhoto);
+      if (dbErr.code === 11000) {
+        const key = Object.keys(dbErr.keyPattern || {})[0];
+        const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+        return res.status(409).json({ success: false, message: msg });
+      }
+      return res.status(500).json({ success: false, message: dbErr.message });
+    }
 
     await sendWelcomeCredentials(customer.name, customer.email, defaultPassword);
 
@@ -158,36 +212,54 @@ const update = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid customer ID" });
 
-    const { name, phone, email, address, zone, status } = req.body;
+    const { name, phone, email, zone, status } = req.body;
     const gstNumber = req.body.gstNumber !== undefined
       ? String(req.body.gstNumber).trim().toUpperCase()
       : undefined;
+    const userLocation = req.body.userLocation !== undefined
+      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
+      : undefined;
 
-    const error = validateUpdateCustomer({ name, phone, email, address, zone, status });
+    const error = validateUpdateCustomer({ name, phone, email, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};
-    if (name !== undefined)    updateData.name    = String(name).trim();
-    if (phone !== undefined)   updateData.phone   = String(phone).trim();
-    if (email !== undefined)   updateData.email   = String(email).trim().toLowerCase();
-    if (address !== undefined) updateData.address = String(address).trim();
-    if (status !== undefined)  updateData.status  = status;
+    if (name      !== undefined) updateData.name      = String(name).trim();
+    if (phone     !== undefined) updateData.phone     = String(phone).trim();
+    if (email     !== undefined) updateData.email     = String(email).trim().toLowerCase();
+    if (status    !== undefined) updateData.status    = status;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
+    if (userLocation !== undefined) updateData.userLocation = userLocation;
+
+    if (req.file) {
+      try {
+        updateData.profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    }
 
     if (updateData.gstNumber) {
       const gstError = validateGST(updateData.gstNumber);
-      if (gstError) return res.status(400).json({ success: false, message: gstError });
+      if (gstError) {
+        if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
+        return res.status(400).json({ success: false, message: gstError });
+      }
     }
 
     if (zone !== undefined) {
       if (zone === null || zone === "") {
         updateData.zone = null;
       } else {
-        if (!mongoose.isValidObjectId(zone))
+        if (!mongoose.isValidObjectId(zone)) {
+          if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
           return res.status(400).json({ success: false, message: "Invalid zone ID" });
+        }
         const zoneExists = await Zone.findById(zone);
-        if (!zoneExists)
+        if (!zoneExists) {
+          if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
           return res.status(404).json({ success: false, message: "Zone not found" });
+        }
         updateData.zone = zone;
       }
     }
@@ -197,23 +269,53 @@ const update = async (req, res) => {
 
     if (updateData.gstNumber) {
       const conflict = await Customer.findOne({ gstNumber: updateData.gstNumber, _id: { $ne: id } });
-      if (conflict)
+      if (conflict) {
+        if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
         return res.status(409).json({ success: false, message: "GST number already exists" });
+      }
     }
     if (updateData.phone) {
       const conflict = await Customer.findOne({ phone: updateData.phone, _id: { $ne: id } });
-      if (conflict) return res.status(409).json({ success: false, message: "Phone number already exists" });
+      if (conflict) {
+        if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
+        return res.status(409).json({ success: false, message: "Phone number already exists" });
+      }
     }
     if (updateData.email) {
       const conflict = await Customer.findOne({ email: updateData.email, _id: { $ne: id } });
-      if (conflict) return res.status(409).json({ success: false, message: "Email already exists" });
+      if (conflict) {
+        if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
+        return res.status(409).json({ success: false, message: "Email already exists" });
+      }
     }
 
-    const customer = await Customer.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" }).populate("zone", "name code");
-    if (!customer)
+    const existing = await Customer.findById(id).select("profilePhoto");
+    if (!existing) {
+      if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
       return res.status(404).json({ success: false, message: "Customer not found" });
+    }
 
-    res.status(200).json({ success: true, data: customer });
+    if (!req.file && !existing.profilePhoto) {
+      try { updateData.profilePhoto = await generateAvatar((updateData.name || existing.name).trim()); } catch (_) {}
+    }
+
+    let user;
+    try {
+      user = await Customer.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" }).populate("zone", "name code");
+    } catch (dbErr) {
+      if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
+      if (dbErr.code === 11000) {
+        const key = Object.keys(dbErr.keyPattern || {})[0];
+        const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+        return res.status(409).json({ success: false, message: msg });
+      }
+      return res.status(500).json({ success: false, message: dbErr.message });
+    }
+
+    if (updateData.profilePhoto && existing.profilePhoto)
+      await deleteProfilePhoto(existing.profilePhoto);
+
+    res.status(200).json({ success: true, data: user });
   } catch (err) {
     if (err.code === 11000) {
       const key = Object.keys(err.keyPattern || {})[0];
@@ -233,6 +335,8 @@ const remove = async (req, res) => {
     const customer = await Customer.findByIdAndDelete(id);
     if (!customer)
       return res.status(404).json({ success: false, message: "Customer not found" });
+
+    if (customer.profilePhoto) await deleteProfilePhoto(customer.profilePhoto);
 
     res.status(200).json({ success: true, message: "Customer deleted successfully" });
   } catch (err) {

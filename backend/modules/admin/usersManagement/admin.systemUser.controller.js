@@ -8,6 +8,7 @@ const AdminUserSession = require("../auth/admin.user.session.model");
 const validatePassword = require("../../../utils/validatePassword");
 const { validateCreateSystemUser, validateUpdateSystemUser } = require("./admin.systemUser.validator");
 const { sendAdminChangePasswordOtp, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendSystemUserPasswordResetSuccess } = require("../../../utils/emailService");
+const generateAvatar = require("../../../utils/generateAvatar");
 
 const IMAGES_DIR = process.env.NODE_ENV === "production"
   ? "/app/cloud/images"
@@ -133,6 +134,8 @@ const createSystemUser = async (req, res) => {
       } catch (imgErr) {
         return res.status(400).json({ success: false, message: imgErr.message });
       }
+    } else if (role === "Engineer") {
+      try { profilePhoto = await generateAvatar(name.trim()); } catch (_) {}
     }
 
     let engineerId;
@@ -218,6 +221,11 @@ const updateSystemUser = async (req, res) => {
     if (!existing) {
       if (update.profilePhoto) await deleteProfilePhoto(update.profilePhoto);
       return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const effectiveRole = update.role || existing.role;
+    if (!req.file && effectiveRole === "Engineer" && !existing.profilePhoto && !update.profilePhoto) {
+      try { update.profilePhoto = await generateAvatar((update.name || existing.name).trim()); } catch (_) {}
     }
 
     if (update.role === "Engineer" && !existing.engineerId)

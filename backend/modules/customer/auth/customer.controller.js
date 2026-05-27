@@ -1,12 +1,35 @@
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
+const path = require("path");
+const fs   = require("fs/promises");
+const sharp = require("sharp");
 const Customer = require("../../admin/customerManagement/admin.customer.model");
 const Zone = require("../../admin/zoneManagement/admin.zone.model");
 const CustomerSession = require("./customer.session.model");
 const { validateSignup, validateLogin, validatePassword } = require("./customer.validator");
 const { validateGST } = require("../../admin/customerManagement/admin.customer.validator");
 const { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification } = require("../../../utils/emailService");
+const generateAvatar = require("../../../utils/generateAvatar");
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images"
+  : path.join(__dirname, "../../../cloud/images");
+
+const uploadProfilePhoto = async (fileBuffer) => {
+  await fs.mkdir(IMAGES_DIR, { recursive: true });
+  const filename = `profile_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+  await sharp(fileBuffer).resize({ width: 400, withoutEnlargement: true }).webp({ quality: 80 }).toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/${filename}`;
+};
+
+const deleteProfilePhoto = async (url) => {
+  try {
+    const filename = url.split("/app/cloud/images/")[1];
+    if (!filename) return;
+    await fs.unlink(path.join(IMAGES_DIR, filename));
+  } catch (_) {}
+};
 
 const getActiveZones = async (req, res) => {
   try {
@@ -21,6 +44,9 @@ const signup = async (req, res) => {
   try {
     const { name, phone, email, password, address, zone } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
+    const userLocation = req.body.userLocation
+      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
+      : undefined;
 
     const { isValid, errors } = validateSignup({ name, phone, email, password, address, zone });
     if (!isValid)
@@ -50,6 +76,17 @@ const signup = async (req, res) => {
     if (zoneExists.status === "Inactive")
       return res.status(400).json({ success: false, message: "Selected zone is inactive" });
 
+    let profilePhoto;
+    if (req.file) {
+      try {
+        profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    } else {
+      try { profilePhoto = await generateAvatar(name.trim()); } catch (_) {}
+    }
+
     const customer = await Customer.create({
       name: name.trim(),
       phone: phone.trim(),
@@ -60,6 +97,8 @@ const signup = async (req, res) => {
       gstNumber,
       status: "Active",
       source: "manual",
+      ...(profilePhoto   && { profilePhoto }),
+      ...(userLocation   && { userLocation }),
     });
 
     const token = jwt.sign({ id: customer._id, email: customer.email }, process.env.CUSTOMER_JWT_SECRET, {
@@ -220,6 +259,9 @@ const updateProfile = async (req, res) => {
   try {
     const customerId = req.customer.id;
     const { name, phone, address, zone, gstNumber } = req.body;
+    const userLocation = req.body.userLocation !== undefined
+      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
+      : undefined;
 
     const customer = await Customer.findById(customerId);
     if (!customer)
@@ -277,10 +319,25 @@ const updateProfile = async (req, res) => {
       }
     }
 
+    if (userLocation !== undefined) updates.userLocation = userLocation;
+
+    if (req.file) {
+      try {
+        updates.profilePhoto = await uploadProfilePhoto(req.file.buffer);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
+    } else if (!customer.profilePhoto) {
+      try { updates.profilePhoto = await generateAvatar((updates.name || customer.name).trim()); } catch (_) {}
+    }
+
     if (Object.keys(updates).length === 0)
       return res.status(400).json({ success: false, message: "No fields to update" });
 
     const updatedCustomer = await Customer.findByIdAndUpdate(customerId, updates, { new: true }).select("-password");
+
+    if (updates.profilePhoto && customer.profilePhoto)
+      await deleteProfilePhoto(customer.profilePhoto);
 
     res.status(200).json({ success: true, message: "Profile updated successfully", data: updatedCustomer });
   } catch (err) {

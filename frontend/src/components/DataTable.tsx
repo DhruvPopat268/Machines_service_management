@@ -9,6 +9,7 @@ export interface Column<T> {
   key: string;
   label: string;
   className?: string;
+  sticky?: boolean;
   render?: (item: T, index: number) => React.ReactNode;
 }
 
@@ -31,9 +32,14 @@ export function DataTable<T extends Record<string, any>>({
       <div className="rounded-lg border bg-card overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <TableRow className="bg-muted/30 hover:bg-muted/30 relative">
               {columns.map((col) => (
-                <TableHead key={col.key} className={`font-semibold text-foreground/70 text-xs uppercase tracking-wider ${col.className ?? ""}`}>
+                <TableHead
+                  key={col.key}
+                  className={`font-semibold text-foreground/70 text-xs uppercase tracking-wider ${
+                    col.sticky ? "sticky right-0 z-20 bg-muted shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]" : ""
+                  } ${col.className ?? ""}`}
+                >
                   {col.label}
                 </TableHead>
               ))}
@@ -54,7 +60,12 @@ export function DataTable<T extends Record<string, any>>({
                   onClick={() => onRowClick?.(item)}
                 >
                   {columns.map((col) => (
-                    <TableCell key={col.key} className={col.className ?? ""}>
+                    <TableCell
+                      key={col.key}
+                      className={`${
+                        col.sticky ? "sticky right-0 bg-background shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]" : ""
+                      } ${col.className ?? ""}`}
+                    >
                       {col.render ? col.render(item, page * pageSize + i) : item[col.key]}
                     </TableCell>
                   ))}

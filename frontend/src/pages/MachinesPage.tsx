@@ -329,7 +329,7 @@ const MachinesPage = () => {
       },
     },
     {
-      key: "actions", label: "Actions", render: (m) => (
+      key: "actions", label: "Actions", sticky: true, render: (m) => (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}`)} title="View">
             <Eye className="h-4 w-4" />
