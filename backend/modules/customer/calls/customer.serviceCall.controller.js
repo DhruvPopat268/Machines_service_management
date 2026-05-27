@@ -56,8 +56,15 @@ const raiseServiceCall = async (req, res) => {
       try {
         parsedCustomerLocation = typeof customerLocation === "string" ? JSON.parse(customerLocation) : customerLocation;
       } catch (_) {
-        parsedCustomerLocation = undefined;
+        return res.status(400).json({ success: false, message: "Invalid customerLocation format" });
       }
+      const { address: locAddr, latitude: lat, longitude: lng } = parsedCustomerLocation;
+      if (!locAddr || typeof locAddr !== "string" || !locAddr.trim())
+        return res.status(400).json({ success: false, message: "customerLocation.address must be a non-empty string" });
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90)
+        return res.status(400).json({ success: false, message: "customerLocation.latitude must be a number between -90 and 90" });
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180)
+        return res.status(400).json({ success: false, message: "customerLocation.longitude must be a number between -180 and 180" });
     }
 
     const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
