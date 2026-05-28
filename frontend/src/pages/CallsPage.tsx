@@ -287,7 +287,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  {["Open","Assigned","In Progress","On Hold","Completed","Cancelled"].map(s => (
+                  {["Open","Assigned","Travel Started","Reached Location","In Progress","On Hold","Completed","Cancelled"].map(s => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
                 </SelectContent>
