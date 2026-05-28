@@ -170,4 +170,30 @@ const startTravel = async (req, res) => {
   }
 };
 
-module.exports = { getActiveCalls, getReimbursementPreview, startTravel };
+const reachedLocation = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+    const { callId } = req.body;
+
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    const call = await ServiceCall.findById(callId);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    if (call.status !== "Travel Started")
+      return res.status(400).json({ success: false, message: "Call is not in Travel Started status" });
+
+    if (call.engineerInfo?._id?.toString() !== engineerId)
+      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    await call.updateOne({ status: "Reached Location", "dates.reachedLocation": new Date() });
+
+    return res.status(200).json({ success: true, message: "Reached location updated" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation };
