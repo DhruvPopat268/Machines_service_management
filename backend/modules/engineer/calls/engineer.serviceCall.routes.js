@@ -5,7 +5,7 @@ const engineerAuthMiddleware = require("../../../middleware/engineer.auth.middle
 router.use(engineerAuthMiddleware);
 
 router.get("/active", getActiveCalls);
-router.get("/:callId/reimbursement-preview", getReimbursementPreview);
+router.post("/reimbursement-preview", getReimbursementPreview);
 router.patch("/travel-started", startTravel);
 
 module.exports = router;

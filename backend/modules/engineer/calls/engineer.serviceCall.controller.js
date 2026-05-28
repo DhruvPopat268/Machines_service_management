@@ -53,14 +53,14 @@ const getActiveCalls = async (req, res) => {
 const getReimbursementPreview = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
-    const { callId } = req.params;
-    const { currentLatitude, currentLongitude } = req.query;
+    const { callId, currentLocation } = req.body;
+    const { latitude: currentLatitude, longitude: currentLongitude } = currentLocation || {};
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
     if (!currentLatitude || !currentLongitude)
-      return res.status(400).json({ success: false, message: "currentLatitude and currentLongitude are required" });
+      return res.status(400).json({ success: false, message: "currentLocation.latitude and currentLocation.longitude are required" });
 
     const call = await ServiceCall.findById(callId);
     if (!call)
