@@ -9,15 +9,7 @@ const reverseGeocode = async (lat, lng) => {
   const { data } = await axios.get("https://maps.googleapis.com/maps/api/geocode/json", {
     params: { latlng: `${lat},${lng}`, key: MAPS_KEY },
   });
-  const result = data.results?.[0];
-  if (!result) return "";
-  const get = (type) => result.address_components?.find(c => c.types.includes(type))?.long_name || "";
-  const parts = [
-    get("sublocality_level_1") || get("sublocality"),
-    get("locality"),
-    get("administrative_area_level_1"),
-  ].filter(Boolean);
-  return parts.join(", ");
+  return data.results?.[0]?.formatted_address || "";
 };
 
 const getRoadDistanceKm = async (originLat, originLng, destLat, destLng) => {
