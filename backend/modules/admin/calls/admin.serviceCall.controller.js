@@ -1,5 +1,6 @@
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const mongoose = require("mongoose");
+const AdminUser = require("../auth/admin.user.model");
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -106,4 +107,105 @@ const getCallDetail = async (req, res) => {
   }
 };
 
-module.exports = { getCalls, getCallDetail };
+const assignEngineer = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { engineerId } = req.body;
+
+    if (!mongoose.isValidObjectId(engineerId))
+      return res.status(400).json({ success: false, message: "Invalid engineerId" });
+
+    const engineer = await AdminUser.findOne({ _id: engineerId, role: "Engineer", status: "Active" })
+      .select("_id engineerId name email phone");
+    if (!engineer)
+      return res.status(404).json({ success: false, message: "Active engineer not found" });
+
+    const call = await ServiceCall.findOne({ _id: id, status: { $in: ["Open", "Assigned"] } });
+    if (!call)
+      return res.status(400).json({ success: false, message: "Call not found or cannot be assigned in current status" });
+
+    await call.updateOne({
+      engineerInfo: {
+        _id:        engineer._id,
+        identityId: engineer.engineerId,
+        name:       engineer.name,
+        email:      engineer.email,
+        phone:      engineer.phone,
+      },
+      status: "Assigned",
+      "dates.assigned": new Date(),
+    });
+
+    return res.status(200).json({ success: true, data: await ServiceCall.findById(id) });
+  } catch (error) {
+    console.error("Error assigning engineer:", error);
+    return res.status(500).json({ success: false, message: "Failed to assign engineer" });
+  }
+};
+
+const VALID_STATUSES = ["Open", "Assigned", "Travel Started", "Reached Location", "In Progress", "On Hold", "Completed", "Cancelled"];
+const VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+
+const STATUS_TRANSITIONS = {
+  "Open":             ["Assigned", "Cancelled"],
+  "Assigned":         ["Travel Started", "Cancelled"],
+  "Travel Started":   ["Reached Location", "Cancelled"],
+  "Reached Location": ["In Progress", "Cancelled"],
+  "In Progress":      ["On Hold", "Completed", "Cancelled"],
+  "On Hold":          ["In Progress", "Cancelled"],
+};
+
+const STATUS_DATE_MAP = {
+  "Assigned":         "dates.assigned",
+  "Travel Started":   "dates.travelStarted",
+  "Reached Location": "dates.reachedLocation",
+  "In Progress":      "dates.inProgress",
+  "On Hold":          "dates.onHold",
+  "Completed":        "dates.completed",
+  "Cancelled":        "dates.cancelled",
+};
+
+const updateCall = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { note, priority, status } = req.body;
+
+    const call = await ServiceCall.findById(id);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Service call not found" });
+
+    const update = {};
+
+    if (note !== undefined) {
+      if (typeof note !== "string" || !note.trim())
+        return res.status(400).json({ success: false, message: "Note cannot be empty" });
+      update.note = note.trim();
+    }
+
+    if (priority !== undefined) {
+      if (!VALID_PRIORITIES.includes(priority))
+        return res.status(400).json({ success: false, message: "Invalid priority" });
+      update.priority = priority;
+    }
+
+    if (status !== undefined) {
+      const allowed = STATUS_TRANSITIONS[call.status] ?? [];
+      if (!allowed.includes(status))
+        return res.status(400).json({ success: false, message: `Cannot transition from ${call.status} to ${status}` });
+      update.status = status;
+      const dateField = STATUS_DATE_MAP[status];
+      if (dateField) update[dateField] = new Date();
+    }
+
+    if (!Object.keys(update).length)
+      return res.status(400).json({ success: false, message: "Nothing to update" });
+
+    const updated = await ServiceCall.findByIdAndUpdate(id, update, { new: true });
+    return res.status(200).json({ success: true, data: updated });
+  } catch (err) {
+    console.error("Error updating call:", err);
+    return res.status(500).json({ success: false, message: "Failed to update call" });
+  }
+};
+
+module.exports = { getCalls, getCallDetail, assignEngineer, updateCall };

@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { serviceCallsApi } from "@/services/serviceCallsApi";
-import { engineers } from "@/data/dummyData";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { serviceCallsApi, engineersApi } from "@/services/serviceCallsApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -13,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Spinner from "@/components/Spinner";
 
 const formatDate = (dateString: string) => {
@@ -26,16 +25,20 @@ const CallDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [attachmentsDialog, setAttachmentsDialog] = useState<{ machineName: string; images: string[] } | null>(null);
   const [assignDialog, setAssignDialog] = useState(false);
   const [noteDialog, setNoteDialog] = useState(false);
   const [priorityDialog, setPriorityDialog] = useState(false);
   const [statusDialog, setStatusDialog] = useState(false);
-  const [selectedEngineer, setSelectedEngineer] = useState("");
+  const [selectedEngineerId, setSelectedEngineerId] = useState("");
+  const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+
+  const [engineers, setEngineers] = useState<{ _id: string; name: string }[]>([]);
 
   const { data: call, isLoading, isFetching } = useQuery({
     queryKey: ["serviceCall", id],
@@ -43,6 +46,10 @@ const CallDetailsPage = () => {
     enabled: !!id,
     staleTime: 0,
   });
+
+  useEffect(() => {
+    engineersApi.getActive().then(setEngineers).catch(() => {});
+  }, []);
 
   if (isLoading || isFetching) return <Spinner />;
   if (!call) return <div className="text-center py-12 text-muted-foreground">Call not found</div>;
@@ -54,6 +61,17 @@ const CallDetailsPage = () => {
     { label: "On Hold", date: formatDate(call.dates.onHold || ""), description: "Work paused", completed: !!call.dates.onHold, active: call.status === "On Hold" },
     { label: "Completed", date: formatDate(call.dates.completed || ""), description: "Issue resolved", completed: !!call.dates.completed },
   ];
+
+  const statusOptions: Record<string, string[]> = {
+    "Open":             ["Assigned", "Cancelled"],
+    "Assigned":         ["Travel Started", "Cancelled"],
+    "Travel Started":   ["Reached Location", "Cancelled"],
+    "Reached Location": ["In Progress", "Cancelled"],
+    "In Progress":      ["On Hold", "Completed", "Cancelled"],
+    "On Hold":          ["In Progress", "Cancelled"],
+  };
+
+  const nextStatuses = statusOptions[call.status] ?? [];
 
   return (
     <div className="space-y-6">
@@ -70,19 +88,23 @@ const CallDetailsPage = () => {
         </div>
         {/* Quick action buttons */}
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineer(call.engineerInfo?.name || ""); setAssignDialog(true); }}>
+          {(call.status === "Open" || call.status === "Assigned") && (
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setAssignDialog(true); }}>
             {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
             {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
           </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => setNoteDialog(true)}>
+          )}
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setNote(call.note || ""); setNoteDialog(true); }}>
             <StickyNote className="h-4 w-4" /> Add Note
           </Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedPriority(call.priority || ""); setPriorityDialog(true); }}>
             <Flag className="h-4 w-4" /> Set Priority
           </Button>
+          {nextStatuses.length > 0 && (
           <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedStatus(call.status); setStatusDialog(true); }}>
             <RefreshCw className="h-4 w-4" /> Update Status
           </Button>
+          )}
         </div>
       </div>
 
@@ -114,10 +136,11 @@ const CallDetailsPage = () => {
                   </p>
                 </div>
                 {call.engineerInfo && (
-                  <div>
-                    <p className="text-muted-foreground">Engineer ID</p>
-                    <p className="font-medium">{call.engineerInfo.engineerId}</p>
-                  </div>
+                  <>
+                    <div><p className="text-muted-foreground">Engineer ID</p><p className="font-medium">{call.engineerInfo.identityId || "N/A"}</p></div>
+                    <div><p className="text-muted-foreground">Phone</p><p className="font-medium">{call.engineerInfo.phone || "N/A"}</p></div>
+                    <div><p className="text-muted-foreground">Email</p><p className="font-medium">{call.engineerInfo.email || "N/A"}</p></div>
+                  </>
                 )}
               </div>
             </CardContent>
@@ -137,6 +160,17 @@ const CallDetailsPage = () => {
               {call.dates.cancelled && <div className="flex justify-between"><span className="text-muted-foreground">Cancelled</span><span className="font-medium">{formatDate(call.dates.cancelled)}</span></div>}
               {call.priority && <div className="flex justify-between"><span className="text-muted-foreground">Priority</span><span className="font-medium">{call.priority}</span></div>}
               <div className="flex justify-between"><span className="text-muted-foreground">Engineer</span><span className="font-medium">{call.engineerInfo?.name || "Unassigned"}</span></div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm mt-6">
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><StickyNote className="h-5 w-5" /> Admin Remarks</CardTitle></CardHeader>
+            <CardContent>
+              {call.note ? (
+                <p className="text-sm whitespace-pre-wrap">{call.note}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No remarks added yet.</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -257,16 +291,34 @@ const CallDetailsPage = () => {
           </DialogHeader>
           <div className="space-y-2 py-4">
             <Label>Select Engineer</Label>
-            <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+            <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
               <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
               <SelectContent>
-                {engineers.map((e) => <SelectItem key={e.id} value={e.name}>{e.name}</SelectItem>)}
+                {engineers.map((e) => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignDialog(false)}>Cancel</Button>
-            <Button onClick={() => { toast({ title: "Engineer Assigned", description: `${selectedEngineer} assigned to ${call.callId}` }); setAssignDialog(false); }}>Assign</Button>
+            <Button
+              disabled={!selectedEngineerId || saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.assignEngineer(id, selectedEngineerId);
+                  toast({ title: "Engineer Assigned", description: `Engineer assigned to ${call.callId}` });
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setAssignDialog(false);
+                } catch {
+                  toast({ title: "Error", description: "Failed to assign engineer", variant: "destructive" });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving..." : "Assign"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -275,7 +327,7 @@ const CallDetailsPage = () => {
       <Dialog open={noteDialog} onOpenChange={setNoteDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add Note — {call.callId}</DialogTitle>
+            <DialogTitle>Admin Remarks — {call.callId}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-4">
             <Label>Note</Label>
@@ -283,7 +335,26 @@ const CallDetailsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNoteDialog(false)}>Cancel</Button>
-            <Button onClick={() => { toast({ title: "Note Added", description: "Note saved successfully" }); setNoteDialog(false); setNote(""); }}>Save Note</Button>
+            <Button
+              disabled={!note.trim() || saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.updateCall(id, { note });
+                  toast({ title: "Note Saved", description: "Note saved successfully" });
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setNoteDialog(false);
+                  setNote("");
+                } catch {
+                  toast({ title: "Error", description: "Failed to save note", variant: "destructive" });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving..." : "Save Note"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -308,7 +379,25 @@ const CallDetailsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPriorityDialog(false)}>Cancel</Button>
-            <Button onClick={() => { toast({ title: "Priority Set", description: `Priority set to ${selectedPriority}` }); setPriorityDialog(false); }}>Save</Button>
+            <Button
+              disabled={!selectedPriority || saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.updateCall(id, { priority: selectedPriority });
+                  toast({ title: "Priority Set", description: `Priority set to ${selectedPriority}` });
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setPriorityDialog(false);
+                } catch {
+                  toast({ title: "Error", description: "Failed to set priority", variant: "destructive" });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -324,18 +413,32 @@ const CallDetailsPage = () => {
             <Select value={selectedStatus} onValueChange={setSelectedStatus}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Open">Open</SelectItem>
-                <SelectItem value="Assigned">Assigned</SelectItem>
-                <SelectItem value="In Progress">In Progress</SelectItem>
-                <SelectItem value="On Hold">On Hold</SelectItem>
-                <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Cancelled">Cancelled</SelectItem>
+                <SelectItem value={call.status} disabled>{call.status}</SelectItem>
+                {nextStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStatusDialog(false)}>Cancel</Button>
-            <Button onClick={() => { toast({ title: "Status Updated", description: `Status updated to ${selectedStatus}` }); setStatusDialog(false); }}>Update</Button>
+            <Button
+              disabled={selectedStatus === call.status || saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.updateCall(id, { status: selectedStatus });
+                  toast({ title: "Status Updated", description: `Status updated to ${selectedStatus}` });
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setStatusDialog(false);
+                } catch {
+                  toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving..." : "Update"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

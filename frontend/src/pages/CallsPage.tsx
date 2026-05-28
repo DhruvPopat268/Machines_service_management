@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { serviceCallsApi, type ServiceCall, type CallStats, type CallsParams } from "@/services/serviceCallsApi";
+import { serviceCallsApi, engineersApi, type ServiceCall, type CallStats, type CallsParams } from "@/services/serviceCallsApi";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -47,7 +47,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [fromDate, setFromDate]             = useState("");
   const [toDate, setToDate]                 = useState("");
   const [assignDialog, setAssignDialog]     = useState<ServiceCall | null>(null);
-  const [selectedEngineer, setSelectedEngineer] = useState("");
+  const [selectedEngineerId, setSelectedEngineerId] = useState("");
+  const [assigning, setAssigning]           = useState(false);
 
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
@@ -72,18 +73,20 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [ptRes, mRes, cRes, catRes, divRes] = await Promise.all([
+        const [ptRes, mRes, cRes, catRes, divRes, engData] = await Promise.all([
           api.get("/admin/problem-types", { params: { limit: 100 } }),
           api.get("/admin/machines", { params: { limit: 100 } }),
           api.get("/admin/customers", { params: { limit: 100 } }),
           api.get("/admin/machine-categories", { params: { limit: 100 } }),
           api.get("/admin/machine-divisions", { params: { limit: 100 } }),
+          engineersApi.getActive(),
         ]);
         setProblemTypes(ptRes.data.data);
         setMachines(mRes.data.data);
         setCustomers(cRes.data.data);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
+        setEngineers(engData);
       } catch {
         // silently fail
       }
@@ -123,8 +126,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
   const fetchEngineers = useCallback(async (q: string) => {
     try {
-      const res = await api.get("/admin/users", { params: { limit: 100, search: q, role: "Engineer" } });
-      setEngineers(res.data.data);
+      const data = await engineersApi.getActive(q);
+      setEngineers(data);
     } catch {}
   }, []);
 
@@ -220,7 +223,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <Eye className="h-4 w-4" />
           </Button>
           {c.status === "Open" && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setAssignDialog(c); setSelectedEngineer(c.engineerInfo?.name || ""); }}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setAssignDialog(c); setSelectedEngineerId(c.engineerInfo?._id || ""); }}>
               <UserPlus className="h-4 w-4" />
             </Button>
           )}
@@ -316,11 +319,11 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>Select Engineer</Label>
-                  <Select value={selectedEngineer} onValueChange={setSelectedEngineer}>
+                  <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
                     <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
                     <SelectContent>
                       {engineers.map((e) => (
-                        <SelectItem key={e._id} value={e.name}>{e.name}</SelectItem>
+                        <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -328,8 +331,24 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAssignDialog(null)}>Cancel</Button>
-                <Button onClick={() => { toast.success(`${selectedEngineer} assigned to ${assignDialog?.callId}`); setAssignDialog(null); }}>
-                  Assign
+                <Button
+                  disabled={!selectedEngineerId || assigning}
+                  onClick={async () => {
+                    if (!assignDialog) return;
+                    setAssigning(true);
+                    try {
+                      await serviceCallsApi.assignEngineer(assignDialog._id, selectedEngineerId);
+                      toast.success(`Engineer assigned to ${assignDialog.callId}`);
+                      setAssignDialog(null);
+                      fetchCalls(pagination.page);
+                    } catch {
+                      toast.error("Failed to assign engineer");
+                    } finally {
+                      setAssigning(false);
+                    }
+                  }}
+                >
+                  {assigning ? "Assigning..." : "Assign"}
                 </Button>
               </DialogFooter>
             </DialogContent>

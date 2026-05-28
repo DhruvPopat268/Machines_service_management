@@ -28,6 +28,7 @@ import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
 import ZonesPage from "./pages/ZonesPage";
 import VendorsPage from "./pages/VendorsPage";
+import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/contract-types" element={<ContractTypesPage />} />
             <Route path="/zones" element={<ZonesPage />} />
             <Route path="/vendors" element={<VendorsPage />} />
+            <Route path="/reimbursements" element={<TravelReimbursementsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

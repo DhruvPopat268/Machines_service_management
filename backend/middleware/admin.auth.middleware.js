@@ -17,9 +17,17 @@ const adminAuthMiddleware = async (req, res, next) => {
     if (!session)
       return res.status(401).json({ success: false, message: "Session expired or invalid" });
 
+    const user = await AdminUser.findById(decoded.id).select("role status lastActivityAt");
+    if (!user)
+      return res.status(401).json({ success: false, message: "User not found" });
+    if (user.status === "Inactive")
+      return res.status(403).json({ success: false, message: "Account is inactive" });
+    if (user.role === "Engineer")
+      return res.status(403).json({ success: false, message: "Access denied" });
+
     await AdminUser.findByIdAndUpdate(decoded.id, { lastActivityAt: new Date() });
 
-    req.adminUser = decoded;
+    req.adminUser = { ...decoded, role: user.role };
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: "Unauthorized" });

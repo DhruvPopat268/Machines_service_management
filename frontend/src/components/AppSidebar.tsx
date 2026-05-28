@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
-  ChevronDown, ClipboardList, FileText, HardHat, MapPin, Layers, Tag, FileSignature, SlidersHorizontal, Truck, ShoppingBag, ShoppingCart,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, SlidersHorizontal, Truck, ShoppingBag, ShoppingCart, Receipt,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -32,20 +32,6 @@ const singleItems: NavItem[] = [
 ];
 
 const zonesItem: NavItem = { title: "Zones", url: "/zones", icon: MapPin };
-
-const callGroup: NavGroup = {
-  label: "Calls",
-  icon: PhoneCall,
-  items: [
-    { title: "All Calls", url: "/calls", icon: ClipboardList },
-    { title: "Open Calls", url: "/calls/open", icon: ClipboardList },
-    { title: "Assigned Calls", url: "/calls/assigned", icon: ClipboardList },
-    { title: "In Progress", url: "/calls/in-progress", icon: ClipboardList },
-    { title: "On Hold", url: "/calls/on-hold", icon: ClipboardList },
-    { title: "Completed", url: "/calls/completed", icon: ClipboardList },
-    { title: "Cancelled", url: "/calls/cancelled", icon: ClipboardList },
-  ],
-};
 
 const contractTypesItem: NavItem = { title: "Contract Types", url: "/contract-types", icon: FileSignature };
 
@@ -389,7 +375,50 @@ export function AppSidebar() {
 
         <SidebarGroup>
           {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
-          <CollapsibleNavGroup group={callGroup} collapsed={collapsed} />
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to="/calls" end className={linkClass} activeClassName={activeClass}>
+                      <PhoneCall className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to="/calls" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <PhoneCall className="h-3.5 w-3.5 shrink-0" />
+                        Calls
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Travel Reimbursements</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to="/reimbursements" end className={linkClass} activeClassName={activeClass}>
+                      <Receipt className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to="/reimbursements" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <Receipt className="h-3.5 w-3.5 shrink-0" />
+                        Travel Reimbursements
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
         </SidebarGroup>
 
         <SidebarGroup>
