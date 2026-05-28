@@ -198,6 +198,10 @@ const raiseServiceCall = async (req, res) => {
     }
     const callId = `SC-${callNumber}`;
 
+    const customerAddress = customer.userLocation?.address;
+    if (!customerAddress)
+      return res.status(400).json({ success: false, message: "Customer address is not set. Please update your profile with a valid address before raising a service call." });
+
     const serviceCallDoc = new ServiceCall({
       callId,
       customerInfo: {
@@ -205,7 +209,7 @@ const raiseServiceCall = async (req, res) => {
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
-        address: customer.address || customer.userLocation?.address || "",
+        address: customerAddress,
         zone: customer.zone?.name || "",
         gstNumber: customer.gstNumber || "",
         ...(parsedCustomerLocation && {
