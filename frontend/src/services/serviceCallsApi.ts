@@ -41,8 +41,11 @@ export interface ServiceCall {
   status: string;
   priority?: string;
   engineerInfo?: {
-    engineerId: string;
+    _id: string;
+    identityId: string;
     name: string;
+    phone: string;
+    email: string;
   };
   dates: {
     created: string;
@@ -52,6 +55,7 @@ export interface ServiceCall {
     completed?: string;
     cancelled?: string;
   };
+  note?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -81,10 +85,27 @@ export interface CallsParams {
   limit?: string;
 }
 
+export const engineersApi = {
+  getActive: async (search?: string): Promise<{ _id: string; name: string }[]> => {
+    const res = await api.get("/admin/engineers/active", { params: { limit: 100, ...(search && { search }) } });
+    return res.data.data;
+  },
+};
+
 export const serviceCallsApi = {
   getCalls: async (params: CallsParams = {}): Promise<{ data: ServiceCall[]; stats?: CallStats; pagination: { total: number; page: number; limit: number; totalPages: number } }> => {
     const response = await api.get("/admin/service-calls", { params });
     return { data: response.data.data, stats: response.data.stats, pagination: response.data.pagination };
+  },
+
+  assignEngineer: async (id: string, engineerId: string): Promise<ServiceCall> => {
+    const res = await api.patch(`/admin/service-calls/${id}/assign-engineer`, { engineerId });
+    return res.data.data;
+  },
+
+  updateCall: async (id: string, payload: { note?: string; priority?: string; status?: string }): Promise<ServiceCall> => {
+    const res = await api.patch(`/admin/service-calls/${id}`, payload);
+    return res.data.data;
   },
 
   getCallDetail: async (id: string): Promise<ServiceCall> => {

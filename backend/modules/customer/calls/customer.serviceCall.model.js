@@ -64,7 +64,7 @@ const serviceCallSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Open", "Assigned", "In Progress", "On Hold", "Completed", "Cancelled"],
+      enum: ["Open", "Assigned", "Travel Started", "Reached Location", "In Progress", "On Hold", "Completed", "Cancelled"],
       default: "Open"
     },
     priority: {
@@ -72,17 +72,23 @@ const serviceCallSchema = new mongoose.Schema(
       enum: ["Low", "Medium", "High", "Critical"]
     },
     engineerInfo: {
-      engineerId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      name: { type: String, trim: true }
+      _id:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      identityId: { type: String, trim: true },
+      name:       { type: String, trim: true },
+      phone:      { type: String, trim: true },
+      email:      { type: String, trim: true },
     },
     dates: {
-      created: { type: Date, required: true, default: Date.now },
-      assigned: { type: Date },
-      inProgress: { type: Date },
-      onHold: { type: Date },
-      completed: { type: Date },
-      cancelled: { type: Date }
-    }
+      created:         { type: Date, required: true, default: Date.now },
+      assigned:        { type: Date },
+      travelStarted:   { type: Date },
+      reachedLocation: { type: Date },
+      inProgress:      { type: Date },
+      onHold:          { type: Date },
+      completed:       { type: Date },
+      cancelled:       { type: Date },
+    },
+    note: { type: String, trim: true, default: "" },
   },
   { timestamps: true }
 );
@@ -92,7 +98,7 @@ serviceCallSchema.index({ "customerInfo.customerId": 1 });
 serviceCallSchema.index({ "machines.variantId": 1 });
 serviceCallSchema.index({ "machines.machineId": 1 });
 serviceCallSchema.index({ "machines.contractType.contractTypeId": 1 });
-serviceCallSchema.index({ "engineerInfo.engineerId": 1 });
+serviceCallSchema.index({ "engineerInfo._id": 1 });
 serviceCallSchema.index({ status: 1 });
 serviceCallSchema.index({ priority: 1 });
 serviceCallSchema.index({ "dates.created": -1 });
