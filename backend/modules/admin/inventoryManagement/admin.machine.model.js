@@ -7,8 +7,7 @@ const variantSchema = new mongoose.Schema(
     lowStockThreshold: { type: Number, default: -1 },
     currentStock:      { type: Number, default: 0, min: 0 },
     stockStatus:       { type: String, enum: ["In Stock", "Low Stock", "Out of Stock"], default: "Out of Stock" },
-  },
-  { _id: false }
+  }
 );
 
 const machineSchema = new mongoose.Schema(

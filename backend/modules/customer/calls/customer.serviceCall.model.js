@@ -89,6 +89,8 @@ const serviceCallSchema = new mongoose.Schema(
       cancelled:       { type: Date },
     },
     note: { type: String, trim: true, default: "" },
+    beforeWorkImages: { type: [String] },
+    onHoldReason: { type: String, trim: true },
   },
   { timestamps: true }
 );

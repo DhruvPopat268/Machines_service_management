@@ -58,8 +58,8 @@ const getReimbursementPreview = async (req, res) => {
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
-    if (call.status !== "Assigned")
-      return res.status(400).json({ success: false, message: "Call is not in Assigned status" });
+    if (call.status !== "Assigned" && call.status !== "On Hold")
+      return res.status(400).json({ success: false, message: "Call is not in Assigned or On Hold status" });
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
@@ -129,8 +129,8 @@ const startTravel = async (req, res) => {
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
-    if (call.status !== "Assigned")
-      return res.status(400).json({ success: false, message: "Call is not in Assigned status" });
+    if (call.status !== "Assigned" && call.status !== "On Hold")
+      return res.status(400).json({ success: false, message: "Call is not in Assigned or On Hold status" });
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
@@ -196,4 +196,70 @@ const reachedLocation = async (req, res) => {
   }
 };
 
-module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation };
+const startWork = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+    const { callId, beforeWorkImages } = req.body;
+
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    if (!Array.isArray(beforeWorkImages) || beforeWorkImages.length === 0)
+      return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
+
+    const call = await ServiceCall.findById(callId);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    if (call.status !== "Reached Location")
+      return res.status(400).json({ success: false, message: "Call is not in Reached Location status" });
+
+    if (call.engineerInfo?._id?.toString() !== engineerId)
+      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    await call.updateOne({
+      status: "In Progress",
+      "dates.inProgress": new Date(),
+      beforeWorkImages,
+    });
+
+    return res.status(200).json({ success: true, message: "Work started" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const putOnHold = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+    const { callId, onHoldReason } = req.body;
+
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    if (!onHoldReason || !onHoldReason.trim())
+      return res.status(400).json({ success: false, message: "onHoldReason is required" });
+
+    const call = await ServiceCall.findById(callId);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    if (call.status !== "In Progress")
+      return res.status(400).json({ success: false, message: "Call is not in In Progress status" });
+
+    if (call.engineerInfo?._id?.toString() !== engineerId)
+      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    await call.updateOne({
+      status: "On Hold",
+      "dates.onHold": new Date(),
+      onHoldReason: onHoldReason.trim(),
+    });
+
+    return res.status(200).json({ success: true, message: "Call put on hold" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold };
