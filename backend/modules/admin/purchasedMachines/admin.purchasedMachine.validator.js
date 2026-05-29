@@ -20,7 +20,7 @@ const validateCreatePurchase = (body) => {
       return `${machineLabel}: variants array is required and must not be empty`;
 
     for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice, willAddToInventory } = variants[vi];
+      const { attribute, value, quantity, price, discountedPrice, sellingPrice, discountedSellingPrice, willAddToInventory } = variants[vi];
       const label = `${machineLabel} Variant ${vi + 1}`;
 
       if (!attribute || !mongoose.isValidObjectId(attribute))
@@ -54,6 +54,27 @@ const validateCreatePurchase = (body) => {
           return `${label}: discounted price must be a non-negative number`;
         if (numDiscountedPrice > numPrice)
           return `${label}: discounted price cannot be greater than price`;
+      }
+
+      // Validation for sellingPrice
+      if (sellingPrice !== undefined && sellingPrice !== null) {
+        const numSellingPrice = Number(sellingPrice);
+        if (Number.isNaN(numSellingPrice))
+          return `${label}: selling price must be a valid number`;
+        if (numSellingPrice < 0)
+          return `${label}: selling price must be a non-negative number`;
+      }
+
+      // Validation for discountedSellingPrice
+      if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
+        const numDiscountedSellingPrice = Number(discountedSellingPrice);
+        if (Number.isNaN(numDiscountedSellingPrice))
+          return `${label}: discounted selling price must be a valid number`;
+        if (numDiscountedSellingPrice < 0)
+          return `${label}: discounted selling price must be a non-negative number`;
+        const numSellingPrice = Number(sellingPrice);
+        if (!Number.isNaN(numSellingPrice) && numDiscountedSellingPrice > numSellingPrice)
+          return `${label}: discounted selling price cannot be greater than selling price`;
       }
 
       if (willAddToInventory !== undefined && typeof willAddToInventory !== "boolean")

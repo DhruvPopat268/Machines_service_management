@@ -1,7 +1,40 @@
+const path = require("path");
+const fs   = require("fs/promises");
+const sharp = require("sharp");
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const TravelReimbursement = require("../reimbursement/engineer.reimbursement.model");
+const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
+const Machine = require("../../admin/inventoryManagement/admin.machine.model");
 const mongoose = require("mongoose");
 const axios = require("axios");
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images"
+  : path.join(__dirname, "../../../cloud/images");
+
+const createdDirs = new Set();
+
+const uploadToServer = async (fileBuffer, filename) => {
+  if (!createdDirs.has(IMAGES_DIR)) {
+    await fs.mkdir(IMAGES_DIR, { recursive: true });
+    createdDirs.add(IMAGES_DIR);
+  }
+  await sharp(fileBuffer)
+    .resize({ width: 800, withoutEnlargement: true })
+    .webp({ quality: 70, effort: 1, smartSubsample: true })
+    .toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/${filename}`;
+};
+
+const processImages = async (files) => {
+  const urls = [];
+  for (const file of files) {
+    const filename = `servicecall_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+    const url = await uploadToServer(file.buffer, filename);
+    urls.push(url);
+  }
+  return urls;
+};
 
 const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -199,12 +232,13 @@ const reachedLocation = async (req, res) => {
 const startWork = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
-    const { callId, beforeWorkImages } = req.body;
+    const { callId } = req.body;
+    const files = req.files || [];
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
-    if (!Array.isArray(beforeWorkImages) || beforeWorkImages.length === 0)
+    if (files.length === 0)
       return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
 
     const call = await ServiceCall.findById(callId);
@@ -216,6 +250,13 @@ const startWork = async (req, res) => {
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    let beforeWorkImages;
+    try {
+      beforeWorkImages = await processImages(files);
+    } catch (imgErr) {
+      return res.status(400).json({ success: false, message: imgErr.message });
+    }
 
     await call.updateOne({
       status: "In Progress",
@@ -262,4 +303,52 @@ const putOnHold = async (req, res) => {
   }
 };
 
-module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold };
+const getPartsMachines = async (req, res) => {
+  try {
+    const partsCategoryId = process.env.PARTS_CATEGORY_ID;
+
+    const soldRecords = await SoldMachine.find({
+      "machines.categoryId": new mongoose.Types.ObjectId(partsCategoryId),
+    });
+
+    const machineIds = [...new Set(
+      soldRecords.flatMap(record =>
+        record.machines
+          .filter(m => m.categoryId?.toString() === partsCategoryId)
+          .map(m => m.machineId)
+          .filter(Boolean)
+      )
+    )];
+
+    const machineImagesMap = new Map();
+    if (machineIds.length > 0) {
+      const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
+      machines.forEach(m => machineImagesMap.set(m._id.toString(), m.images));
+    }
+
+    const parts = soldRecords.flatMap(record =>
+      record.machines
+        .filter(m => m.categoryId?.toString() === partsCategoryId)
+        .flatMap(machine =>
+          machine.variants.map(variant => ({
+            machineId:    machine.machineId,
+            machineName:  machine.machineName,
+            modelNumber:  machine.modelNumber,
+            categoryId:   machine.categoryId,
+            category:     machine.category,
+            divisionId:   machine.divisionId,
+            division:     machine.division,
+            images:       machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+            variant:      variant.toObject(),
+            customerInfo: record.customerInfo,
+          }))
+        )
+    );
+
+    return res.status(200).json({ success: true, data: parts });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines };

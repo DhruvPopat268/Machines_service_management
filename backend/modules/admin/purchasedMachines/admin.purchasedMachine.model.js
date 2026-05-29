@@ -2,15 +2,17 @@ const mongoose = require("mongoose");
 
 const variantSchema = new mongoose.Schema(
   {
-    attribute:          { type: mongoose.Schema.Types.ObjectId, ref: "Attribute", required: true },
-    name:               { type: String, trim: true, required: true },
-    value:              { type: String, trim: true, required: true },
-    quantity:           { type: Number, required: true },
-    price:              { type: Number, required: true },
-    discountedPrice:    { type: Number, default: null },
-    total:              { type: Number, required: true },
-    willAddToInventory: { type: Boolean, default: true },
-    addedToInventory:   { type: Boolean, default: false },
+    attribute:              { type: mongoose.Schema.Types.ObjectId, ref: "Attribute", required: true },
+    name:                   { type: String, trim: true, required: true },
+    value:                  { type: String, trim: true, required: true },
+    quantity:               { type: Number, required: true },
+    price:                  { type: Number, required: true },
+    discountedPrice:        { type: Number, default: null },
+    sellingPrice:           { type: Number, default: null },
+    discountedSellingPrice: { type: Number, default: null },
+    total:                  { type: Number, required: true },
+    willAddToInventory:     { type: Boolean, default: true },
+    addedToInventory:       { type: Boolean, default: false },
   },
   { _id: false }
 );

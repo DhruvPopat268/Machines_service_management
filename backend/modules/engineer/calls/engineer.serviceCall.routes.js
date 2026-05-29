@@ -1,14 +1,27 @@
 const router = require("express").Router();
-const { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold } = require("./engineer.serviceCall.controller");
+const multer = require("multer");
+const { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines } = require("./engineer.serviceCall.controller");
 const engineerAuthMiddleware = require("../../../middleware/engineer.auth.middleware");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = file.originalname.split(".").pop().toLowerCase();
+    if (!["jpg", "jpeg", "png", "webp"].includes(ext))
+      return cb(new Error("Invalid file type. Allowed: jpg, jpeg, png, webp"));
+    cb(null, true);
+  },
+});
 
 router.use(engineerAuthMiddleware);
 
 router.get("/active", getActiveCalls);
+router.get("/parts-machines", getPartsMachines);
 router.post("/reimbursement-preview", getReimbursementPreview);
 router.patch("/travel-started", startTravel);
 router.patch("/reached-location", reachedLocation);
-router.patch("/start-work", startWork);
+router.patch("/start-work", upload.array("beforeWorkImages", 10), startWork);
 router.patch("/on-hold", putOnHold);
 
 module.exports = router;

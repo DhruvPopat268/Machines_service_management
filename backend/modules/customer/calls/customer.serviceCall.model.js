@@ -69,7 +69,8 @@ const serviceCallSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ["Low", "Medium", "High", "Critical"]
+      enum: ["Low", "Medium", "High", "Critical"],
+      default: "Medium"
     },
     engineerInfo: {
       _id:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },

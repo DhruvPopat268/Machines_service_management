@@ -219,7 +219,7 @@ const createPurchase = async (req, res) => {
       const purchaseVariants = [];
 
       for (const v of variants) {
-        const { attribute, value, quantity, price, discountedPrice, willAddToInventory } = v;
+        const { attribute, value, quantity, price, discountedPrice, sellingPrice, discountedSellingPrice, willAddToInventory } = v;
 
         const attrDoc = attrMap[attribute.toString()];
         if (!attrDoc) return abort(404, `Attribute "${attribute}" not found`);
@@ -241,7 +241,9 @@ const createPurchase = async (req, res) => {
           value: value.trim(),
           quantity,
           price,
-          discountedPrice: discountedPrice ?? null,
+          discountedPrice:        discountedPrice ?? null,
+          sellingPrice:           sellingPrice ?? null,
+          discountedSellingPrice: discountedSellingPrice ?? null,
           total,
           willAddToInventory: willAddToInventory !== false,
           addedToInventory: false,
@@ -617,6 +619,8 @@ const exportToExcel = async (req, res) => {
             "Quantity": variant.quantity || 0,
             "Price": variant.price || 0,
             "Discounted Price": variant.discountedPrice !== null && variant.discountedPrice !== undefined ? variant.discountedPrice : "",
+            "Selling Price": variant.sellingPrice !== null && variant.sellingPrice !== undefined ? variant.sellingPrice : "",
+            "Discounted Selling Price": variant.discountedSellingPrice !== null && variant.discountedSellingPrice !== undefined ? variant.discountedSellingPrice : "",
             "Total": variant.total || 0,
             "Will Add To Inventory": variant.willAddToInventory ? "Yes" : "No",
             "Added To Inventory": variant.addedToInventory ? "Yes" : "No",

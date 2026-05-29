@@ -58,7 +58,7 @@ interface MachineVariant {
 interface Machine {
   _id: string;
   name: string;
-  category?: { name: string };
+  category?: { _id: string; name: string };
   variants: MachineVariant[];
 }
 
@@ -69,6 +69,8 @@ interface VariantRow {
   quantity: string;
   price: string;
   discountedPrice: string;
+  sellingPrice: string;
+  discountedSellingPrice: string;
   willAddToInventory: boolean;
 }
 
@@ -163,13 +165,15 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       return;
     }
     const variants: VariantRow[] = machine.variants.map((v) => ({
-      attributeId:        typeof v.attribute === "string" ? v.attribute : v.attribute._id,
-      attributeName:      typeof v.attribute === "string" ? "" : v.attribute.name,
-      value:              v.value,
-      quantity:           "",
-      price:              "",
-      discountedPrice:    "",
-      willAddToInventory: true,
+      attributeId:            typeof v.attribute === "string" ? v.attribute : v.attribute._id,
+      attributeName:          typeof v.attribute === "string" ? "" : v.attribute.name,
+      value:                  v.value,
+      quantity:               "",
+      price:                  "",
+      discountedPrice:        "",
+      sellingPrice:           "",
+      discountedSellingPrice: "",
+      willAddToInventory:     true,
     }));
     setEntries((prev) => [...prev, { machine, variants }]);
     setMachineSearch("");
@@ -207,7 +211,16 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           return;
         }
         if (hasQty && hasPrice && v.discountedPrice !== "" && Number(v.discountedPrice) > Number(v.price)) {
-          toast.error(`Discounted price cannot exceed price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          toast.error(`Discounted buying price cannot exceed buying price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        const isParts = entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID;
+        if (isParts && hasQty && !v.sellingPrice) {
+          toast.error(`Selling price is required for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        if (isParts && v.sellingPrice !== "" && v.discountedSellingPrice !== "" && Number(v.discountedSellingPrice) > Number(v.sellingPrice)) {
+          toast.error(`Discounted selling price cannot exceed selling price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
         }
       }
@@ -220,12 +233,14 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
         variants:  e.variants
           .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "")
           .map((v) => ({
-            attribute:          v.attributeId,
-            value:              v.value,
-            quantity:           Number(v.quantity),
-            price:              Number(v.price),
-            discountedPrice:    v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
-            willAddToInventory: v.willAddToInventory,
+            attribute:              v.attributeId,
+            value:                  v.value,
+            quantity:               Number(v.quantity),
+            price:                  Number(v.price),
+            discountedPrice:        v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
+            sellingPrice:           v.sellingPrice !== "" ? Number(v.sellingPrice) : null,
+            discountedSellingPrice: v.discountedSellingPrice !== "" ? Number(v.discountedSellingPrice) : null,
+            willAddToInventory:     v.willAddToInventory,
           })),
       })).filter((m) => m.variants.length > 0),
     };
@@ -278,7 +293,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-5xl h-[70vh] flex flex-col">
+      <DialogContent className="max-w-7xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Record Machine Purchase</DialogTitle>
         </DialogHeader>
@@ -391,8 +406,14 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                             <th className="text-left font-medium pb-2 pr-3">Attribute</th>
                             <th className="text-left font-medium pb-2 pr-3">Value</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Buying Price <span className="text-destructive">*</span></th>
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Discounted Buying Price</th>
+                            {entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID && (
+                              <>
+                                <th className="text-left font-medium pb-2 pr-3 w-24">Selling Price <span className="text-destructive">*</span></th>
+                                <th className="text-left font-medium pb-2 pr-3 w-24">Discounted Selling Price</th>
+                              </>
+                            )}
                             <th className="text-center font-medium pb-2">Add to Inv.</th>
                           </tr>
                         </thead>
@@ -429,6 +450,30 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                   onChange={(e) => updateVariant(mi, vi, "discountedPrice", e.target.value)}
                                 />
                               </td>
+                              {entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID && (
+                                <>
+                                  <td className="py-1.5 pr-3">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-7 text-xs w-24"
+                                      placeholder="—"
+                                      value={v.sellingPrice}
+                                      onChange={(e) => updateVariant(mi, vi, "sellingPrice", e.target.value)}
+                                    />
+                                  </td>
+                                  <td className="py-1.5 pr-3">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="h-7 text-xs w-24"
+                                      placeholder="—"
+                                      value={v.discountedSellingPrice}
+                                      onChange={(e) => updateVariant(mi, vi, "discountedSellingPrice", e.target.value)}
+                                    />
+                                  </td>
+                                </>
+                              )}
                               <td className="py-1.5 text-center">
                                 {v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" ? (
                                   <Switch
