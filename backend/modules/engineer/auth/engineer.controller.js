@@ -95,14 +95,7 @@ const updateProfile = async (req, res) => {
   try {
     const { name, phone, email } = req.body;
 
-    let engineerLocation;
-    if (req.body.engineerLocation) {
-      try {
-        engineerLocation = typeof req.body.engineerLocation === "string"
-          ? JSON.parse(req.body.engineerLocation)
-          : req.body.engineerLocation;
-      } catch (_) {}
-    }
+    
 
     const error = validateUpdateProfile({ name, phone, email });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -111,7 +104,7 @@ const updateProfile = async (req, res) => {
     if (name              !== undefined) update.name             = name.trim();
     if (phone             !== undefined) update.phone            = phone.trim();
     if (email             !== undefined) update.email            = email.trim().toLowerCase();
-    if (engineerLocation  !== undefined) update.engineerLocation = engineerLocation;
+    
 
     if (req.file) {
       try {
@@ -140,7 +133,7 @@ const updateProfile = async (req, res) => {
     if (!existing) return res.status(404).json({ success: false, message: "Engineer not found" });
 
     const engineer = await AdminUser.findByIdAndUpdate(req.engineer.id, update, { new: true, runValidators: true })
-      .select("name phone email role engineerLocation profilePhoto engineerId");
+      .select("name phone email role  profilePhoto engineerId");
 
     if (update.profilePhoto && existing.profilePhoto)
       await deleteProfilePhoto(existing.profilePhoto);
