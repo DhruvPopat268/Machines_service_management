@@ -19,6 +19,7 @@ const variantSchema = new mongoose.Schema(
     name:               { type: String, trim: true, required: true },
     value:              { type: String, trim: true, required: true },
     quantity:           { type: Number, required: true },
+    serialNumbers:      { type: [String], default: [] },
     price:              { type: Number, required: true },
     discountedPrice:    { type: Number, default: null },
     total:              { type: Number, required: true },
@@ -71,6 +72,7 @@ soldMachineSchema.index({ "machines.variants.contractType.contractTypeId": 1 });
 soldMachineSchema.index({ "machines.variants.contractType.name": 1 });
 soldMachineSchema.index({ "machines.variants.validFrom": 1 });
 soldMachineSchema.index({ "machines.variants.validTo": 1 });
+soldMachineSchema.index({ "machines.variants.serialNumbers": 1 });
 soldMachineSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("SoldMachine", soldMachineSchema);

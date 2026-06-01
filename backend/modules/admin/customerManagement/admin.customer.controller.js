@@ -127,9 +127,17 @@ const create = async (req, res) => {
   try {
     const { name, phone, email, zone, status } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
-    const userLocation = req.body.userLocation
-      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
-      : undefined;
+
+    let userLocation;
+    if (req.body.userLocation) {
+      try {
+        const loc = typeof req.body.userLocation === "string"
+          ? JSON.parse(req.body.userLocation)
+          : req.body.userLocation;
+        if (loc.address && loc.latitude !== undefined && loc.longitude !== undefined)
+          userLocation = { address: loc.address.trim(), latitude: loc.latitude, longitude: loc.longitude };
+      } catch (_) {}
+    }
 
     const error = validateCreateCustomer({ name, phone, email, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -216,9 +224,17 @@ const update = async (req, res) => {
     const gstNumber = req.body.gstNumber !== undefined
       ? String(req.body.gstNumber).trim().toUpperCase()
       : undefined;
-    const userLocation = req.body.userLocation !== undefined
-      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
-      : undefined;
+
+    let userLocation;
+    if (req.body.userLocation !== undefined) {
+      try {
+        const loc = typeof req.body.userLocation === "string"
+          ? JSON.parse(req.body.userLocation)
+          : req.body.userLocation;
+        if (loc && loc.address && loc.latitude !== undefined && loc.longitude !== undefined)
+          userLocation = { address: loc.address.trim(), latitude: loc.latitude, longitude: loc.longitude };
+      } catch (_) {}
+    }
 
     const error = validateUpdateCustomer({ name, phone, email, zone, status });
     if (error) return res.status(400).json({ success: false, message: error });

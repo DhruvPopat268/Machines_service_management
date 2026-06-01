@@ -154,6 +154,48 @@ const createSale = async (req, res) => {
     const validationError = validateCreateSale(req.body);
     if (validationError) return abort(400, validationError);
 
+    // Validate serial numbers
+    const allSerialNumbers = [];
+    for (const machineInput of machines) {
+      for (const v of machineInput.variants) {
+        if (!v.serialNumbers || !Array.isArray(v.serialNumbers)) {
+          return abort(400, `Serial numbers are required for all variants`);
+        }
+        if (v.serialNumbers.length !== v.quantity) {
+          return abort(400, `Serial numbers count must match quantity for variant`);
+        }
+        // Check for duplicates within variant
+        const uniqueSerials = new Set(v.serialNumbers.map(sn => sn.trim().toUpperCase()));
+        if (uniqueSerials.size !== v.serialNumbers.length) {
+          return abort(400, `Duplicate serial numbers found in variant`);
+        }
+        // Collect all serial numbers for global duplicate check
+        allSerialNumbers.push(...v.serialNumbers.map(sn => sn.trim().toUpperCase()));
+      }
+    }
+
+    // Check for duplicates across all variants in this sale
+    const uniqueAllSerials = new Set(allSerialNumbers);
+    if (uniqueAllSerials.size !== allSerialNumbers.length) {
+      return abort(400, `Duplicate serial numbers found across different variants in this sale`);
+    }
+
+    // Check if any serial number already exists in the database
+    const existingSerials = await SoldMachine.find(
+      { "machines.variants.serialNumbers": { $in: allSerialNumbers } },
+      { "machines.variants.serialNumbers": 1 }
+    ).session(session);
+
+    if (existingSerials.length > 0) {
+      const foundSerials = existingSerials.flatMap(sale => 
+        sale.machines.flatMap(m => 
+          m.variants.flatMap(v => v.serialNumbers.map(sn => sn.toUpperCase()))
+        )
+      );
+      const duplicates = allSerialNumbers.filter(sn => foundSerials.includes(sn));
+      return abort(400, `Serial number(s) already exist in system: ${duplicates.slice(0, 5).join(", ")}${duplicates.length > 5 ? ` and ${duplicates.length - 5} more` : ""}`);
+    }
+
     const customer = await Customer.findById(customerId).populate("zone", "name").session(session);
     if (!customer)                     return abort(404, "Customer not found");
     if (customer.status === "Inactive") return abort(400, "Customer is inactive");
@@ -233,6 +275,7 @@ const createSale = async (req, res) => {
           name:                  attrDoc.name,
           value:                 value.trim(),
           quantity,
+          serialNumbers:         v.serialNumbers.map(sn => sn.trim()),
           price,
           discountedPrice:       discountedPrice ?? null,
           total,
@@ -509,4 +552,42 @@ const exportToExcel = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, exportToExcel };
+const checkSerialNumbers = async (req, res) => {
+  try {
+    const { serialNumbers } = req.body;
+    if (!Array.isArray(serialNumbers) || serialNumbers.length === 0)
+      return res.status(400).json({ success: false, message: "serialNumbers array is required" });
+
+    const normalized = serialNumbers.map(sn => sn.trim().toUpperCase());
+
+    // Check duplicates within the submitted list
+    const uniqueSet = new Set(normalized);
+    if (uniqueSet.size !== normalized.length) {
+      const seen = new Set();
+      const dupes = normalized.filter(sn => seen.size === seen.add(sn).size);
+      return res.status(409).json({ success: false, message: `Duplicate serial numbers in your list: ${[...new Set(dupes)].join(", ")}` });
+    }
+
+    // Check against database
+    const existing = await SoldMachine.find(
+      { "machines.variants.serialNumbers": { $in: normalized } },
+      { "machines.variants.serialNumbers": 1 }
+    ).lean();
+
+    if (existing.length > 0) {
+      const foundSerials = existing.flatMap(sale =>
+        sale.machines.flatMap(m =>
+          m.variants.flatMap(v => (v.serialNumbers || []).map(sn => sn.toUpperCase()))
+        )
+      );
+      const duplicates = normalized.filter(sn => foundSerials.includes(sn));
+      return res.status(409).json({ success: false, message: `Serial number(s) already exist in system: ${duplicates.join(", ")}` });
+    }
+
+    res.status(200).json({ success: true, message: "All serial numbers are unique" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, exportToExcel, checkSerialNumbers };

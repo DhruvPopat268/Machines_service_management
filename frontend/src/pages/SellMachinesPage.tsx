@@ -68,6 +68,7 @@ interface VariantRow {
   attributeName: string;
   value: string;
   quantity: string;
+  serialNumbers: string[];
   price: string;
   discountedPrice: string;
   contractType: string;
@@ -120,6 +121,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
   const [customerForm, setCustomerForm]     = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
   const [contractTypes, setContractTypes]   = useState<ContractType[]>([]);
+  const [serialNumberDialog, setSerialNumberDialog] = useState(false);
+  const [currentSerialEdit, setCurrentSerialEdit] = useState<{ mi: number; vi: number } | null>(null);
+  const [tempSerialNumbers, setTempSerialNumbers] = useState<string[]>([]);
+  const [checkingSerials, setCheckingSerials] = useState(false);
   const contractTypesAbortRef = useRef<AbortController | null>(null);
   const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -206,6 +211,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         attributeName:   typeof v.attribute === "string" ? "" : v.attribute.name,
         value:           v.value,
         quantity:        "",
+        serialNumbers:   [],
         price:           "",
         discountedPrice: "",
         contractType:    "",
@@ -231,7 +237,51 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const removeMachine = (machineId: string) =>
     setEntries((prev) => prev.filter((e) => e.machine._id !== machineId));
 
-  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string | boolean) => {
+  const openSerialNumberDialog = (mi: number, vi: number) => {
+    const variant = entries[mi].variants[vi];
+    const qty = Number(variant.quantity) || 0;
+    
+    setTempSerialNumbers(variant.serialNumbers.length > 0 ? [...variant.serialNumbers] : Array(qty).fill(""));
+    setCurrentSerialEdit({ mi, vi });
+    setSerialNumberDialog(true);
+  };
+
+  const handleSerialNumberSave = async () => {
+    if (!currentSerialEdit) return;
+    const { mi, vi } = currentSerialEdit;
+
+    const allFilled = tempSerialNumbers.every(sn => sn.trim() !== "");
+    if (!allFilled) {
+      toast.error("Please fill all serial numbers");
+      return;
+    }
+
+    const uniqueSerials = new Set(tempSerialNumbers.map(sn => sn.trim().toUpperCase()));
+    if (uniqueSerials.size !== tempSerialNumbers.length) {
+      toast.error("Duplicate serial numbers found");
+      return;
+    }
+
+    setCheckingSerials(true);
+    try {
+      await api.post("/admin/sales/check-serials", { serialNumbers: tempSerialNumbers.map(sn => sn.trim()) });
+      updateVariant(mi, vi, "serialNumbers", tempSerialNumbers.map(sn => sn.trim()));
+      setSerialNumberDialog(false);
+      setCurrentSerialEdit(null);
+      setTempSerialNumbers([]);
+      toast.success("Serial numbers verified and saved");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Serial number check failed");
+    } finally {
+      setCheckingSerials(false);
+    }
+  };
+
+  const updateTempSerialNumber = (index: number, value: string) => {
+    setTempSerialNumbers(prev => prev.map((sn, i) => i === index ? value : sn));
+  };
+
+  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string | boolean | string[]) => {
     setEntries((prev) =>
       prev.map((e, i) => {
         if (i !== mi) return e;
@@ -239,6 +289,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           ...e,
           variants: e.variants.map((v, j) => {
             if (j !== vi) return v;
+            
+            if (field === "quantity") {
+              return { ...v, quantity: value as string, serialNumbers: [] };
+            }
             
             // If contractType is being changed, update freeService and freeParts
             if (field === "contractTypeId") {
@@ -276,6 +330,11 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         }
         if (hasPrice && !hasQty) {
           toast.error(`Enter quantity for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        
+        if (hasQty && hasPrice && v.serialNumbers.length !== Number(v.quantity)) {
+          toast.error(`Add ${v.quantity} serial numbers for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
         }
         
@@ -322,6 +381,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             attribute:       v.attributeId,
             value:           v.value,
             quantity:        Number(v.quantity),
+            serialNumbers:   v.serialNumbers,
             price:           Number(v.price),
             discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
             contractTypeId:  v.contractTypeId,
@@ -496,6 +556,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             <th className="text-left font-medium pb-2 pr-3">Value</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Available</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
+                            <th className="text-left font-medium pb-2 pr-3 w-32">Serial Numbers <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
                             <th className="text-left font-medium pb-2 pr-3 w-36">Contract Type <span className="text-destructive">*</span></th>
@@ -524,6 +585,21 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   value={v.quantity}
                                   onChange={(e) => updateVariant(mi, vi, "quantity", e.target.value)}
                                 />
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-xs w-32"
+                                  onClick={() => openSerialNumberDialog(mi, vi)}
+                                  disabled={!v.quantity || Number(v.quantity) === 0}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" />
+                                  {v.serialNumbers.length > 0 
+                                    ? `${v.serialNumbers.length}/${v.quantity} Added` 
+                                    : "Add Serial Nos"}
+                                </Button>
                               </td>
                               <td className="py-1.5 pr-3">
                                 <Input
@@ -643,6 +719,36 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); }} disabled={submitting}>Cancel</Button>
             <Button onClick={handleCreateCustomer} disabled={submitting}>{submitting ? "Creating..." : "Create Customer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={serialNumberDialog} onOpenChange={(o) => { if (!o) { setSerialNumberDialog(false); setCurrentSerialEdit(null); setTempSerialNumbers([]); } }}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Add Serial Numbers</DialogTitle>
+            {currentSerialEdit && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {entries[currentSerialEdit.mi].machine.name} — {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].attributeName}: {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].value}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto py-4 space-y-3">
+            {tempSerialNumbers.map((sn, idx) => (
+              <div key={idx} className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Serial Number {idx + 1}</Label>
+                <Input
+                  placeholder={`e.g. SN-${String(idx + 1).padStart(6, '0')}`}
+                  value={sn}
+                  onChange={(e) => updateTempSerialNumber(idx, e.target.value)}
+                  className="h-9"
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSerialNumberDialog(false); setCurrentSerialEdit(null); setTempSerialNumbers([]); }} disabled={checkingSerials}>Cancel</Button>
+            <Button onClick={handleSerialNumberSave} disabled={checkingSerials}>{checkingSerials ? "Checking..." : "Save Serial Numbers"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

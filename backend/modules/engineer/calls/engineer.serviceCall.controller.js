@@ -3,7 +3,7 @@ const fs   = require("fs/promises");
 const sharp = require("sharp");
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const TravelReimbursement = require("../reimbursement/engineer.reimbursement.model");
-const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
+const PurchasedMachine = require("../../admin/purchasedMachines/admin.purchasedMachine.model");
 const Machine = require("../../admin/inventoryManagement/admin.machine.model");
 const mongoose = require("mongoose");
 const axios = require("axios");
@@ -306,13 +306,17 @@ const putOnHold = async (req, res) => {
 const getPartsMachines = async (req, res) => {
   try {
     const partsCategoryId = process.env.PARTS_CATEGORY_ID;
+    const { search } = req.query;
 
-    const soldRecords = await SoldMachine.find({
+    const purchaseRecords = await PurchasedMachine.find({
       "machines.categoryId": new mongoose.Types.ObjectId(partsCategoryId),
+      ...(search?.trim() && {
+        "machines.machineName": { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" },
+      }),
     });
 
     const machineIds = [...new Set(
-      soldRecords.flatMap(record =>
+      purchaseRecords.flatMap(record =>
         record.machines
           .filter(m => m.categoryId?.toString() === partsCategoryId)
           .map(m => m.machineId)
@@ -321,27 +325,37 @@ const getPartsMachines = async (req, res) => {
     )];
 
     const machineImagesMap = new Map();
+    const machineVariantStockMap = new Map();
     if (machineIds.length > 0) {
-      const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
-      machines.forEach(m => machineImagesMap.set(m._id.toString(), m.images));
+      const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images variants");
+      machines.forEach(m => {
+        machineImagesMap.set(m._id.toString(), m.images);
+        const stockMap = new Map();
+        m.variants.forEach(v => stockMap.set(`${v.attribute.toString()}_${v.value.trim().toLowerCase()}`, v.currentStock));
+        machineVariantStockMap.set(m._id.toString(), stockMap);
+      });
     }
 
-    const parts = soldRecords.flatMap(record =>
+    const parts = purchaseRecords.flatMap(record =>
       record.machines
         .filter(m => m.categoryId?.toString() === partsCategoryId)
         .flatMap(machine =>
-          machine.variants.map(variant => ({
-            machineId:    machine.machineId,
-            machineName:  machine.machineName,
-            modelNumber:  machine.modelNumber,
-            categoryId:   machine.categoryId,
-            category:     machine.category,
-            divisionId:   machine.divisionId,
-            division:     machine.division,
-            images:       machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
-            variant:      variant.toObject(),
-            customerInfo: record.customerInfo,
-          }))
+          machine.variants.map(variant => {
+            const { quantity, price, discountedPrice, total, willAddToInventory, addedToInventory, ...rest } = variant.toObject();
+            const stockMap = machine.machineId ? machineVariantStockMap.get(machine.machineId.toString()) : null;
+            const currentStock = stockMap?.get(`${rest.attribute.toString()}_${rest.value.trim().toLowerCase()}`) ?? 0;
+            return {
+              machineId:   machine.machineId,
+              machineName: machine.machineName,
+              modelNumber: machine.modelNumber,
+              categoryId:  machine.categoryId,
+              category:    machine.category,
+              divisionId:  machine.divisionId,
+              division:    machine.division,
+              images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+              variant:     { ...rest, currentStock },
+            };
+          })
         )
     );
 

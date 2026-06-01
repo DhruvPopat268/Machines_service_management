@@ -7,7 +7,7 @@ const validateGST = (gst) => {
   return null;
 };
 
-const validateCreateCustomer = ({ name, phone, email, address, zone, status }) => {
+const validateCreateCustomer = ({ name, phone, email, zone, status }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
   if (!phone || typeof phone !== "string" || !phone.trim())
@@ -18,8 +18,6 @@ const validateCreateCustomer = ({ name, phone, email, address, zone, status }) =
     return "Email is required";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
     return "Invalid email format";
-  if (!address || typeof address !== "string" || !address.trim())
-    return "Address is required";
   if (!zone)
     return "Zone is required";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
@@ -27,7 +25,7 @@ const validateCreateCustomer = ({ name, phone, email, address, zone, status }) =
   return null;
 };
 
-const validateUpdateCustomer = ({ name, phone, email, address, zone, status }) => {
+const validateUpdateCustomer = ({ name, phone, email, zone, status }) => {
   if (name !== undefined && (typeof name !== "string" || !name.trim()))
     return "Name must be a non-empty string";
   if (phone !== undefined && (typeof phone !== "string" || !phone.trim()))
@@ -38,8 +36,6 @@ const validateUpdateCustomer = ({ name, phone, email, address, zone, status }) =
     if (typeof email !== "string" || !email.trim()) return "Email must be a non-empty string";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Invalid email format";
   }
-  if (address !== undefined && (typeof address !== "string" || !address.trim()))
-    return "Address must be a non-empty string";
   if (zone === "")
     return "Zone is required";
   if (status !== undefined && !["Active", "Inactive"].includes(status))

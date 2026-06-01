@@ -14,7 +14,6 @@ const machineSchema = new mongoose.Schema(
   {
     name:         { type: String, required: true, trim: true },
     modelNumber:  { type: String, trim: true, default: "" },
-    serialNumber: { type: String, trim: true, default: "" },
     hsnCode:      { type: String, trim: true, default: "" },
     partCode:     { type: String, trim: true, default: "" },
     gstPercentage:{ type: Number, min: 0, max: 100, default: null },

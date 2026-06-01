@@ -7,7 +7,7 @@ const getOwnedMachines = async (req, res) => {
     const customerId = req.customer.id;
     const isAllRoute = req.path === '/all';
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
     const soldRecords = await SoldMachine.find({
@@ -50,14 +50,18 @@ const getOwnedMachines = async (req, res) => {
 
     const allVariants = soldRecords.flatMap(record => 
       record.machines.flatMap(machine => 
-        machine.variants.map(variant => {
+        machine.variants.flatMap(variant => {
           const contractType = variant.contractType.toObject();
           
           // Convert validTo to IST for comparison
           const validToIST = toZonedTime(contractType.validTo, 'Asia/Kolkata');
           contractType.isContractExpired = validToIST < currentDateIST;
-          
-          return {
+
+          const variantObj = variant.toObject();
+          const serialNumbers = variantObj.serialNumbers || [];
+
+          // One entry per serial number
+          return serialNumbers.map((serialNumber) => ({
             machineId: machine.machineId,
             machineName: machine.machineName,
             modelNumber: machine.modelNumber,
@@ -67,12 +71,13 @@ const getOwnedMachines = async (req, res) => {
             division: machine.division,
             images: machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
             variant: {
-              ...variant.toObject(),
-              contractType
+              ...variantObj,
+              contractType,
+              serialNumber,
             },
             createdAt: record.createdAt,
             updatedAt: record.updatedAt
-          };
+          }));
         })
       )
     );

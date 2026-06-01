@@ -17,7 +17,7 @@ const uploadPhoto = multer({
 });
 
 router.get("/zones", getActiveZones);
-router.post("/signup", signup);
+router.post("/signup", uploadPhoto.single("profilePhoto"), signup);
 router.post("/login", login);
 router.post("/send-reset-otp", sendResetOtp);
 router.post("/verify-otp-reset-password", verifyOtpResetPassword);

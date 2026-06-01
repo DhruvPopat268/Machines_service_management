@@ -42,13 +42,21 @@ const getActiveZones = async (req, res) => {
 
 const signup = async (req, res) => {
   try {
-    const { name, phone, email, password, address, zone } = req.body;
+    const { name, phone, email, password, zone } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
-    const userLocation = req.body.userLocation
-      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
-      : undefined;
 
-    const { isValid, errors } = validateSignup({ name, phone, email, password, address, zone });
+    let userLocation;
+    if (req.body.userLocation) {
+      try {
+        const loc = typeof req.body.userLocation === "string"
+          ? JSON.parse(req.body.userLocation)
+          : req.body.userLocation;
+        if (loc.address && loc.latitude !== undefined && loc.longitude !== undefined)
+          userLocation = { address: loc.address.trim(), latitude: loc.latitude, longitude: loc.longitude };
+      } catch (_) {}
+    }
+
+    const { isValid, errors } = validateSignup({ name, phone, email, password, address: userLocation?.address, zone });
     if (!isValid)
       return res.status(400).json({ success: false, errors });
 
@@ -92,7 +100,6 @@ const signup = async (req, res) => {
       phone: phone.trim(),
       email: email.trim().toLowerCase(),
       password: await bcrypt.hash(password.trim(), 10),
-      address: address.trim(),
       zone,
       gstNumber,
       status: "Active",
@@ -258,10 +265,18 @@ const verifyOtpResetPassword = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { name, phone, address, zone, gstNumber } = req.body;
-    const userLocation = req.body.userLocation !== undefined
-      ? (typeof req.body.userLocation === "string" ? JSON.parse(req.body.userLocation) : req.body.userLocation)
-      : undefined;
+    const { name, phone, zone, gstNumber } = req.body;
+
+    let userLocation;
+    if (req.body.userLocation !== undefined) {
+      try {
+        const loc = typeof req.body.userLocation === "string"
+          ? JSON.parse(req.body.userLocation)
+          : req.body.userLocation;
+        if (loc && loc.address && loc.latitude !== undefined && loc.longitude !== undefined)
+          userLocation = { address: loc.address.trim(), latitude: loc.latitude, longitude: loc.longitude };
+      } catch (_) {}
+    }
 
     const customer = await Customer.findById(customerId);
     if (!customer)
@@ -285,12 +300,6 @@ const updateProfile = async (req, res) => {
       if (phoneExists)
         return res.status(409).json({ success: false, message: "Phone number already exists" });
       updates.phone = phone.trim();
-    }
-
-    if (address !== undefined) {
-      if (!address.trim())
-        return res.status(400).json({ success: false, message: "Address cannot be empty" });
-      updates.address = address.trim();
     }
 
     if (zone !== undefined) {

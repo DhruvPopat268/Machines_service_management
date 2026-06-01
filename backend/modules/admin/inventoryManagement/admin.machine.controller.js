@@ -160,7 +160,7 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, imageOrder } = req.body;
+    const { name, modelNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, imageOrder } = req.body;
 
     const error = validateCreateMachine({ name, modelNumber, category, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -196,7 +196,7 @@ const create = async (req, res) => {
 
     const machine = await Machine.create({
       name: name.trim(),
-      modelNumber, serialNumber, hsnCode, partCode,
+      modelNumber, hsnCode, partCode,
       gstPercentage: gstPercentage !== "" && gstPercentage !== undefined ? Number(gstPercentage) : null,
       category,
       division: division || null,
@@ -222,7 +222,7 @@ const update = async (req, res) => {
     if (!machine)
       return res.status(404).json({ success: false, message: "Machine not found" });
 
-    const { name, modelNumber, serialNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, existingImages, imageOrder } = req.body;
+    const { name, modelNumber, hsnCode, partCode, gstPercentage, category, division, variants, notes, status, existingImages, imageOrder } = req.body;
 
     const error = validateUpdateMachine({ name, modelNumber, division, gstPercentage, status, variants });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -262,7 +262,6 @@ const update = async (req, res) => {
     const updateData = { images: currentImages };
     if (name !== undefined)          updateData.name          = name.trim();
     if (modelNumber !== undefined)   updateData.modelNumber   = modelNumber;
-    if (serialNumber !== undefined)  updateData.serialNumber  = serialNumber;
     if (hsnCode !== undefined)       updateData.hsnCode       = hsnCode;
     if (partCode !== undefined)      updateData.partCode      = partCode;
     if (gstPercentage !== undefined) updateData.gstPercentage = gstPercentage !== "" ? Number(gstPercentage) : null;
@@ -355,11 +354,11 @@ const formatIST = (date) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "modelNumber", "serialNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "attribute", "value", "lowStockThreshold", "status (Active/Inactive)", "notes"],
-    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Red",  "5",  "Active", "Sample notes"],
-    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Blue", "5",  "Active", "Sample notes"],
-    ["CNC Machine X200", "X200", "SN-001", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Voltage", "220V", "-1", "Active", "Sample notes"],
-    ["Laser Cutter L10", "L10",  "",       "",            "",         "",   "Light Machinery", "Laser Division", "",      "",     "",   "Active", ""],
+    ["name", "modelNumber", "partCode", "hsnCode", "gstPercentage", "category", "division", "attribute", "value", "lowStockThreshold", "status (Active/Inactive)", "notes"],
+    ["CNC Machine X200", "X200", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Red",  "5",  "Active", "Sample notes"],
+    ["CNC Machine X200", "X200", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Color",   "Blue", "5",  "Active", "Sample notes"],
+    ["CNC Machine X200", "X200", "MC-X200-001", "84715000", "18", "Heavy Machinery", "CNC Division", "Voltage", "220V", "-1", "Active", "Sample notes"],
+    ["Laser Cutter L10", "L10",  "",            "",         "",   "Light Machinery", "Laser Division", "",      "",     "",   "Active", ""],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Machines");
@@ -528,7 +527,6 @@ const importMachines = async (req, res) => {
         await Machine.create({
           name:          String(row.name         || ""),
           modelNumber:   String(row.modelnumber  || ""),
-          serialNumber:  String(row.serialnumber || ""),
           partCode:      String(row.partcode     || ""),
           hsnCode:       String(row.hsncode      || ""),
           gstPercentage: row.gstpercentage !== "" ? Number(row.gstpercentage) : null,
@@ -602,7 +600,6 @@ const exportMachines = async (req, res) => {
         rows.push({
           name:              m.name,
           modelNumber:       m.modelNumber,
-          serialNumber:      m.serialNumber,
           partCode:          m.partCode,
           hsnCode:           m.hsnCode,
           gstPercentage:     m.gstPercentage ?? "",
@@ -625,7 +622,6 @@ const exportMachines = async (req, res) => {
           rows.push({
             name:              m.name,
             modelNumber:       m.modelNumber,
-            serialNumber:      m.serialNumber,
             partCode:          m.partCode,
             hsnCode:           m.hsnCode,
             gstPercentage:     m.gstPercentage ?? "",

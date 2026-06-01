@@ -13,8 +13,7 @@ const variantSchema = new mongoose.Schema(
     total:                  { type: Number, required: true },
     willAddToInventory:     { type: Boolean, default: true },
     addedToInventory:       { type: Boolean, default: false },
-  },
-  { _id: false }
+  }
 );
 
 const purchasedMachineEntrySchema = new mongoose.Schema(

@@ -47,7 +47,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
   const [loadingData, setLoadingData] = useState(isEdit || isView);
 
   const [form, setForm] = useState({
-    name: "", modelNumber: "", serialNumber: "", category: "",
+    name: "", modelNumber: "", category: "",
     division: "", hsnCode: "", gstPercentage: "", partCode: "",
     status: "Active" as "Active" | "Inactive", notes: "",
   });
@@ -107,7 +107,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         setForm({
           name:          m.name          ?? "",
           modelNumber:   m.modelNumber   ?? "",
-          serialNumber:  m.serialNumber  ?? "",
           category:      m.category?._id ?? "",
           division:      m.division?._id ?? "",
           hsnCode:       m.hsnCode       ?? "",
@@ -237,7 +236,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       const fd = new FormData();
       fd.append("name",          form.name.trim());
       fd.append("modelNumber",   form.modelNumber);
-      fd.append("serialNumber",  form.serialNumber);
       fd.append("hsnCode",       form.hsnCode);
       fd.append("partCode",      form.partCode);
       fd.append("gstPercentage", form.gstPercentage);
@@ -304,7 +302,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Machine name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>Model Number</Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
-              <div className="space-y-2"><Label>Serial Number</Label><Input placeholder="Unique serial number" value={form.serialNumber} onChange={(e) => setField("serialNumber", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>Part Code</Label><Input placeholder="e.g. MC-X200-001" value={form.partCode} onChange={(e) => setField("partCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={form.hsnCode} onChange={(e) => setField("hsnCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>GST %</Label><Input type="number" placeholder="e.g. 18" min={0} max={100} value={form.gstPercentage} onChange={(e) => setField("gstPercentage", e.target.value)} disabled={isReadOnly} /></div>
