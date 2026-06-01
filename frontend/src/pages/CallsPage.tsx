@@ -43,6 +43,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [loading, setLoading]               = useState(true);
   const [search, setSearch]                 = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [serialNumber, setSerialNumber]         = useState("");
+  const [debouncedSerialNumber, setDebouncedSerialNumber] = useState("");
   const [filters, setFilters]               = useState<Record<string, string>>({});
   const [fromDate, setFromDate]             = useState("");
   const [toDate, setToDate]                 = useState("");
@@ -68,6 +70,11 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500);
+    return () => clearTimeout(t);
+  }, [serialNumber]);
 
   // fetch filter dropdown options
   useEffect(() => {
@@ -170,6 +177,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (debouncedSearch)                                             params.search       = debouncedSearch;
       if (filters.problemTypeId && filters.problemTypeId !== "all")     params.problemTypeId = filters.problemTypeId;
       if (filters.machineName  && filters.machineName  !== "all")     params.machineName  = filters.machineName;
+      if (debouncedSerialNumber)                                         params.serialNumber = debouncedSerialNumber;
       if (filters.customerName && filters.customerName !== "all")     params.customerName = filters.customerName;
       if (filters.engineerName && filters.engineerName !== "all")     params.engineerName = filters.engineerName;
       if (filters.category     && filters.category     !== "all")     params.category     = filters.category;
@@ -188,7 +196,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [statusFilter, debouncedSearch, filters, fromDate, toDate]);
+  }, [statusFilter, debouncedSearch, debouncedSerialNumber, filters, fromDate, toDate]);
 
   useEffect(() => { fetchCalls(1); }, [fetchCalls]);
 
@@ -272,8 +280,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
                 <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
               </div>
-              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+              {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
                   <X className="h-4 w-4 mr-1" /> Clear
                 </Button>
               )}
@@ -296,6 +304,14 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
+            <div className="relative">
+              <Input
+                placeholder="Serial number..."
+                value={serialNumber}
+                onChange={(e) => setSerialNumber(e.target.value)}
+                className="w-[160px] h-9 text-sm"
+              />
+            </div>
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />

@@ -195,6 +195,7 @@ const CallDetailsPage = () => {
                 <TableRow>
                   <TableHead className="w-10">#</TableHead>
                   <TableHead>Machine Name</TableHead>
+                  <TableHead>Serial No.</TableHead>
                   <TableHead>Model</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Division</TableHead>
@@ -211,6 +212,7 @@ const CallDetailsPage = () => {
                   <TableRow key={index}>
                     <TableCell className="font-medium">{index + 1}</TableCell>
                     <TableCell className="font-medium">{machine.machineName}</TableCell>
+                    <TableCell className="font-mono text-sm">{machine.serialNumber || "N/A"}</TableCell>
                     <TableCell>{machine.modelNumber || "N/A"}</TableCell>
                     <TableCell>{machine.category || "N/A"}</TableCell>
                     <TableCell>{machine.division || "N/A"}</TableCell>

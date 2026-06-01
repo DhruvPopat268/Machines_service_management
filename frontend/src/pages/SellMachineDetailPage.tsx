@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Package } from "lucide-react";
+import { ArrowLeft, User, Package, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
@@ -22,6 +23,7 @@ interface SaleVariant {
   name: string;
   value: string;
   quantity: number;
+  serialNumbers: string[];
   price: number;
   discountedPrice: number | null;
   total: number;
@@ -86,6 +88,7 @@ const SellMachineDetailPage = () => {
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [serialDialog, setSerialDialog] = useState<{ machineName: string; variantName: string; variantValue: string; serialNumbers: string[] } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -177,6 +180,7 @@ const SellMachineDetailPage = () => {
                     <th className="text-left font-medium pb-2 pr-4">Variant</th>
                     <th className="text-left font-medium pb-2 pr-4">Value</th>
                     <th className="text-right font-medium pb-2 pr-4">Qty</th>
+                    <th className="text-center font-medium pb-2 pr-4">Serial Numbers</th>
                     <th className="text-right font-medium pb-2 pr-4">Price</th>
                     <th className="text-right font-medium pb-2 pr-4">Disc. Price</th>
                     <th className="text-right font-medium pb-2 pr-4">Total</th>
@@ -196,6 +200,17 @@ const SellMachineDetailPage = () => {
                         <td className="py-2 pr-4">{v.name}</td>
                         <td className="py-2 pr-4">{v.value}</td>
                         <td className="py-2 pr-4 text-right">{v.quantity}</td>
+                        <td className="py-2 pr-4 text-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-xs gap-1"
+                            onClick={() => setSerialDialog({ machineName: machine.machineName, variantName: v.name, variantValue: v.value, serialNumbers: v.serialNumbers || [] })}
+                          >
+                            <Hash className="h-3 w-3" />
+                            {v.serialNumbers?.length ?? 0} Serial{(v.serialNumbers?.length ?? 0) !== 1 ? "s" : ""}
+                          </Button>
+                        </td>
                         <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
                         <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
                         <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
@@ -230,6 +245,32 @@ const SellMachineDetailPage = () => {
           </Card>
         ))}
       </div>
+
+      {/* Serial Numbers Dialog */}
+      <Dialog open={!!serialDialog} onOpenChange={() => setSerialDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Serial Numbers</DialogTitle>
+            {serialDialog && (
+              <p className="text-sm text-muted-foreground">
+                {serialDialog.machineName} — {serialDialog.variantName}: {serialDialog.variantValue}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-2 py-2 max-h-72 overflow-y-auto">
+            {serialDialog?.serialNumbers.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No serial numbers found</p>
+            ) : (
+              serialDialog?.serialNumbers.map((sn, idx) => (
+                <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted">
+                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
+                  <span className="text-sm font-medium font-mono">{sn}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

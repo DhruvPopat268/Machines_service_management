@@ -74,6 +74,7 @@ export interface CallsParams {
   status?: string;
   search?: string;
   problemTypeId?: string;
+  serialNumber?: string;
   machineName?: string;
   customerName?: string;
   engineerName?: string;

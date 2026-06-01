@@ -24,6 +24,7 @@ const getCalls = async (req, res) => {
 
     if (problemTypeId && mongoose.isValidObjectId(problemTypeId)) query["machines.problemTypeIds"] = new mongoose.Types.ObjectId(problemTypeId);
     if (machineName)  query["machines.machineName"] = { $regex: escapeRegex(machineName), $options: "i" };
+    if (req.query.serialNumber) query["machines.serialNumber"] = { $regex: escapeRegex(req.query.serialNumber.trim()), $options: "i" };
     if (customerName) query["customerInfo.name"]    = { $regex: escapeRegex(customerName), $options: "i" };
     if (engineerName) query["engineerInfo.name"]    = { $regex: escapeRegex(engineerName), $options: "i" };
     if (category && mongoose.isValidObjectId(category)) query["machines.categoryId"] = new mongoose.Types.ObjectId(category);

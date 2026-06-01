@@ -11,6 +11,7 @@ interface LogVariant {
   name: string;
   value: string;
   qtyChange: string;
+  serialNumbers: string[];
 }
 
 interface LogMachine {
@@ -184,6 +185,7 @@ const InventoryLogDetailPage = () => {
                 <thead>
                   <tr className="text-muted-foreground border-b text-xs">
                     <th className="text-left font-medium pb-2 pr-4">Attribute</th>
+                    <th className="text-left font-medium pb-2 pr-4">Serial Numbers</th>
                     <th className="text-left font-medium pb-2 pr-4">Value</th>
                     <th className="text-right font-medium pb-2">Qty Change</th>
                   </tr>
@@ -192,6 +194,17 @@ const InventoryLogDetailPage = () => {
                   {machine.variants.map((v, vi) => (
                     <tr key={vi} className="border-b last:border-0">
                       <td className="py-2 pr-4">{v.name}</td>
+                      <td className="py-2 pr-4">
+                        {v.serialNumbers && v.serialNumbers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {v.serialNumbers.map((sn, si) => (
+                              <span key={si} className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-xs font-mono">{sn}</span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
                       <td className="py-2 pr-4">{v.value}</td>
                       <td className="py-2 text-right">
                         <span className={`font-medium ${v.qtyChange.startsWith("+") ? "text-green-600" : "text-red-600"}`}>

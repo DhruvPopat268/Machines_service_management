@@ -559,6 +559,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             <th className="text-left font-medium pb-2 pr-3 w-32">Serial Numbers <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Total</th>
                             <th className="text-left font-medium pb-2 pr-3 w-36">Contract Type <span className="text-destructive">*</span></th>
                             <th className="text-center font-medium pb-2 pr-3 w-24">Free Service</th>
                             <th className="text-center font-medium pb-2 pr-3 w-24">Free Parts</th>
@@ -619,6 +620,15 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   value={v.discountedPrice}
                                   onChange={(e) => updateVariant(mi, vi, "discountedPrice", e.target.value)}
                                 />
+                              </td>
+                              <td className="py-1.5 pr-3">
+                                {v.quantity && v.price ? (
+                                  <span className="text-xs font-medium text-foreground">
+                                    ₹{((Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity)).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
                               </td>
                               <td className="py-1.5 pr-3">
                                 <SearchableSelect
@@ -765,6 +775,8 @@ const SellMachinesPage = () => {
   const [stats, setStats]                     = useState<Stats | null>(null);
   const [search, setSearch]                   = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [serialNumber, setSerialNumber]         = useState("");
+  const [debouncedSerialNumber, setDebouncedSerialNumber] = useState("");
   const [filters, setFilters]                 = useState<Record<string, string>>({});
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
@@ -788,6 +800,11 @@ const SellMachinesPage = () => {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500);
+    return () => clearTimeout(t);
+  }, [serialNumber]);
 
   // auto-open dialog if customerId is in query params
   useEffect(() => {
@@ -936,6 +953,7 @@ const SellMachinesPage = () => {
       if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
       if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
+      if (debouncedSerialNumber) params.serialNumber = debouncedSerialNumber;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -953,7 +971,7 @@ const SellMachinesPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
+  }, [debouncedSearch, debouncedSerialNumber, filters, fromDate, toDate, pageSize]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
 
@@ -1105,8 +1123,8 @@ const SellMachinesPage = () => {
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
                 <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
               </div>
-              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+              {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
                   <X className="h-4 w-4 mr-1" /> Clear
                 </Button>
               )}
@@ -1119,6 +1137,12 @@ const SellMachinesPage = () => {
             <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machine: v }))} onSearchChange={fetchMachines} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
+            <Input
+              placeholder="Serial number..."
+              value={serialNumber}
+              onChange={(e) => setSerialNumber(e.target.value)}
+              className="w-[160px] h-9 text-sm"
+            />
           </div>
           <div>
             <DataTable columns={columns} data={data} pageSize={999} />

@@ -139,6 +139,13 @@ const raiseServiceCall = async (req, res) => {
         for (const machine of record.machines) {
           const variant = machine.variants.find(v => v._id.toString() === serviceCall.variantId);
           if (variant) {
+            if (!serviceCall.serialNumber || !variant.serialNumbers.includes(serviceCall.serialNumber)) {
+                return res.status(400).json({
+                  success: false,
+                  message: `Invalid or missing serialNumber for variantId: ${serviceCall.variantId}`
+                });
+              }
+
             const scProblemTypeIds = Array.isArray(serviceCall.problemTypeIds)
               ? serviceCall.problemTypeIds
               : serviceCall.problemTypeId ? [serviceCall.problemTypeId] : [];
@@ -159,7 +166,7 @@ const raiseServiceCall = async (req, res) => {
               machineId: machine.machineId,
               machineName: machine.machineName,
               modelNumber: machine.modelNumber,
-              serialNumber: variant.name,
+              serialNumber: serviceCall.serialNumber,
               divisionId: machine.divisionId,
               division: machine.division,
               categoryId: machine.categoryId,

@@ -2,9 +2,10 @@ const mongoose = require("mongoose");
 
 const variantSchema = new mongoose.Schema(
   {
-    name:      { type: String, trim: true, required: true },
-    value:     { type: String, trim: true, required: true },
-    qtyChange: { type: String, trim: true, required: true },
+    name:          { type: String, trim: true, required: true },
+    value:         { type: String, trim: true, required: true },
+    qtyChange:     { type: String, trim: true, required: true },
+    serialNumbers: { type: [String], default: [] },
   },
   { _id: false }
 );

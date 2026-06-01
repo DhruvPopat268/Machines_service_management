@@ -113,6 +113,7 @@ const getVariantDetail = async (req, res) => {
   try {
     const customerId = req.customer.id;
     const { variantId } = req.params;
+    const { serialNumber } = req.query;
 
     const soldRecord = await SoldMachine.findOne({
       "customerInfo.customerId": customerId,
@@ -144,8 +145,10 @@ const getVariantDetail = async (req, res) => {
         
         variantDetail = {
           ...variantObj,
-          contractType
+          contractType,
+          serialNumber: serialNumber || (variantObj.serialNumbers?.[0] ?? null),
         };
+        delete variantDetail.serialNumbers;
         
         // Fetch machine images
         let images = [];

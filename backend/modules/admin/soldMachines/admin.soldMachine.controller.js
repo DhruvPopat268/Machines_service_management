@@ -28,7 +28,7 @@ const buildMachineFilter = (category, division, machineId) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, category, division, machineId, serialNumber, fromDate, toDate, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
@@ -85,6 +85,11 @@ const getAll = async (req, res) => {
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (machineFilter) {
       query.machines = machineFilter;
+    }
+
+    if (serialNumber) {
+      const escaped = serialNumber.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query["machines.variants.serialNumbers"] = { $regex: escaped, $options: "i" };
     }
 
     if (fromDate || toDate) {
@@ -355,7 +360,7 @@ const createSale = async (req, res) => {
           { session }
         );
 
-        logVariants.push({ name: sv.name, value: sv.value, qtyChange: `-${sv.quantity}` });
+        logVariants.push({ name: sv.name, value: sv.value, qtyChange: `-${sv.quantity}`, serialNumbers: sv.serialNumbers || [] });
       }
 
       if (logVariants.length) {
@@ -433,7 +438,7 @@ const getById = async (req, res) => {
 
 const exportToExcel = async (req, res) => {
   try {
-    const { search, customerId, category, division, machineId, fromDate, toDate } = req.query;
+    const { search, customerId, category, division, machineId, serialNumber, fromDate, toDate } = req.query;
 
     const query = {};
 
@@ -490,6 +495,11 @@ const exportToExcel = async (req, res) => {
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (machineFilter) {
       query.machines = machineFilter;
+    }
+
+    if (serialNumber) {
+      const escaped = serialNumber.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query["machines.variants.serialNumbers"] = { $regex: escaped, $options: "i" };
     }
 
     if (fromDate || toDate) {

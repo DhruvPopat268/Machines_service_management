@@ -414,6 +414,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                 <th className="text-left font-medium pb-2 pr-3 w-24">Discounted Selling Price</th>
                               </>
                             )}
+                            <th className="text-left font-medium pb-2 pr-3 w-24">Total</th>
                             <th className="text-center font-medium pb-2">Add to Inv.</th>
                           </tr>
                         </thead>
@@ -474,6 +475,15 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                   </td>
                                 </>
                               )}
+                              <td className="py-1.5 pr-3">
+                                {v.quantity && v.price ? (
+                                  <span className="text-xs font-medium text-foreground">
+                                    ₹{((Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity)).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">—</span>
+                                )}
+                              </td>
                               <td className="py-1.5 text-center">
                                 {v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" ? (
                                   <Switch
