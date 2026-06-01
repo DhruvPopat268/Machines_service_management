@@ -82,7 +82,7 @@ const logout = async (req, res) => {
 const getProfile = async (req, res) => {
   try {
     const engineer = await AdminUser.findById(req.engineer.id)
-      .select("name phone email role engineerId address profilePhoto _id");
+      .select("name phone email role engineerId engineerLocation profilePhoto _id");
     if (!engineer) return res.status(404).json({ success: false, message: "Engineer not found" });
 
     res.status(200).json({ success: true, data: engineer });
@@ -93,16 +93,25 @@ const getProfile = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const { name, phone, email, address } = req.body;
+    const { name, phone, email } = req.body;
+
+    let engineerLocation;
+    if (req.body.engineerLocation) {
+      try {
+        engineerLocation = typeof req.body.engineerLocation === "string"
+          ? JSON.parse(req.body.engineerLocation)
+          : req.body.engineerLocation;
+      } catch (_) {}
+    }
 
     const error = validateUpdateProfile({ name, phone, email });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const update = {};
-    if (name    !== undefined) update.name    = name.trim();
-    if (phone   !== undefined) update.phone   = phone.trim();
-    if (email   !== undefined) update.email   = email.trim().toLowerCase();
-    if (address !== undefined) update.address = address.trim();
+    if (name              !== undefined) update.name             = name.trim();
+    if (phone             !== undefined) update.phone            = phone.trim();
+    if (email             !== undefined) update.email            = email.trim().toLowerCase();
+    if (engineerLocation  !== undefined) update.engineerLocation = engineerLocation;
 
     if (req.file) {
       try {
@@ -131,7 +140,7 @@ const updateProfile = async (req, res) => {
     if (!existing) return res.status(404).json({ success: false, message: "Engineer not found" });
 
     const engineer = await AdminUser.findByIdAndUpdate(req.engineer.id, update, { new: true, runValidators: true })
-      .select("name phone email role address profilePhoto engineerId");
+      .select("name phone email role engineerLocation profilePhoto engineerId");
 
     if (update.profilePhoto && existing.profilePhoto)
       await deleteProfilePhoto(existing.profilePhoto);

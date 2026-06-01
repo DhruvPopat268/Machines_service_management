@@ -8,11 +8,119 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { UserPlus, Edit, Trash2, Search, X, Eye, EyeOff, KeyRound, UserCircle } from "lucide-react";
+import { UserPlus, Edit, Trash2, Search, X, Eye, EyeOff, KeyRound, UserCircle, MapPin } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
+
+const GMAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+let gmapsLoaded = false;
+const loadGMaps = () => new Promise<void>((resolve) => {
+  if (gmapsLoaded || (window as any).google?.maps?.places) { gmapsLoaded = true; resolve(); return; }
+  const script = document.createElement("script");
+  script.src = `https://maps.googleapis.com/maps/api/js?key=${GMAPS_KEY}&libraries=places`;
+  script.async = true;
+  script.onload = () => { gmapsLoaded = true; resolve(); };
+  document.head.appendChild(script);
+});
+
+const getLatLng = (placeId: string): Promise<{ latitude: number; longitude: number } | null> =>
+  new Promise((resolve) => {
+    const map = new (window as any).google.maps.Map(document.createElement("div"));
+    const service = new (window as any).google.maps.places.PlacesService(map);
+    service.getDetails({ placeId, fields: ["geometry"] }, (place: any, status: string) => {
+      if (status === "OK" && place?.geometry?.location)
+        resolve({ latitude: place.geometry.location.lat(), longitude: place.geometry.location.lng() });
+      else resolve(null);
+    });
+  });
+
+interface Suggestion { place_id: string; description: string; }
+
+interface LocationFieldProps {
+  value: string;
+  onChange: (val: string) => void;
+  onSelect: (address: string, coords: { latitude: number; longitude: number } | null) => void;
+}
+
+const LocationField = ({ value, onChange, onSelect }: LocationFieldProps) => {
+  const [suggestions, setSuggestions]         = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const debounceRef                           = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef                            = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node))
+        setShowSuggestions(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const fetchSuggestions = (val: string) => {
+    if (!GMAPS_KEY || val.trim().length < 3) { setSuggestions([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        await loadGMaps();
+        const service = new (window as any).google.maps.places.AutocompleteService();
+        service.getPlacePredictions({ input: val, language: "en", componentRestrictions: { country: "in" } }, (predictions: any[], status: string) => {
+          if (status === "OK" && predictions) {
+            setSuggestions(predictions.map((p: any) => ({ place_id: p.place_id, description: p.description })));
+            setShowSuggestions(true);
+          } else {
+            setSuggestions([]);
+          }
+        });
+      } catch { setSuggestions([]); }
+    }, 400);
+  };
+
+  const handleChange = (val: string) => {
+    onChange(val);
+    fetchSuggestions(val);
+  };
+
+  const handleSelect = async (description: string, placeId: string) => {
+    onChange(description);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    try {
+      await loadGMaps();
+      const coords = await getLatLng(placeId);
+      onSelect(description, coords);
+    } catch { onSelect(description, null); }
+  };
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <Input
+        placeholder="Start typing an address..."
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+        autoComplete="off"
+      />
+      {showSuggestions && suggestions.length > 0 && (
+        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-52 overflow-y-auto">
+          {suggestions.map((s) => (
+            <button
+              key={s.place_id}
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(s.description, s.place_id); }}
+            >
+              {s.description}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface SystemUser {
   _id: string;
@@ -22,7 +130,7 @@ interface SystemUser {
   role: "Admin" | "Engineer" | "Support";
   status: "Active" | "Inactive";
   profilePhoto?: string;
-  address?: string;
+  engineerLocation?: { address: string; latitude?: number; longitude?: number };
   engineerId?: string;
   lastLoginAt: string | null;
   lastActivityAt: string | null;
@@ -40,7 +148,7 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], address: "", profilePhoto: null as File | null };
+const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null };
 
 // ─── Reset Password Popup ─────────────────────────────────────────────────────
 const ResetPasswordPopup = ({ open, onClose, userId, userEmail }: { open: boolean; onClose: () => void; userId: string; userEmail: string }) => {
@@ -154,7 +262,7 @@ const UsersPage = () => {
   const addPhotoRef                           = useRef<HTMLInputElement>(null);
 
   const [editDialog, setEditDialog]           = useState<SystemUser | null>(null);
-  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], address: "", profilePhoto: null as File | null });
+  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null });
   const [resetPopup, setResetPopup]           = useState(false);
   const editPhotoRef                          = useRef<HTMLInputElement>(null);
 
@@ -204,9 +312,13 @@ const UsersPage = () => {
         fd.append("password", addForm.password);
         fd.append("role", addForm.role);
         fd.append("status", addForm.status);
-        if (addForm.address) fd.append("address", addForm.address);
+        if (addForm.engineerLocation) fd.append("engineerLocation", JSON.stringify(addForm.engineerLocation));
         fd.append("profilePhoto", addForm.profilePhoto);
         payload = fd;
+      } else {
+        const { profilePhoto: _p, ...rest } = addForm;
+        payload = rest;
+        if (!addForm.engineerLocation) delete payload.engineerLocation;
       }
       await api.post("/admin/system-users", payload);
       toast.success("User added successfully");
@@ -232,12 +344,13 @@ const UsersPage = () => {
         fd.append("phone", editForm.phone);
         fd.append("role", editForm.role);
         fd.append("status", editForm.status);
-        if (editForm.address) fd.append("address", editForm.address);
+        if (editForm.engineerLocation) fd.append("engineerLocation", JSON.stringify(editForm.engineerLocation));
         fd.append("profilePhoto", editForm.profilePhoto);
         payload = fd;
       } else {
         const { profilePhoto: _p, ...rest } = editForm;
         payload = rest;
+        if (!editForm.engineerLocation) delete payload.engineerLocation;
       }
       await api.patch(`/admin/system-users/${editDialog._id}`, payload);
       toast.success("User updated successfully");
@@ -291,7 +404,20 @@ const UsersPage = () => {
     { key: "phone", label: "Phone", render: (u) => <span className="text-sm">{u.phone || "—"}</span> },
     { key: "role",  label: "Role",  render: (u) => <StatusBadge status={u.role} /> },
     { key: "engineerId", label: "Engineer ID", render: (u) => u.role === "Engineer" ? <span className="text-sm font-medium">{u.engineerId || "—"}</span> : <span className="text-muted-foreground text-sm">—</span> },
-    { key: "address", label: "Address", render: (u) => u.role === "Engineer" ? <span className="text-sm">{u.address || "—"}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "engineerLocation", label: "Address", render: (u) => {
+      const addr = u.engineerLocation?.address || "";
+      if (u.role !== "Engineer" || !addr) return <span className="text-muted-foreground text-sm">—</span>;
+      return (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="max-w-[180px] truncate block text-sm cursor-default">{addr}</span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs whitespace-normal">{addr}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    } },
     {
       key: "status", label: "Status", render: (u) => (
         <div className="flex items-center gap-2">
@@ -319,7 +445,7 @@ const UsersPage = () => {
     {
       key: "actions", label: "Actions", sticky: true, render: (u) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status, address: u.address ?? "", profilePhoto: null }); setResetPopup(false); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status, engineerLocation: u.engineerLocation ? { address: u.engineerLocation.address, latitude: u.engineerLocation.latitude, longitude: u.engineerLocation.longitude } : null, profilePhoto: null }); setResetPopup(false); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete" onClick={() => setDeleteDialog(u)}>
@@ -398,7 +524,7 @@ const UsersPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Role <span className="text-destructive">*</span></Label>
-              <Select value={addForm.role} onValueChange={(v) => setAddForm(p => ({ ...p, role: v as SystemUser["role"], address: "", profilePhoto: null }))}>
+              <Select value={addForm.role} onValueChange={(v) => { setAddForm(p => ({ ...p, role: v as SystemUser["role"], engineerLocation: null, profilePhoto: null })); }}>
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Engineer">Engineer</SelectItem>
@@ -410,8 +536,12 @@ const UsersPage = () => {
             {addForm.role === "Engineer" && (
               <>
                 <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input placeholder="Engineer's address" value={addForm.address} onChange={(e) => setAddForm(p => ({ ...p, address: e.target.value }))} />
+                  <Label>Location</Label>
+                  <LocationField
+                    value={addForm.engineerLocation?.address ?? ""}
+                    onChange={(val) => setAddForm(p => ({ ...p, engineerLocation: { address: val } }))}
+                    onSelect={(address, coords) => setAddForm(p => ({ ...p, engineerLocation: { address, ...coords ?? {} } }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Profile Photo</Label>
@@ -481,7 +611,7 @@ const UsersPage = () => {
 
             <div className="space-y-2">
               <Label>Role</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm(p => ({ ...p, role: v as SystemUser["role"], address: "", profilePhoto: null }))}>
+              <Select value={editForm.role} onValueChange={(v) => { setEditForm(p => ({ ...p, role: v as SystemUser["role"], engineerLocation: null, profilePhoto: null })); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} disabled={r !== "Engineer"}>{r}</SelectItem>)}</SelectContent>
               </Select>
@@ -489,8 +619,12 @@ const UsersPage = () => {
             {editForm.role === "Engineer" && (
               <>
                 <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input placeholder="Engineer's address" value={editForm.address} onChange={(e) => setEditForm(p => ({ ...p, address: e.target.value }))} />
+                  <Label>Location</Label>
+                  <LocationField
+                    value={editForm.engineerLocation?.address ?? ""}
+                    onChange={(val) => setEditForm(p => ({ ...p, engineerLocation: { address: val } }))}
+                    onSelect={(address, coords) => setEditForm(p => ({ ...p, engineerLocation: { address, ...coords ?? {} } }))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Profile Photo</Label>

@@ -110,7 +110,16 @@ const getSystemUserById = async (req, res) => {
 
 const createSystemUser = async (req, res) => {
   try {
-    const { name, email, phone, password, role, status, address } = req.body;
+    const { name, email, phone, password, role, status } = req.body;
+
+    let engineerLocation;
+    if (req.body.engineerLocation) {
+      try {
+        engineerLocation = typeof req.body.engineerLocation === "string"
+          ? JSON.parse(req.body.engineerLocation)
+          : req.body.engineerLocation;
+      } catch (_) {}
+    }
 
     const error = validateCreateSystemUser({ name, email, phone, password, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -150,7 +159,7 @@ const createSystemUser = async (req, res) => {
         password,
         role,
         status,
-        ...(address    !== undefined && { address: address.trim() }),
+        ...(engineerLocation         && { engineerLocation }),
         ...(profilePhoto             && { profilePhoto }),
         ...(engineerId               && { engineerId }),
       });
@@ -180,7 +189,16 @@ const updateSystemUser = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid user ID" });
 
-    const { name, email, phone, role, status, address } = req.body;
+    const { name, email, phone, role, status } = req.body;
+
+    let engineerLocation;
+    if (req.body.engineerLocation) {
+      try {
+        engineerLocation = typeof req.body.engineerLocation === "string"
+          ? JSON.parse(req.body.engineerLocation)
+          : req.body.engineerLocation;
+      } catch (_) {}
+    }
 
     const error = validateUpdateSystemUser({ name, email, phone, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -191,7 +209,7 @@ const updateSystemUser = async (req, res) => {
     if (phone   !== undefined) update.phone   = phone.trim();
     if (role    !== undefined) update.role    = role;
     if (status  !== undefined) update.status  = status;
-    if (address !== undefined) update.address = address.trim();
+    if (engineerLocation !== undefined) update.engineerLocation = engineerLocation;
 
     if (req.file) {
       try {
