@@ -13,7 +13,7 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getCalls = async (req, res) => {
   try {
-    const { status, search, problemTypeId, machineName, customerName, engineerName, category, division, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { status, search, problemTypeId, machineName, customerName, engineerName, category, division, fromDate, toDate, contractTypeId, contractTypeStatus, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
@@ -37,6 +37,21 @@ const getCalls = async (req, res) => {
     if (engineerName) query["engineerInfo.name"]    = { $regex: escapeRegex(engineerName), $options: "i" };
     if (category && mongoose.isValidObjectId(category)) query["machines.categoryId"] = new mongoose.Types.ObjectId(category);
     if (division && mongoose.isValidObjectId(division)) query["machines.divisionId"] = new mongoose.Types.ObjectId(division);
+
+    if (contractTypeId && mongoose.isValidObjectId(contractTypeId))
+      query["machines.contractType.contractTypeId"] = new mongoose.Types.ObjectId(contractTypeId);
+
+    if (contractTypeStatus === "Active") {
+      // All machines must have non-expired contractType
+      query["machines"] = {
+        $not: { $elemMatch: { "contractType.validTo": { $lt: new Date() } } },
+      };
+    } else if (contractTypeStatus === "Expired") {
+      // At least one machine has an expired contractType
+      query["machines"] = {
+        $elemMatch: { "contractType.validTo": { $lt: new Date() } },
+      };
+    }
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -76,7 +91,7 @@ const getCalls = async (req, res) => {
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     };
 
-    if (!status && !search && !problemTypeId && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate) {
+    if (!status && !search && !problemTypeId && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate && !contractTypeId && !contractTypeStatus) {
       const statusCounts = await ServiceCall.aggregate([
         { $group: { _id: "$status", count: { $sum: 1 } } }
       ]);
@@ -465,9 +480,6 @@ const raiseServiceCall = async (req, res) => {
             const entry = (variant.serialNumbers || []).find(e => e.serialNumber === sn);
             if (!entry)
               return res.status(400).json({ success: false, message: `Serial number "${sn}" not found for variantId ${variantId}` });
-
-            if (entry.contractType?.validTo && new Date(entry.contractType.validTo) < new Date())
-              return res.status(400).json({ success: false, message: `Serial number "${sn}" has an expired contract` });
 
             foundMachine = machine; foundVariant = variant; serialEntry = entry;
             break outer;

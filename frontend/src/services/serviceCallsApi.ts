@@ -83,6 +83,8 @@ export interface CallsParams {
   division?: string;
   fromDate?: string;
   toDate?: string;
+  contractTypeId?: string;
+  contractTypeStatus?: string;
   page?: string;
   limit?: string;
 }

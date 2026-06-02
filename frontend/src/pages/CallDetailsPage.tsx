@@ -220,7 +220,17 @@ const CallDetailsPage = () => {
                     <TableCell>{machine.attributeName}: {machine.attributeValue}</TableCell>
                     <TableCell>
                       <div className="space-y-1 text-sm min-w-[160px]">
-                        <p className="font-medium">{machine.contractType.name} ({machine.contractType.code})</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-medium">{machine.contractType.name} ({machine.contractType.code})</p>
+                          {(() => {
+                            const isExpired = machine.contractType.validTo ? new Date() > new Date(machine.contractType.validTo) : false;
+                            return (
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                {isExpired ? "Expired" : "Active"}
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <p className="text-muted-foreground">Free Service: {machine.contractType.freeService ? "Yes" : "No"}</p>
                         <p className="text-muted-foreground">Free Parts: {machine.contractType.freeParts ? "Yes" : "No"}</p>
                         <p className="text-muted-foreground">From: {formatDate(machine.contractType.validFrom)}</p>

@@ -132,15 +132,14 @@ const CustomerOwnedMachinePage = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isExpired ? (
+          {isExpired && (
             <Button variant="destructive" className="gap-2" onClick={openRenewDialog}>
               <RefreshCw className="h-4 w-4" /> Renew Contract
             </Button>
-          ) : (
-            <Button className="gap-2" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(serialNumber)}`)}>
-              <PhoneCall className="h-4 w-4" /> Raise Call
-            </Button>
           )}
+          <Button className="gap-2" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(serialNumber)}`)}>
+            <PhoneCall className="h-4 w-4" /> Raise Call
+          </Button>
         </div>
       </div>
 

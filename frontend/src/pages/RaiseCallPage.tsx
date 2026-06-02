@@ -237,15 +237,14 @@ const RaiseCallPage = () => {
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.variant?.serialNumber)}`)}>
               <Eye className="h-4 w-4" /> View
             </Button>
-            {isExpired ? (
+            {isExpired && (
               <Button size="sm" variant="destructive" className="h-8 gap-1.5" onClick={() => openRenewDialog(m)}>
                 <RefreshCw className="h-3.5 w-3.5" /> Renew Contract
               </Button>
-            ) : (
-              <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.variant?.serialNumber)}`)}>
-                <PhoneCall className="h-3.5 w-3.5" /> Raise Call
-              </Button>
             )}
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.variant?.serialNumber)}`)}>
+              <PhoneCall className="h-3.5 w-3.5" /> Raise Call
+            </Button>
           </div>
         );
       },

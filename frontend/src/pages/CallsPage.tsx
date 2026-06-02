@@ -58,12 +58,14 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [engineers, setEngineers]           = useState<DropdownOption[]>([]);
   const [categories, setCategories]         = useState<DropdownOption[]>([]);
   const [divisions, setDivisions]           = useState<DropdownOption[]>([]);
+  const [contractTypes, setContractTypes]   = useState<DropdownOption[]>([]);
 
   const customerAbortRef  = useRef<AbortController | null>(null);
   const categoryAbortRef  = useRef<AbortController | null>(null);
   const divisionAbortRef  = useRef<AbortController | null>(null);
   const machineAbortRef   = useRef<AbortController | null>(null);
   const ptAbortRef        = useRef<AbortController | null>(null);
+  const ctAbortRef        = useRef<AbortController | null>(null);
 
   // debounce search
   useEffect(() => {
@@ -80,13 +82,14 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [ptRes, mRes, cRes, catRes, divRes, engData] = await Promise.all([
+        const [ptRes, mRes, cRes, catRes, divRes, engData, ctRes] = await Promise.all([
           api.get("/admin/problem-types", { params: { limit: 100 } }),
           api.get("/admin/machines", { params: { limit: 100 } }),
           api.get("/admin/customers", { params: { limit: 100 } }),
           api.get("/admin/machine-categories", { params: { limit: 100 } }),
           api.get("/admin/machine-divisions", { params: { limit: 100 } }),
           engineersApi.getActive(),
+          api.get("/admin/contract-types/active"),
         ]);
         setProblemTypes(ptRes.data.data);
         setMachines(mRes.data.data);
@@ -94,6 +97,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
         setEngineers(engData);
+        setContractTypes(ctRes.data.data);
       } catch {
         // silently fail
       }
@@ -158,6 +162,16 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     } catch {}
   }, []);
 
+  const fetchContractTypeOptions = useCallback(async (q: string) => {
+    ctAbortRef.current?.abort();
+    const controller = new AbortController();
+    ctAbortRef.current = controller;
+    try {
+      const res = await api.get("/admin/contract-types", { params: { limit: 100, search: q, status: "Active" }, signal: controller.signal });
+      if (!controller.signal.aborted) setContractTypes(res.data.data);
+    } catch {}
+  }, []);
+
   const abortRef = useRef<AbortController | null>(null);
 
   const toISTDateParam = (htmlDate: string) => {
@@ -184,6 +198,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (filters.division     && filters.division     !== "all")     params.division     = filters.division;
       if (!statusFilter && filters.callType && filters.callType !== "all")  params.callType     = filters.callType;
       if (!statusFilter && filters.status && filters.status !== "all") params.status      = filters.status;
+      if (filters.contractTypeId   && filters.contractTypeId   !== "all") params.contractTypeId   = filters.contractTypeId;
+      if (filters.contractTypeStatus && filters.contractTypeStatus !== "all") params.contractTypeStatus = filters.contractTypeStatus;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -332,6 +348,27 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />
+          </div>
+
+          {/* Row 3: Contract Type filters */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <SearchableSelect
+              options={contractTypes.map(c => ({ label: c.name, value: c._id }))}
+              value={filters.contractTypeId ?? ""}
+              onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))}
+              onSearchChange={fetchContractTypeOptions}
+              placeholder="Contract Type"
+              searchPlaceholder="Search contract types..."
+              className="w-[180px] h-9 text-sm"
+            />
+            <Select value={filters.contractTypeStatus || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, contractTypeStatus: v }))}>
+              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Contract Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Contract Status</SelectItem>
+                <SelectItem value="Active">Active Contracts</SelectItem>
+                <SelectItem value="Expired">Expired Contracts</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <DataTable columns={columns} data={data} />

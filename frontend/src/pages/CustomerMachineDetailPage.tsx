@@ -288,11 +288,6 @@ const CustomerMachineDetailPage = () => {
 
     for (let i = 0; i < machines.length; i++) {
       const m = machines[i];
-      const isExpired = m.detail.variant.contractType?.validTo ? new Date() > new Date(m.detail.variant.contractType.validTo) : false;
-      if (isExpired) {
-        toast.error(`Machine ${i + 1} (${m.detail.variant.serialNumber}) has an expired contract. Please renew before raising a call.`);
-        return;
-      }
       if (!m.issueDescription.trim()) {
         toast.error(`Issue description is required for machine ${i + 1}`);
         return;
@@ -449,15 +444,6 @@ const CustomerMachineDetailPage = () => {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
-
-              {isExpired && (
-                <div className="flex items-center justify-between rounded-md bg-red-50 border border-red-200 px-3 py-2">
-                  <p className="text-xs text-red-700 font-medium">Contract expired — renew to raise a call</p>
-                  <Button size="sm" variant="destructive" className="h-7 gap-1.5" onClick={() => openRenewDialog(entry)}>
-                    <RefreshCw className="h-3 w-3" /> Renew Contract
-                  </Button>
-                </div>
-              )}
 
               {/* Problem Types multiselect dropdown */}
               <div>

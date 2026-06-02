@@ -320,4 +320,13 @@ const exportContractTypes = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, update, remove, downloadSample, importContractTypes, exportContractTypes };
+const getActive = async (req, res) => {
+  try {
+    const contractTypes = await ContractType.find({ status: "Active" }).sort({ name: 1 }).select("_id name code freeService freeParts");
+    res.status(200).json({ success: true, data: contractTypes });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getActive, create, update, remove, downloadSample, importContractTypes, exportContractTypes };
