@@ -10,6 +10,9 @@ import Dashboard from "./pages/Dashboard";
 import UsersPage from "./pages/UsersPage";
 import EngineersPage from "./pages/EngineersPage";
 import CallsPage from "./pages/CallsPage";
+import RaiseCallPage from "./pages/RaiseCallPage";
+import CustomerMachineDetailPage from "./pages/CustomerMachineDetailPage";
+import CustomerOwnedMachinePage from "./pages/CustomerOwnedMachinePage";
 import CallDetailsPage from "./pages/CallDetailsPage";
 import MachinesPage from "./pages/MachinesPage";
 import AddMachineForm from "./pages/AddMachineForm";
@@ -46,6 +49,9 @@ const App = () => (
           <Route element={<ProfileProvider><AdminLayout /></ProfileProvider>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/calls" element={<CallsPage />} />
+            <Route path="/calls/raise/detail" element={<CustomerMachineDetailPage />} />
+            <Route path="/calls/raise/machine" element={<CustomerOwnedMachinePage />} />
+            <Route path="/calls/raise" element={<RaiseCallPage />} />
             <Route path="/calls/open" element={<CallsPage statusFilter="Open" title="Open Calls" description="Newly raised calls awaiting assignment" />} />
             <Route path="/calls/assigned" element={<CallsPage statusFilter="Assigned" title="Assigned Calls" description="Calls assigned to engineers" />} />
             <Route path="/calls/in-progress" element={<CallsPage statusFilter="In Progress" title="In Progress Calls" description="Calls currently being worked on" />} />

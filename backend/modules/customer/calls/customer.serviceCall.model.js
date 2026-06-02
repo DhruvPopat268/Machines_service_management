@@ -97,6 +97,8 @@ const serviceCallSchema = new mongoose.Schema(
       cancelled:       { type: Date },
     },
     note: { type: String, trim: true, default: "" },
+    callType: { type: String, enum: ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"], default: "Service-Call" },
+    createdBy: { type: String, enum: ["Admin", "Customer"], default: "Customer" },
     beforeWorkImages: { type: [String] },
     onHoldReason: { type: String, trim: true },
   },

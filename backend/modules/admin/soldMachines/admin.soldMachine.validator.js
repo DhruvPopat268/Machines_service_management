@@ -20,7 +20,7 @@ const validateCreateSale = (body) => {
       return `${machineLabel}: variants array is required and must not be empty`;
 
     for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice, contractTypeId, validFrom, validTo } = variants[vi];
+      const { attribute, value, quantity, price, discountedPrice, serialNumbers } = variants[vi];
       const label = `${machineLabel} Variant ${vi + 1}`;
 
       if (!attribute || !mongoose.isValidObjectId(attribute))
@@ -32,7 +32,6 @@ const validateCreateSale = (body) => {
       if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
         return `${label}: quantity must be a positive number`;
 
-      // Strict validation for price
       if (price == null)
         return `${label}: price is required`;
       if (typeof price === "string" && price.trim() === "")
@@ -43,7 +42,6 @@ const validateCreateSale = (body) => {
       if (numPrice < 0)
         return `${label}: price must be a non-negative number`;
 
-      // Strict validation for discountedPrice
       if (discountedPrice !== undefined && discountedPrice !== null) {
         if (typeof discountedPrice === "string" && discountedPrice.trim() === "")
           return `${label}: discounted price cannot be empty`;
@@ -56,23 +54,31 @@ const validateCreateSale = (body) => {
           return `${label}: discounted price cannot be greater than price`;
       }
 
-      // Validate contract type ID
-      if (!contractTypeId || !mongoose.isValidObjectId(contractTypeId))
-        return `${label}: invalid or missing contract type ID`;
+      if (!Array.isArray(serialNumbers) || serialNumbers.length === 0)
+        return `${label}: serialNumbers array is required`;
 
-      // Validate dates
-      if (!validFrom || !validTo)
-        return `${label}: valid from and valid to dates are required`;
-      
-      const fromDate = new Date(validFrom);
-      const toDate = new Date(validTo);
-      
-      if (isNaN(fromDate.getTime()))
-        return `${label}: invalid valid from date`;
-      if (isNaN(toDate.getTime()))
-        return `${label}: invalid valid to date`;
-      if (toDate <= fromDate)
-        return `${label}: valid to date must be after valid from date`;
+      if (serialNumbers.length !== Number(quantity))
+        return `${label}: serialNumbers count must match quantity`;
+
+      for (let si = 0; si < serialNumbers.length; si++) {
+        const entry = serialNumbers[si];
+        const slabel = `${label} Serial ${si + 1}`;
+
+        if (!entry.serialNumber || !String(entry.serialNumber).trim())
+          return `${slabel}: serialNumber is required`;
+
+        if (!entry.contractTypeId || !mongoose.isValidObjectId(entry.contractTypeId))
+          return `${slabel}: invalid or missing contract type ID`;
+
+        if (!entry.validFrom || !entry.validTo)
+          return `${slabel}: validFrom and validTo are required`;
+
+        const fromDate = new Date(entry.validFrom);
+        const toDate   = new Date(entry.validTo);
+        if (isNaN(fromDate.getTime())) return `${slabel}: invalid validFrom date`;
+        if (isNaN(toDate.getTime()))   return `${slabel}: invalid validTo date`;
+        if (toDate <= fromDate)        return `${slabel}: validTo must be after validFrom`;
+      }
     }
   }
 

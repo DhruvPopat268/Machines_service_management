@@ -6,106 +6,86 @@ const getOwnedMachines = async (req, res) => {
   try {
     const customerId = req.customer.id;
     const isAllRoute = req.path === '/all';
-    const page = parseInt(req.query.page) || 1;
+    const page  = parseInt(req.query.page)  || 1;
     const limit = parseInt(req.query.limit) || 12;
-    const skip = (page - 1) * limit;
+    const skip  = (page - 1) * limit;
 
-    const soldRecords = await SoldMachine.find({
-      "customerInfo.customerId": customerId
-    });
+    const soldRecords = await SoldMachine.find({ "customerInfo.customerId": customerId });
 
     if (soldRecords.length === 0) {
       return res.status(200).json({
         success: true,
-        data: {
-          customerInfo: null,
-          machines: []
-        },
-        ...(!isAllRoute && {
-          pagination: {
-            total: 0,
-            page,
-            limit,
-            totalPages: 0
-          }
-        })
+        data: { customerInfo: null, machines: [] },
+        ...(!isAllRoute && { pagination: { total: 0, page, limit, totalPages: 0 } }),
       });
     }
 
     const customerInfo = soldRecords[0].customerInfo;
-    
-    // Get current date in IST (UTC + 5:30)
-    const currentDateIST = toZonedTime(new Date(), 'Asia/Kolkata');
+    const currentDateIST = toZonedTime(new Date(), "Asia/Kolkata");
 
-    // Collect all unique machineIds
     const machineIds = [...new Set(
-      soldRecords.flatMap(record => 
+      soldRecords.flatMap(record =>
         record.machines.map(machine => machine.machineId).filter(id => id)
       )
     )];
 
-    // Fetch all machines with images
     const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
     const machineImagesMap = new Map(machines.map(m => [m._id.toString(), m.images]));
 
-    const allVariants = soldRecords.flatMap(record => 
-      record.machines.flatMap(machine => 
+    const allVariants = soldRecords.flatMap(record =>
+      record.machines.flatMap(machine =>
         machine.variants.flatMap(variant => {
-          const contractType = variant.contractType.toObject();
-          
-          // Convert validTo to IST for comparison
-          const validToIST = toZonedTime(contractType.validTo, 'Asia/Kolkata');
-          contractType.isContractExpired = validToIST < currentDateIST;
-
           const variantObj = variant.toObject();
-          const serialNumbers = variantObj.serialNumbers || [];
 
-          // One entry per serial number
-          return serialNumbers.map((serialNumber) => ({
-            machineId: machine.machineId,
-            machineName: machine.machineName,
-            modelNumber: machine.modelNumber,
-            categoryId: machine.categoryId,
-            category: machine.category,
-            divisionId: machine.divisionId,
-            division: machine.division,
-            images: machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
-            variant: {
-              ...variantObj,
-              contractType,
-              serialNumber,
-            },
-            createdAt: record.createdAt,
-            updatedAt: record.updatedAt
-          }));
+          // One entry per serialNumber entry — each carries its own contractType
+          return (variantObj.serialNumbers || []).map((entry) => {
+            const contractType = { ...entry.contractType };
+            const validToIST = toZonedTime(contractType.validTo, "Asia/Kolkata");
+            contractType.isContractExpired = validToIST < currentDateIST;
+
+            return {
+              machineId:   machine.machineId,
+              machineName: machine.machineName,
+              modelNumber: machine.modelNumber,
+              categoryId:  machine.categoryId,
+              category:    machine.category,
+              divisionId:  machine.divisionId,
+              division:    machine.division,
+              images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+              variant: {
+                _id:             variantObj._id,
+                attribute:       variantObj.attribute,
+                name:            variantObj.name,
+                value:           variantObj.value,
+                quantity:        variantObj.quantity,
+                price:           variantObj.price,
+                discountedPrice: variantObj.discountedPrice,
+                total:           variantObj.total,
+                deductedFromInventory: variantObj.deductedFromInventory,
+                serialNumber:    entry.serialNumber,
+                contractType,
+              },
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+            };
+          });
         })
       )
     );
 
-    const total = allVariants.length;
+    const total          = allVariants.length;
     const resultVariants = isAllRoute ? allVariants : allVariants.slice(skip, skip + limit);
 
     return res.status(200).json({
       success: true,
-      data: {
-        customerInfo,
-        machines: resultVariants
-      },
+      data: { customerInfo, machines: resultVariants },
       ...(!isAllRoute && {
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit)
-        }
-      })
+        pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      }),
     });
   } catch (error) {
     console.error("Error fetching owned machines:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch owned machines"
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch owned machines" });
   }
 };
 
@@ -117,55 +97,62 @@ const getVariantDetail = async (req, res) => {
 
     const soldRecord = await SoldMachine.findOne({
       "customerInfo.customerId": customerId,
-      "machines.variants._id": variantId
+      "machines.variants._id": variantId,
     });
 
     if (!soldRecord) {
-      return res.status(404).json({
-        success: false,
-        message: "Variant not found"
-      });
+      return res.status(404).json({ success: false, message: "Variant not found" });
     }
 
+    const currentDateIST = toZonedTime(new Date(), "Asia/Kolkata");
     let variantDetail = null;
     let machineDetail = null;
-    
-    // Get current date in IST (UTC + 5:30)
-    const currentDateIST = toZonedTime(new Date(), 'Asia/Kolkata');
 
     for (const machine of soldRecord.machines) {
       const variant = machine.variants.find(v => v._id.toString() === variantId);
       if (variant) {
         const variantObj = variant.toObject();
-        const contractType = variantObj.contractType;
-        
-        // Convert validTo to IST for comparison
-        const validToIST = toZonedTime(contractType.validTo, 'Asia/Kolkata');
-        contractType.isContractExpired = validToIST < currentDateIST;
-        
+
+        // Find the matching serial entry, fallback to first
+        const entry = serialNumber
+          ? (variantObj.serialNumbers || []).find(e => e.serialNumber === serialNumber) || variantObj.serialNumbers?.[0]
+          : variantObj.serialNumbers?.[0];
+
+        const contractType = entry ? { ...entry.contractType } : null;
+        if (contractType) {
+          const validToIST = toZonedTime(contractType.validTo, "Asia/Kolkata");
+          contractType.isContractExpired = validToIST < currentDateIST;
+        }
+
         variantDetail = {
-          ...variantObj,
+          _id:             variantObj._id,
+          attribute:       variantObj.attribute,
+          name:            variantObj.name,
+          value:           variantObj.value,
+          quantity:        variantObj.quantity,
+          price:           variantObj.price,
+          discountedPrice: variantObj.discountedPrice,
+          total:           variantObj.total,
+          deductedFromInventory: variantObj.deductedFromInventory,
+          serialNumber:    entry?.serialNumber ?? null,
           contractType,
-          serialNumber: serialNumber || (variantObj.serialNumbers?.[0] ?? null),
         };
-        delete variantDetail.serialNumbers;
-        
-        // Fetch machine images
+
         let images = [];
         if (machine.machineId) {
           const machineDoc = await Machine.findById(machine.machineId).select("images");
           images = machineDoc?.images || [];
         }
-        
+
         machineDetail = {
-          machineId: machine.machineId,
+          machineId:   machine.machineId,
           machineName: machine.machineName,
           modelNumber: machine.modelNumber,
-          categoryId: machine.categoryId,
-          category: machine.category,
-          divisionId: machine.divisionId,
-          division: machine.division,
-          images
+          categoryId:  machine.categoryId,
+          category:    machine.category,
+          divisionId:  machine.divisionId,
+          division:    machine.division,
+          images,
         };
         break;
       }
@@ -175,18 +162,15 @@ const getVariantDetail = async (req, res) => {
       success: true,
       data: {
         customerInfo: soldRecord.customerInfo,
-        machine: machineDetail,
-        variant: variantDetail,
-        createdAt: soldRecord.createdAt,
-        updatedAt: soldRecord.updatedAt
-      }
+        machine:      machineDetail,
+        variant:      variantDetail,
+        createdAt:    soldRecord.createdAt,
+        updatedAt:    soldRecord.updatedAt,
+      },
     });
   } catch (error) {
     console.error("Error fetching variant detail:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch variant detail"
-    });
+    return res.status(500).json({ success: false, message: "Failed to fetch variant detail" });
   }
 };
 

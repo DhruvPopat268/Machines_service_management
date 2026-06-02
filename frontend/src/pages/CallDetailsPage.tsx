@@ -152,6 +152,7 @@ const CallDetailsPage = () => {
             <CardHeader><CardTitle className="text-lg">Quick Info</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Call ID</span><span className="font-medium">{call.callId}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Call Type</span><span className="font-medium">{(call as any).callType || "—"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium">{formatDate(call.dates.created)}</span></div>
               {call.dates.assigned && <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span className="font-medium">{formatDate(call.dates.assigned)}</span></div>}
               {call.dates.inProgress && <div className="flex justify-between"><span className="text-muted-foreground">Started</span><span className="font-medium">{formatDate(call.dates.inProgress)}</span></div>}

@@ -182,6 +182,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (filters.engineerName && filters.engineerName !== "all")     params.engineerName = filters.engineerName;
       if (filters.category     && filters.category     !== "all")     params.category     = filters.category;
       if (filters.division     && filters.division     !== "all")     params.division     = filters.division;
+      if (!statusFilter && filters.callType && filters.callType !== "all")  params.callType     = filters.callType;
       if (!statusFilter && filters.status && filters.status !== "all") params.status      = filters.status;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
@@ -203,6 +204,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const columns: Column<ServiceCall>[] = [
     { key: "no",          label: "No.",            render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     { key: "callId",      label: "Call ID",         render: (c) => <span className="font-medium text-foreground">{c.callId}</span> },
+    { key: "callType",    label: "Call Type",       render: (c) => <span className="font-medium">{(c as any).callType || "—"}</span> },
     { key: "customer", label: "Customer", render: (c) => (
       <div>
         <p className="font-medium">{c.customerInfo.name}</p>
@@ -212,6 +214,10 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     { key: "totalMachines", label: "Total Machines", render: (c) => <span className="font-medium">{c.machines.length}</span> },
     { key: "status",      label: "Status",          render: (c) => <StatusBadge status={c.status} /> },
     { key: "engineer",    label: "Engineer",        render: (c) => <span className={!c.engineerInfo ? "text-muted-foreground italic" : ""}>{c.engineerInfo?.name || "Unassigned"}</span> },
+    { key: "createdBy",   label: "Created By",      render: (c) => {
+      const val = (c as any).createdBy || "Customer";
+      return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ val === "Admin" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700" }`}>{val}</span>;
+    } },
     {
       key: "createdAt", label: "Created At", render: (c) => {
         const { date, time } = formatDateTime(c.createdAt);
@@ -290,6 +296,17 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
           {/* Row 2: Filters (right-aligned) */}
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {!statusFilter && (
+              <Select value={filters.callType || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, callType: v }))}>
+                <SelectTrigger className="w-[160px]"><SelectValue placeholder="Call Type" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"].map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {!statusFilter && (
               <Select value={filters.status || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}>
                 <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>

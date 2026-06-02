@@ -13,17 +13,24 @@ const contractTypeSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const serialNumberEntrySchema = new mongoose.Schema(
+  {
+    serialNumber:  { type: String, trim: true, required: true },
+    contractType:  { type: contractTypeSnapshotSchema, required: true },
+  },
+  { _id: false }
+);
+
 const variantSchema = new mongoose.Schema(
   {
     attribute:          { type: mongoose.Schema.Types.ObjectId, ref: "Attribute", required: true },
     name:               { type: String, trim: true, required: true },
     value:              { type: String, trim: true, required: true },
     quantity:           { type: Number, required: true },
-    serialNumbers:      { type: [String], default: [] },
+    serialNumbers:      { type: [serialNumberEntrySchema], default: [] },
     price:              { type: Number, required: true },
     discountedPrice:    { type: Number, default: null },
     total:              { type: Number, required: true },
-    contractType:       { type: contractTypeSnapshotSchema, required: true },
     deductedFromInventory: { type: Boolean, default: false },
   }
 );
@@ -72,7 +79,7 @@ soldMachineSchema.index({ "machines.variants.contractType.contractTypeId": 1 });
 soldMachineSchema.index({ "machines.variants.contractType.name": 1 });
 soldMachineSchema.index({ "machines.variants.validFrom": 1 });
 soldMachineSchema.index({ "machines.variants.validTo": 1 });
-soldMachineSchema.index({ "machines.variants.serialNumbers": 1 });
+soldMachineSchema.index({ "machines.variants.serialNumbers.serialNumber": 1 });
 soldMachineSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("SoldMachine", soldMachineSchema);

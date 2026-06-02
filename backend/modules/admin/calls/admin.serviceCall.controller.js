@@ -1,6 +1,13 @@
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
+const SoldMachine = require("../soldMachines/admin.soldMachine.model");
+const Machine = require("../inventoryManagement/admin.machine.model");
+const Customer = require("../customerManagement/admin.customer.model");
+const ProblemType = require("../problemTypeManagement/admin.problemType.model");
 const mongoose = require("mongoose");
 const AdminUser = require("../auth/admin.user.model");
+const path = require("path");
+const fs   = require("fs/promises");
+const sharp = require("sharp");
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -11,6 +18,7 @@ const getCalls = async (req, res) => {
     const query = {};
 
     if (status) query.status = status;
+    if (req.query.callType) query.callType = req.query.callType;
 
     if (search) {
       const s = escapeRegex(search.trim().slice(0, 100));
@@ -55,7 +63,7 @@ const getCalls = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt")
+        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy")
         .sort({ [sortKey]: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -209,4 +217,343 @@ const updateCall = async (req, res) => {
   }
 };
 
-module.exports = { getCalls, getCallDetail, assignEngineer, updateCall };
+const getCustomerMachines = async (req, res) => {
+  try {
+    const { customerId, serialNumber, category, division, page = 1, limit = 10 } = req.query;
+
+    if (customerId && !mongoose.isValidObjectId(customerId))
+      return res.status(400).json({ success: false, message: "Invalid customerId" });
+
+    const soldRecords = await SoldMachine.find(customerId ? { "customerInfo.customerId": customerId } : {}).sort({ createdAt: -1 });
+    if (soldRecords.length === 0)
+      return res.status(200).json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 } });
+
+    const machineIds = [...new Set(
+      soldRecords.flatMap(r => r.machines.map(m => m.machineId).filter(Boolean))
+    )];
+
+    const machineList = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
+    const machineImagesMap = new Map(machineList.map(m => [m._id.toString(), m.images]));
+
+    let allData = soldRecords.flatMap(record =>
+      record.machines.flatMap(machine =>
+        machine.variants.flatMap(variant => {
+          const variantObj = variant.toObject();
+          return (variantObj.serialNumbers || []).map(entry => ({
+            customerInfo: record.customerInfo,
+            machineId:   machine.machineId,
+            machineName: machine.machineName,
+            modelNumber: machine.modelNumber,
+            categoryId:  machine.categoryId,
+            category:    machine.category,
+            divisionId:  machine.divisionId,
+            division:    machine.division,
+            images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+            variant: {
+              _id:             variantObj._id,
+              attribute:       variantObj.attribute,
+              name:            variantObj.name,
+              value:           variantObj.value,
+              quantity:        variantObj.quantity,
+              price:           variantObj.price,
+              discountedPrice: variantObj.discountedPrice,
+              total:           variantObj.total,
+              deductedFromInventory: variantObj.deductedFromInventory,
+              serialNumber:    entry.serialNumber,
+              contractType:    entry.contractType,
+            },
+            createdAt:   record.createdAt,
+            updatedAt:   record.updatedAt,
+          }));
+        })
+      )
+    );
+
+    // Apply filters
+    if (serialNumber) {
+      const sn = serialNumber.toString().toLowerCase();
+      allData = allData.filter(m => m.variant?.serialNumber?.toLowerCase().includes(sn));
+    }
+    if (category && mongoose.isValidObjectId(category)) {
+      allData = allData.filter(m => m.categoryId?.toString() === category);
+    }
+    if (division && mongoose.isValidObjectId(division)) {
+      allData = allData.filter(m => m.divisionId?.toString() === division);
+    }
+
+    const total = allData.length;
+    const pageNum  = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const skip     = (pageNum - 1) * limitNum;
+    const data     = allData.slice(skip, skip + limitNum);
+
+    return res.status(200).json({ success: true, data, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCustomerMachineDetail = async (req, res) => {
+  try {
+    const { serialNumber } = req.query;
+
+    if (!serialNumber || !serialNumber.trim())
+      return res.status(400).json({ success: false, message: "serialNumber is required" });
+
+    const soldRecord = await SoldMachine.findOne({ "machines.variants.serialNumbers.serialNumber": serialNumber.trim() });
+    if (!soldRecord)
+      return res.status(404).json({ success: false, message: "Machine not found for this serial number" });
+
+    let resultMachine = null;
+    let resultVariant = null;
+
+    for (const machine of soldRecord.machines) {
+      for (const variant of machine.variants) {
+        const entry = (variant.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
+        if (entry) {
+          const variantObj = variant.toObject();
+          resultVariant = {
+            _id:             variantObj._id,
+            attribute:       variantObj.attribute,
+            name:            variantObj.name,
+            value:           variantObj.value,
+            quantity:        variantObj.quantity,
+            price:           variantObj.price,
+            discountedPrice: variantObj.discountedPrice,
+            total:           variantObj.total,
+            deductedFromInventory: variantObj.deductedFromInventory,
+            serialNumber:    entry.serialNumber,
+            contractType:    entry.contractType,
+          };
+
+          let images = [];
+          if (machine.machineId) {
+            const machineDoc = await Machine.findById(machine.machineId).select("images");
+            images = machineDoc?.images || [];
+          }
+
+          resultMachine = {
+            machineId:   machine.machineId,
+            machineName: machine.machineName,
+            modelNumber: machine.modelNumber,
+            categoryId:  machine.categoryId,
+            category:    machine.category,
+            divisionId:  machine.divisionId,
+            division:    machine.division,
+            images,
+          };
+          break;
+        }
+      }
+      if (resultMachine) break;
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        customerInfo: soldRecord.customerInfo,
+        machine:      resultMachine,
+        variant:      resultVariant,
+        createdAt:    soldRecord.createdAt,
+        updatedAt:    soldRecord.updatedAt,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const IMAGES_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/images/service-calls"
+  : path.join(__dirname, "../../../cloud/images/service-calls");
+
+const _createdDirs = new Set();
+const _uploadImage = async (buffer, filename) => {
+  if (!_createdDirs.has(IMAGES_DIR)) {
+    await fs.mkdir(IMAGES_DIR, { recursive: true });
+    _createdDirs.add(IMAGES_DIR);
+  }
+  await sharp(buffer)
+    .resize({ width: 800, withoutEnlargement: true })
+    .webp({ quality: 70, effort: 1, smartSubsample: true })
+    .toFile(path.join(IMAGES_DIR, filename));
+  return `${process.env.BACKEND_URL}/app/cloud/images/service-calls/${filename}`;
+};
+
+const raiseServiceCall = async (req, res) => {
+  try {
+    const { customerId, callType = "Service-Call", machines: machinesRaw, customerLocation: customerLocationRaw } = req.body;
+
+    const validCallTypes = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"];
+    if (!validCallTypes.includes(callType))
+      return res.status(400).json({ success: false, message: "Invalid callType" });
+    if (!mongoose.isValidObjectId(customerId))
+      return res.status(400).json({ success: false, message: "Invalid customerId" });
+
+    let parsedCustomerLocation;
+    if (customerLocationRaw) {
+      try {
+        parsedCustomerLocation = typeof customerLocationRaw === "string" ? JSON.parse(customerLocationRaw) : customerLocationRaw;
+      } catch (_) {
+        return res.status(400).json({ success: false, message: "Invalid customerLocation format" });
+      }
+      const { address: locAddr, latitude: lat, longitude: lng } = parsedCustomerLocation;
+      if (!locAddr || typeof locAddr !== "string" || !locAddr.trim())
+        return res.status(400).json({ success: false, message: "customerLocation.address must be a non-empty string" });
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90)
+        return res.status(400).json({ success: false, message: "customerLocation.latitude must be between -90 and 90" });
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180)
+        return res.status(400).json({ success: false, message: "customerLocation.longitude must be between -180 and 180" });
+    }
+
+    let parsedMachines;
+    try {
+      parsedMachines = typeof machinesRaw === "string" ? JSON.parse(machinesRaw) : machinesRaw;
+    } catch (_) {
+      return res.status(400).json({ success: false, message: "Invalid machines format" });
+    }
+
+    if (!Array.isArray(parsedMachines) || parsedMachines.length === 0)
+      return res.status(400).json({ success: false, message: "machines must be a non-empty array" });
+
+    for (let i = 0; i < parsedMachines.length; i++) {
+      const m = parsedMachines[i];
+      if (!mongoose.isValidObjectId(m.variantId))
+        return res.status(400).json({ success: false, message: `Invalid variantId at index ${i}` });
+      if (!m.serialNumber?.trim())
+        return res.status(400).json({ success: false, message: `serialNumber is required at index ${i}` });
+      if (!m.issueDescription?.trim())
+        return res.status(400).json({ success: false, message: `issueDescription is required at index ${i}` });
+    }
+
+    const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
+    if (!customer)
+      return res.status(404).json({ success: false, message: "Customer not found or inactive" });
+
+    const variantIds = parsedMachines.map(m => m.variantId);
+    const soldRecords = await SoldMachine.find({
+      "customerInfo.customerId": customerId,
+      "machines.variants._id": { $in: variantIds },
+    });
+    if (soldRecords.length === 0)
+      return res.status(404).json({ success: false, message: "No machines found for this customer" });
+
+    const allPtIds = [...new Set(parsedMachines.flatMap(m => Array.isArray(m.problemTypeIds) ? m.problemTypeIds : []).filter(Boolean))];
+    const ptDocs   = allPtIds.length > 0 ? await ProblemType.find({ _id: { $in: allPtIds } }) : [];
+    const ptMap    = new Map(ptDocs.map(p => [p._id.toString(), p.name]));
+
+    // Group uploaded images by index (field names: images_0, images_1, ...)
+    const filesByIndex = {};
+    for (const file of (req.files || [])) {
+      const match = file.fieldname.match(/^images_(\d+)$/);
+      if (match) {
+        const idx = parseInt(match[1]);
+        (filesByIndex[idx] = filesByIndex[idx] || []).push(file);
+      }
+    }
+
+    const machineEntries = [];
+    for (let i = 0; i < parsedMachines.length; i++) {
+      const { variantId, serialNumber, issueDescription, problemTypeIds = [] } = parsedMachines[i];
+      const sn = serialNumber.trim();
+
+      let foundMachine = null, foundVariant = null, serialEntry = null;
+      outer: for (const record of soldRecords) {
+        for (const machine of record.machines) {
+          const variant = machine.variants.find(v => v._id.toString() === variantId);
+          if (variant) {
+            const entry = (variant.serialNumbers || []).find(e => e.serialNumber === sn);
+            if (!entry)
+              return res.status(400).json({ success: false, message: `Serial number "${sn}" not found for variantId ${variantId}` });
+
+            if (entry.contractType?.validTo && new Date(entry.contractType.validTo) < new Date())
+              return res.status(400).json({ success: false, message: `Serial number "${sn}" has an expired contract` });
+
+            foundMachine = machine; foundVariant = variant; serialEntry = entry;
+            break outer;
+          }
+        }
+      }
+
+      if (!foundVariant)
+        return res.status(404).json({ success: false, message: `Variant ${variantId} not found` });
+
+      const ptIds = Array.isArray(problemTypeIds) ? problemTypeIds : [];
+      for (const ptId of ptIds) {
+        if (!ptMap.has(ptId))
+          return res.status(404).json({ success: false, message: `Problem type not found: ${ptId}` });
+      }
+
+      // Upload images for this index
+      const images = [];
+      for (const file of (filesByIndex[i] || [])) {
+        const filename = `servicecall_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
+        images.push(await _uploadImage(file.buffer, filename));
+      }
+
+      machineEntries.push({
+        variantId:        foundVariant._id,
+        machineId:        foundMachine.machineId,
+        machineName:      foundMachine.machineName,
+        modelNumber:      foundMachine.modelNumber,
+        serialNumber:     sn,
+        divisionId:       foundMachine.divisionId,
+        division:         foundMachine.division,
+        categoryId:       foundMachine.categoryId,
+        category:         foundMachine.category,
+        attributeName:    foundVariant.name,
+        attributeValue:   foundVariant.value,
+        contractType:     serialEntry.contractType,
+        issueDescription: issueDescription.trim(),
+        problemTypeIds:   ptIds,
+        problemTypes:     ptIds.map(id => ptMap.get(id)),
+        images,
+      });
+    }
+
+    if (machineEntries.length === 0)
+      return res.status(404).json({ success: false, message: "No valid machine variants found" });
+
+    const lastCall = await ServiceCall.findOne().sort({ createdAt: -1 }).select("callId");
+    let callNumber = 1;
+    if (lastCall?.callId) {
+      const match = lastCall.callId.match(/^SC-(\d+)$/);
+      if (match) callNumber = parseInt(match[1]) + 1;
+    }
+
+    const customerAddress = parsedCustomerLocation?.address || customer.userLocation?.address || customer.address || "";
+    if (!customerAddress)
+      return res.status(400).json({ success: false, message: "Customer address is not set" });
+
+    const serviceCallDoc = new ServiceCall({
+      callId: `SC-${callNumber}`,
+      callType,
+      customerInfo: {
+        customerId: customer._id,
+        name:       customer.name,
+        phone:      customer.phone,
+        email:      customer.email,
+        address:    customerAddress,
+        zone:       customer.zone?.name || "",
+        gstNumber:  customer.gstNumber || "",
+        ...(parsedCustomerLocation && {
+          location: {
+            address:   parsedCustomerLocation.address,
+            latitude:  parsedCustomerLocation.latitude,
+            longitude: parsedCustomerLocation.longitude,
+          }
+        }),
+      },
+      machines: machineEntries,
+      createdBy: "Admin",
+    });
+
+    await serviceCallDoc.save();
+    return res.status(201).json({ success: true, data: serviceCallDoc });
+  } catch (err) {
+    console.error("Error raising service call (admin):", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall };

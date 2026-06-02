@@ -56,6 +56,7 @@ export interface ServiceCall {
     cancelled?: string;
   };
   note?: string;
+  createdBy?: "Admin" | "Customer";
   createdAt: string;
   updatedAt: string;
 }

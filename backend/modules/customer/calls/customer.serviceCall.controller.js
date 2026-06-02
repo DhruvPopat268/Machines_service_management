@@ -39,7 +39,11 @@ const processImages = async (files) => {
 const raiseServiceCall = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { serviceCalls, customerLocation } = req.body;
+    const { serviceCalls, customerLocation, callType } = req.body;
+
+    const validCallTypes = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"];
+    if (callType && !validCallTypes.includes(callType))
+      return res.status(400).json({ success: false, message: "Invalid callType. Must be Service-Call, Installation, Deinstallation or Others" });
 
     let parsedServiceCalls;
     try {
@@ -139,12 +143,20 @@ const raiseServiceCall = async (req, res) => {
         for (const machine of record.machines) {
           const variant = machine.variants.find(v => v._id.toString() === serviceCall.variantId);
           if (variant) {
-            if (!serviceCall.serialNumber || !variant.serialNumbers.includes(serviceCall.serialNumber)) {
+            if (!serviceCall.serialNumber || !variant.serialNumbers.some(e => e.serialNumber === serviceCall.serialNumber)) {
                 return res.status(400).json({
                   success: false,
                   message: `Invalid or missing serialNumber for variantId: ${serviceCall.variantId}`
                 });
               }
+
+            const serialEntry = variant.serialNumbers.find(e => e.serialNumber === serviceCall.serialNumber);
+            if (serialEntry?.contractType?.validTo && new Date(serialEntry.contractType.validTo) < new Date()) {
+              return res.status(400).json({
+                success: false,
+                message: `Serial number ${serviceCall.serialNumber} has an expired contract type`
+              });
+            }
 
             const scProblemTypeIds = Array.isArray(serviceCall.problemTypeIds)
               ? serviceCall.problemTypeIds
@@ -173,7 +185,7 @@ const raiseServiceCall = async (req, res) => {
               category: machine.category,
               attributeName: variant.name,
               attributeValue: variant.value,
-              contractType: variant.contractType,
+              contractType: serialEntry.contractType,
               issueDescription: serviceCall.issueDescription,
               problemTypeIds: scProblemTypeIds,
               problemTypes: scProblemTypeIds.map(id => problemTypeMap.get(id).name),
@@ -227,7 +239,8 @@ const raiseServiceCall = async (req, res) => {
           }
         })
       },
-      machines
+      machines,
+      callType: callType || "Service-Call",
     });
 
     await serviceCallDoc.save();
@@ -356,21 +369,28 @@ const getDashboardStats = async (req, res) => {
 
     const soldRecords = await SoldMachine.find({ "customerInfo.customerId": customerId });
 
-    // Flatten all variants
+    // Flatten all serial entries across all variants
     const allVariants = soldRecords.flatMap(record =>
       record.machines.flatMap(machine =>
-        machine.variants.map(variant => ({
-          machineId: machine.machineId,
-          machineName: machine.machineName,
-          modelNumber: machine.modelNumber,
-          category: machine.category,
-          division: machine.division,
-          variant: variant.toObject()
-        }))
+        machine.variants.flatMap(variant =>
+          (variant.serialNumbers || []).map(entry => ({
+            machineId:   machine.machineId,
+            machineName: machine.machineName,
+            modelNumber: machine.modelNumber,
+            category:    machine.category,
+            division:    machine.division,
+            variant: {
+              ...variant.toObject(),
+              serialNumber: entry.serialNumber,
+              contractType: entry.contractType,
+            }
+          }))
+        )
       )
     );
 
     const expiredVariants = allVariants.filter(v => {
+      if (!v.variant.contractType?.validTo) return false;
       const validToIST = toZonedTime(v.variant.contractType.validTo, "Asia/Kolkata");
       return validToIST < currentDateIST;
     });

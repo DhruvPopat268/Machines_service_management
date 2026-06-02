@@ -506,12 +506,23 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-            <Plus className="h-4 w-4" />
-            {submitting ? "Recording..." : "Record Purchase"}
-          </Button>
+        <DialogFooter className="flex items-center justify-between gap-4">
+          <div className="text-sm font-medium">
+            Net Total: <span className="text-base font-bold text-green-600">₹{
+              entries.reduce((sum, e) =>
+                sum + e.variants.reduce((vSum, v) =>
+                  vSum + (v.quantity && v.price ? (Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity) : 0)
+                , 0)
+              , 0).toLocaleString()
+            }</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
+              <Plus className="h-4 w-4" />
+              {submitting ? "Recording..." : "Record Purchase"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
 

@@ -63,20 +63,24 @@ interface Machine {
   variants: MachineVariant[];
 }
 
+interface SerialEntry {
+  serialNumber: string;
+  contractTypeId: string;
+  contractType: string;
+  freeService: boolean;
+  freeParts: boolean;
+  validFrom: string;
+  validTo: string;
+}
+
 interface VariantRow {
   attributeId: string;
   attributeName: string;
   value: string;
   quantity: string;
-  serialNumbers: string[];
+  serialEntries: SerialEntry[];
   price: string;
   discountedPrice: string;
-  contractType: string;
-  contractTypeId: string;
-  freeService: boolean;
-  freeParts: boolean;
-  validFrom: string;
-  validTo: string;
   availableStock: number;
 }
 
@@ -122,8 +126,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [customerForm, setCustomerForm]     = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
   const [contractTypes, setContractTypes]   = useState<ContractType[]>([]);
   const [serialNumberDialog, setSerialNumberDialog] = useState(false);
-  const [currentSerialEdit, setCurrentSerialEdit] = useState<{ mi: number; vi: number } | null>(null);
-  const [tempSerialNumbers, setTempSerialNumbers] = useState<string[]>([]);
+  const [currentSerialEdit, setCurrentSerialEdit] = useState<{ mi: number; vi: number; serialEntries: SerialEntry[] } | null>(null);
   const [checkingSerials, setCheckingSerials] = useState(false);
   const contractTypesAbortRef = useRef<AbortController | null>(null);
   const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -211,15 +214,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         attributeName:   typeof v.attribute === "string" ? "" : v.attribute.name,
         value:           v.value,
         quantity:        "",
-        serialNumbers:   [],
+        serialEntries:   [],
         price:           "",
         discountedPrice: "",
-        contractType:    "",
-        contractTypeId:  "",
-        freeService:     false,
-        freeParts:       false,
-        validFrom:       "",
-        validTo:         "",
         availableStock:  v.currentStock,
       }));
     
@@ -240,45 +237,48 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const openSerialNumberDialog = (mi: number, vi: number) => {
     const variant = entries[mi].variants[vi];
     const qty = Number(variant.quantity) || 0;
-    
-    setTempSerialNumbers(variant.serialNumbers.length > 0 ? [...variant.serialNumbers] : Array(qty).fill(""));
-    setCurrentSerialEdit({ mi, vi });
+    const existing = variant.serialEntries;
+    const entries_: SerialEntry[] = existing.length > 0
+      ? [...existing]
+      : Array.from({ length: qty }, () => ({ serialNumber: "", contractTypeId: "", contractType: "", freeService: false, freeParts: false, validFrom: "", validTo: "" }));
+    setCurrentSerialEdit({ mi, vi, serialEntries: entries_ });
     setSerialNumberDialog(true);
   };
 
   const handleSerialNumberSave = async () => {
     if (!currentSerialEdit) return;
-    const { mi, vi } = currentSerialEdit;
+    const { mi, vi, serialEntries } = currentSerialEdit;
 
-    const allFilled = tempSerialNumbers.every(sn => sn.trim() !== "");
-    if (!allFilled) {
-      toast.error("Please fill all serial numbers");
-      return;
+    for (let i = 0; i < serialEntries.length; i++) {
+      const e = serialEntries[i];
+      if (!e.serialNumber.trim()) { toast.error(`Fill serial number for entry ${i + 1}`); return; }
+      if (!e.contractTypeId) { toast.error(`Select contract type for serial ${i + 1}`); return; }
+      if (!e.validFrom || !e.validTo) { toast.error(`Enter dates for serial ${i + 1}`); return; }
+      if (new Date(e.validTo) <= new Date(e.validFrom)) { toast.error(`Valid to must be after valid from for serial ${i + 1}`); return; }
     }
 
-    const uniqueSerials = new Set(tempSerialNumbers.map(sn => sn.trim().toUpperCase()));
-    if (uniqueSerials.size !== tempSerialNumbers.length) {
-      toast.error("Duplicate serial numbers found");
-      return;
-    }
+    const allSerials = serialEntries.map(e => e.serialNumber.trim());
+    const unique = new Set(allSerials.map(s => s.toUpperCase()));
+    if (unique.size !== allSerials.length) { toast.error("Duplicate serial numbers found"); return; }
 
     setCheckingSerials(true);
     try {
-      await api.post("/admin/sales/check-serials", { serialNumbers: tempSerialNumbers.map(sn => sn.trim()) });
-      updateVariant(mi, vi, "serialNumbers", tempSerialNumbers.map(sn => sn.trim()));
+      await api.post("/admin/sales/check-serials", { serialNumbers: allSerials });
+      setEntries(prev => prev.map((e, i) => i !== mi ? e : {
+        ...e,
+        variants: e.variants.map((v, j) => j !== vi ? v : {
+          ...v,
+          serialEntries: serialEntries.map(se => ({ ...se, serialNumber: se.serialNumber.trim() })),
+        }),
+      }));
       setSerialNumberDialog(false);
       setCurrentSerialEdit(null);
-      setTempSerialNumbers([]);
       toast.success("Serial numbers verified and saved");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Serial number check failed");
     } finally {
       setCheckingSerials(false);
     }
-  };
-
-  const updateTempSerialNumber = (index: number, value: string) => {
-    setTempSerialNumbers(prev => prev.map((sn, i) => i === index ? value : sn));
   };
 
   const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string | boolean | string[]) => {
@@ -289,25 +289,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           ...e,
           variants: e.variants.map((v, j) => {
             if (j !== vi) return v;
-            
-            if (field === "quantity") {
-              return { ...v, quantity: value as string, serialNumbers: [] };
-            }
-            
-            // If contractType is being changed, update freeService and freeParts
-            if (field === "contractTypeId") {
-              const selectedContract = contractTypes.find(ct => ct._id === value);
-              if (selectedContract) {
-                return {
-                  ...v,
-                  contractTypeId: value as string,
-                  contractType: selectedContract.name,
-                  freeService: selectedContract.freeService,
-                  freeParts: selectedContract.freeParts,
-                };
-              }
-            }
-            
+            if (field === "quantity") return { ...v, quantity: value as string, serialEntries: [] };
             return { ...v, [field]: value };
           }),
         };
@@ -333,31 +315,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           return;
         }
         
-        if (hasQty && hasPrice && v.serialNumbers.length !== Number(v.quantity)) {
+        if (hasQty && hasPrice && v.serialEntries.length !== Number(v.quantity)) {
           toast.error(`Add ${v.quantity} serial numbers for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
-        }
-        
-        // Check if contract type is selected when qty and price are filled
-        if (hasQty && hasPrice && !v.contractTypeId) {
-          toast.error(`Select contract type for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-          return;
-        }
-        
-        // Check if date range is provided when contract type is selected
-        if (hasQty && hasPrice && v.contractTypeId) {
-          if (!v.validFrom || !v.validTo) {
-            toast.error(`Enter valid from and valid to dates for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-            return;
-          }
-          
-          // Validate that validTo is after validFrom
-          const fromDate = new Date(v.validFrom);
-          const toDate = new Date(v.validTo);
-          if (toDate <= fromDate) {
-            toast.error(`Valid to date must be after valid from date for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-            return;
-          }
         }
         
         if (hasQty && Number(v.quantity) > v.availableStock) {
@@ -375,27 +335,23 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       customerId,
       machines: entries.map((e) => ({
         machineId: e.machine._id,
-        variants:  e.variants
-          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" && v.contractTypeId)
-          .map((v) => ({
-            attribute:       v.attributeId,
-            value:           v.value,
-            quantity:        Number(v.quantity),
-            serialNumbers:   v.serialNumbers,
-            price:           Number(v.price),
-            discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
-            contractTypeId:  v.contractTypeId,
-            contractType:    v.contractType,
-            freeService:     v.freeService,
-            freeParts:       v.freeParts,
-            validFrom:       v.validFrom,
-            validTo:         v.validTo,
-          })),
+        variants: e.variants
+          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" && v.serialEntries.length > 0)
+          .flatMap((v) =>
+            v.serialEntries.map((se) => ({
+              attribute:       v.attributeId,
+              value:           v.value,
+              quantity:        1,
+              serialNumbers:   [{ serialNumber: se.serialNumber, contractTypeId: se.contractTypeId, validFrom: se.validFrom, validTo: se.validTo }],
+              price:           Number(v.price),
+              discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
+            }))
+          ),
       })).filter((m) => m.variants.length > 0),
     };
 
     if (payload.machines.length === 0) {
-      toast.error("Please fill quantity, price, contract type, and dates for at least one variant");
+      toast.error("Please fill quantity, price, and serial entries for at least one variant");
       return;
     }
 
@@ -520,7 +476,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             <div className="space-y-4">
               <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>Variants with empty quantity, price, or contract type will be skipped. Free Service and Free Parts are auto-populated based on selected contract type. Valid From and Valid To dates are required for contracts. Stock will be automatically deducted.</span>
+                <span>Variants with empty quantity or price will be skipped. Contract type, dates, and serial numbers are configured in the serial number popup. Free Service and Free Parts are auto-populated based on selected contract type. Stock will be automatically deducted.</span>
               </div>
               {entries.map((entry, mi) => (
                 <div key={entry.machine._id} className="border rounded-lg p-4 space-y-3">
@@ -556,15 +512,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             <th className="text-left font-medium pb-2 pr-3">Value</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Available</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-32">Serial Numbers <span className="text-destructive">*</span></th>
+                            <th className="text-left font-medium pb-2 pr-3 w-48">Serial Numbers &amp; Contracts <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Total</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-36">Contract Type <span className="text-destructive">*</span></th>
-                            <th className="text-center font-medium pb-2 pr-3 w-24">Free Service</th>
-                            <th className="text-center font-medium pb-2 pr-3 w-24">Free Parts</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-32">Valid From</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-32">Valid To</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -592,14 +543,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="h-7 text-xs w-32"
+                                  className="h-7 text-xs w-48"
                                   onClick={() => openSerialNumberDialog(mi, vi)}
                                   disabled={!v.quantity || Number(v.quantity) === 0}
                                 >
                                   <Plus className="h-3 w-3 mr-1" />
-                                  {v.serialNumbers.length > 0 
-                                    ? `${v.serialNumbers.length}/${v.quantity} Added` 
-                                    : "Add Serial Nos"}
+                                  {v.serialEntries.length > 0
+                                    ? `${v.serialEntries.length}/${v.quantity} Added`
+                                    : "Add Serial Nos & Contracts"}
                                 </Button>
                               </td>
                               <td className="py-1.5 pr-3">
@@ -630,49 +581,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   <span className="text-muted-foreground text-xs">—</span>
                                 )}
                               </td>
-                              <td className="py-1.5 pr-3">
-                                <SearchableSelect
-                                  options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
-                                  value={v.contractTypeId}
-                                  onChange={(val) => updateVariant(mi, vi, "contractTypeId", val)}
-                                  onSearchChange={fetchContractTypes}
-                                  placeholder="Select contract"
-                                  searchPlaceholder="Search contracts..."
-                                  className="h-7 text-xs w-36"
-                                />
-                              </td>
-                              <td className="py-1.5 pr-3 text-center">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  v.freeService ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-                                }`}>
-                                  {v.freeService ? "Yes" : "No"}
-                                </span>
-                              </td>
-                              <td className="py-1.5 pr-3 text-center">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                  v.freeParts ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-                                }`}>
-                                  {v.freeParts ? "Yes" : "No"}
-                                </span>
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Input
-                                  type="date"
-                                  className="h-7 text-xs w-32"
-                                  value={v.validFrom}
-                                  onChange={(e) => updateVariant(mi, vi, "validFrom", e.target.value)}
-                                  disabled={!v.contractTypeId}
-                                />
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Input
-                                  type="date"
-                                  className="h-7 text-xs w-32"
-                                  value={v.validTo}
-                                  onChange={(e) => updateVariant(mi, vi, "validTo", e.target.value)}
-                                  disabled={!v.contractTypeId}
-                                />
-                              </td>
+
                             </tr>
                           ))}
                         </tbody>
@@ -685,12 +594,23 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
-          <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-            <Plus className="h-4 w-4" />
-            {submitting ? "Recording..." : "Record Sale"}
-          </Button>
+        <DialogFooter className="flex items-center justify-between gap-4">
+          <div className="text-sm font-medium">
+            Net Total: <span className="text-base font-bold text-green-600">₹{
+              entries.reduce((sum, e) =>
+                sum + e.variants.reduce((vSum, v) =>
+                  vSum + (v.quantity && v.price ? (Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity) : 0)
+                , 0)
+              , 0).toLocaleString()
+            }</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
+              <Plus className="h-4 w-4" />
+              {submitting ? "Recording..." : "Record Sale"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
 
@@ -733,32 +653,113 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         </DialogContent>
       </Dialog>
 
-      <Dialog open={serialNumberDialog} onOpenChange={(o) => { if (!o) { setSerialNumberDialog(false); setCurrentSerialEdit(null); setTempSerialNumbers([]); } }}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <Dialog open={serialNumberDialog} onOpenChange={(o) => { if (!o) { setSerialNumberDialog(false); setCurrentSerialEdit(null); } }}>
+        <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Add Serial Numbers</DialogTitle>
+            <DialogTitle>Add Serial Numbers &amp; Contracts</DialogTitle>
             {currentSerialEdit && (
               <p className="text-sm text-muted-foreground mt-1">
                 {entries[currentSerialEdit.mi].machine.name} — {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].attributeName}: {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].value}
               </p>
             )}
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto py-4 space-y-3">
-            {tempSerialNumbers.map((sn, idx) => (
-              <div key={idx} className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Serial Number {idx + 1}</Label>
-                <Input
-                  placeholder={`e.g. SN-${String(idx + 1).padStart(6, '0')}`}
-                  value={sn}
-                  onChange={(e) => updateTempSerialNumber(idx, e.target.value)}
-                  className="h-9"
-                />
-              </div>
-            ))}
-          </div>
+          {currentSerialEdit && (
+            <div className="flex-1 overflow-auto py-2">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b">
+                    <th className="text-left font-medium pb-2 pr-3 w-8">#</th>
+                    <th className="text-left font-medium pb-2 pr-3">Serial Number <span className="text-destructive">*</span></th>
+                    <th className="text-left font-medium pb-2 pr-3 w-52">Contract Type <span className="text-destructive">*</span></th>
+                    <th className="text-left font-medium pb-2 pr-3 w-36">Valid From <span className="text-destructive">*</span></th>
+                    <th className="text-left font-medium pb-2 pr-3 w-36">Valid To <span className="text-destructive">*</span></th>
+                    <th className="text-center font-medium pb-2 pr-3 w-24">Free Service</th>
+                    <th className="text-center font-medium pb-2 w-24">Free Parts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentSerialEdit.serialEntries.map((se, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-2 pr-3 text-muted-foreground">{idx + 1}</td>
+                      <td className="py-2 pr-3">
+                        <Input
+                          placeholder={`e.g. SN-${String(idx + 1).padStart(6, "0")}`}
+                          value={se.serialNumber}
+                          onChange={(e) => setCurrentSerialEdit(prev => {
+                            if (!prev) return prev;
+                            const updated = [...prev.serialEntries];
+                            updated[idx] = { ...updated[idx], serialNumber: e.target.value };
+                            return { ...prev, serialEntries: updated };
+                          })}
+                          className="h-7 text-xs"
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <SearchableSelect
+                          options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
+                          value={se.contractTypeId}
+                          onChange={(val) => {
+                            const selected = contractTypes.find(ct => ct._id === val);
+                            setCurrentSerialEdit(prev => {
+                              if (!prev) return prev;
+                              const updated = [...prev.serialEntries];
+                              updated[idx] = { ...updated[idx], contractTypeId: val, contractType: selected?.name ?? "", freeService: selected?.freeService ?? false, freeParts: selected?.freeParts ?? false };
+                              return { ...prev, serialEntries: updated };
+                            });
+                          }}
+                          onSearchChange={fetchContractTypes}
+                          placeholder="Select contract"
+                          searchPlaceholder="Search..."
+                          className="h-7 text-xs w-52"
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Input
+                          type="date"
+                          className="h-7 text-xs w-36"
+                          value={se.validFrom}
+                          disabled={!se.contractTypeId}
+                          onChange={(e) => setCurrentSerialEdit(prev => {
+                            if (!prev) return prev;
+                            const updated = [...prev.serialEntries];
+                            updated[idx] = { ...updated[idx], validFrom: e.target.value };
+                            return { ...prev, serialEntries: updated };
+                          })}
+                        />
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Input
+                          type="date"
+                          className="h-7 text-xs w-36"
+                          value={se.validTo}
+                          disabled={!se.contractTypeId}
+                          onChange={(e) => setCurrentSerialEdit(prev => {
+                            if (!prev) return prev;
+                            const updated = [...prev.serialEntries];
+                            updated[idx] = { ...updated[idx], validTo: e.target.value };
+                            return { ...prev, serialEntries: updated };
+                          })}
+                        />
+                      </td>
+                      <td className="py-2 pr-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${se.freeService ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          {se.freeService ? "Yes" : "No"}
+                        </span>
+                      </td>
+                      <td className="py-2 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${se.freeParts ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          {se.freeParts ? "Yes" : "No"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setSerialNumberDialog(false); setCurrentSerialEdit(null); setTempSerialNumbers([]); }} disabled={checkingSerials}>Cancel</Button>
-            <Button onClick={handleSerialNumberSave} disabled={checkingSerials}>{checkingSerials ? "Checking..." : "Save Serial Numbers"}</Button>
+            <Button variant="outline" onClick={() => { setSerialNumberDialog(false); setCurrentSerialEdit(null); }} disabled={checkingSerials}>Cancel</Button>
+            <Button onClick={handleSerialNumberSave} disabled={checkingSerials}>{checkingSerials ? "Checking..." : "Save"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
