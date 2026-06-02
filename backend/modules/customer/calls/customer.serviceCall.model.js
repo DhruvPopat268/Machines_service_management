@@ -78,6 +78,13 @@ const serviceCallSchema = new mongoose.Schema(
       name:       { type: String, trim: true },
       phone:      { type: String, trim: true },
       email:      { type: String, trim: true },
+      locations: [
+        {
+          address:   { type: String, trim: true },
+          latitude:  { type: Number },
+          longitude: { type: Number },
+        }
+      ],
     },
     dates: {
       created:         { type: Date, required: true, default: Date.now },

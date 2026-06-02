@@ -454,7 +454,7 @@ export function AppSidebar() {
           {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">System Users Management</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {[userRolesItem, usersItem].map((item) => (
+              {[usersItem].map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     {collapsed ? (

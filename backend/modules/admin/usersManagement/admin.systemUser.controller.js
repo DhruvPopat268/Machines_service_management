@@ -93,11 +93,7 @@ const getAllSystemUsers = async (req, res) => {
 
 const getSystemUserById = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid user ID" });
-
-    const user = await AdminUser.findById(id)
+    const user = await AdminUser.findById(req.adminUser.id)
       .select("-password -changePasswordOtp -changePasswordOtpExpires");
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -123,6 +119,12 @@ const createSystemUser = async (req, res) => {
 
     const error = validateCreateSystemUser({ name, email, phone, password, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
+
+    if (role === "Admin") {
+      const adminExists = await AdminUser.exists({ role: "Admin" });
+      if (adminExists)
+        return res.status(409).json({ success: false, message: "An Admin user already exists" });
+    }
 
     const existing = await AdminUser.findOne({
       $or: [
@@ -185,13 +187,22 @@ const createSystemUser = async (req, res) => {
 
 const updateSystemUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id || req.adminUser.id;
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid user ID" });
 
     const { name, email, phone, role, status } = req.body;
 
     let engineerLocation;
+    let officeLocation;
+    if (req.body.officeLocation) {
+      try {
+        officeLocation = typeof req.body.officeLocation === "string"
+          ? JSON.parse(req.body.officeLocation)
+          : req.body.officeLocation;
+      } catch (_) {}
+    }
+
     if (req.body.engineerLocation) {
       try {
         engineerLocation = typeof req.body.engineerLocation === "string"
@@ -210,6 +221,7 @@ const updateSystemUser = async (req, res) => {
     if (role    !== undefined) update.role    = role;
     if (status  !== undefined) update.status  = status;
     if (engineerLocation !== undefined) update.engineerLocation = engineerLocation;
+    if (officeLocation   !== undefined) update.officeLocation   = officeLocation;
 
     if (req.file) {
       try {
@@ -360,4 +372,23 @@ const deleteSystemUser = async (req, res) => {
   }
 };
 
-module.exports = { getAllSystemUsers, getSystemUserById, createSystemUser, updateSystemUser, sendResetPasswordOtp, resetSystemUserPassword, deleteSystemUser };
+const changeOwnPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword)
+      return res.status(400).json({ success: false, message: "currentPassword and newPassword are required" });
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
+    const user = await AdminUser.findById(req.adminUser.id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    const match = await user.comparePassword(currentPassword);
+    if (!match) return res.status(401).json({ success: false, message: "Current password is incorrect" });
+    user.password = newPassword;
+    await user.save();
+    res.status(200).json({ success: true, message: "Password changed successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAllSystemUsers, getSystemUserById, createSystemUser, updateSystemUser, sendResetPasswordOtp, resetSystemUserPassword, deleteSystemUser, changeOwnPassword };

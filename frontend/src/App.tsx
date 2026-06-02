@@ -8,7 +8,6 @@ import Login from "./pages/Login";
 import AdminLayout from "./components/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import UsersPage from "./pages/UsersPage";
-import UserRolesPage from "./pages/UserRolesPage";
 import EngineersPage from "./pages/EngineersPage";
 import CallsPage from "./pages/CallsPage";
 import CallDetailsPage from "./pages/CallDetailsPage";
@@ -29,6 +28,8 @@ import ContractTypesPage from "./pages/ContractTypesPage";
 import ZonesPage from "./pages/ZonesPage";
 import VendorsPage from "./pages/VendorsPage";
 import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
+import ProfilePage from "./pages/ProfilePage";
+import { ProfileProvider } from "./context/ProfileContext";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,7 +43,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
-          <Route element={<AdminLayout />}>
+          <Route element={<ProfileProvider><AdminLayout /></ProfileProvider>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/calls" element={<CallsPage />} />
             <Route path="/calls/open" element={<CallsPage statusFilter="Open" title="Open Calls" description="Newly raised calls awaiting assignment" />} />
@@ -53,7 +54,6 @@ const App = () => (
             <Route path="/calls/cancelled" element={<CallsPage statusFilter="Cancelled" title="Cancelled Calls" description="Calls cancelled by customer or admin" />} />
             <Route path="/calls/:id" element={<CallDetailsPage />} />
             <Route path="/users" element={<UsersPage />} />
-            <Route path="/user-roles" element={<UserRolesPage />} />
             <Route path="/engineers" element={<EngineersPage />} />
             <Route path="/machines" element={<MachinesPage />} />
             <Route path="/machines/add" element={<AddMachineForm type="Machine" />} />
@@ -74,6 +74,7 @@ const App = () => (
             <Route path="/zones" element={<ZonesPage />} />
             <Route path="/vendors" element={<VendorsPage />} />
             <Route path="/reimbursements" element={<TravelReimbursementsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -24,6 +24,7 @@ const travelReimbursementSchema = new mongoose.Schema(
       address: { type: String, trim: true },
     },
     travelDate:   { type: Date, required: true },
+    purpose:      { type: String, enum: ["Service Call", "Go To Home", "Go To Office"], required: true },
     travelFrom:   { type: locationSchema, required: true },
     travelTo:     { type: locationSchema, required: true },
     travelledKm:  { type: Number, required: true, min: 0 },

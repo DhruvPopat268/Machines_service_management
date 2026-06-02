@@ -8,11 +8,14 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "@/lib/axiosInterceptor";
+import { useProfile } from "@/context/ProfileContext";
 
 const AdminLayout = () => {
   const navigate = useNavigate();
   const [dark, setDark] = useState(false);
+  const { profile } = useProfile();
 
   const toggleDark = () => {
     setDark(!dark);
@@ -67,19 +70,20 @@ const AdminLayout = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9">
-                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center">
-                      <User className="h-4 w-4 text-primary-foreground" />
+                    <div className="h-7 w-7 rounded-full bg-primary flex items-center justify-center overflow-hidden">
+                      {profile?.profilePhoto
+                        ? <img src={profile.profilePhoto} alt={profile.name} className="h-full w-full object-cover" />
+                        : <User className="h-4 w-4 text-primary-foreground" />}
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuLabel>
-                    <p className="text-sm font-medium">Arjun Sharma</p>
-                    <p className="text-xs text-muted-foreground">Admin</p>
+                    <p className="text-sm font-medium">{profile?.name || "—"}</p>
+                    <p className="text-xs text-muted-foreground">{profile?.role || "—"}</p>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>Profile Settings</DropdownMenuItem>
-                  <DropdownMenuItem>Preferences</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>Profile Settings</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/")}>
                     <LogOut className="h-4 w-4 mr-2" />

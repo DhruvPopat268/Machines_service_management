@@ -14,6 +14,11 @@ const adminUserSchema = new mongoose.Schema(
       latitude:  { type: Number },
       longitude: { type: Number },
     },
+    officeLocation: {
+      address:   { type: String, trim: true },
+      latitude:  { type: Number },
+      longitude: { type: Number },
+    },
     engineerId:    { type: String, trim: true, unique: true, sparse: true },
     lastLoginAt:    { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },

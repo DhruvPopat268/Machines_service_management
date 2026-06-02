@@ -528,8 +528,8 @@ const UsersPage = () => {
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Engineer">Engineer</SelectItem>
-                  <SelectItem value="Admin">Admin</SelectItem>
-                  <SelectItem value="Support" disabled>Support</SelectItem>
+                  <SelectItem value="Admin" disabled>Admin</SelectItem>
+                  <SelectItem value="Support" >Support</SelectItem>
                 </SelectContent>
               </Select>
             </div>

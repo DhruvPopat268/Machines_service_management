@@ -3,6 +3,7 @@ const fs   = require("fs/promises");
 const sharp = require("sharp");
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const TravelReimbursement = require("../reimbursement/engineer.reimbursement.model");
+const AdminUser = require("../../admin/auth/admin.user.model");
 const PurchasedMachine = require("../../admin/purchasedMachines/admin.purchasedMachine.model");
 const Machine = require("../../admin/inventoryManagement/admin.machine.model");
 const mongoose = require("mongoose");
@@ -43,19 +44,6 @@ const reverseGeocode = async (lat, lng) => {
     params: { latlng: `${lat},${lng}`, key: MAPS_KEY },
   });
   return data.results?.[0]?.formatted_address || "";
-};
-
-const getRoadDistanceKm = async (originLat, originLng, destLat, destLng) => {
-  const { data } = await axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
-    params: {
-      origins:      `${originLat},${originLng}`,
-      destinations: `${destLat},${destLng}`,
-      key: MAPS_KEY,
-    },
-  });
-  const meters = data.rows?.[0]?.elements?.[0]?.distance?.value;
-  if (!meters) throw new Error("Could not calculate distance");
-  return Math.round((meters / 1000) * 100) / 100;
 };
 
 const getActiveCalls = async (req, res) => {
@@ -168,36 +156,23 @@ const startTravel = async (req, res) => {
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
 
-    const customerLat = call.customerInfo?.location?.latitude;
-    const customerLng = call.customerInfo?.location?.longitude;
-
-    if (!customerLat || !customerLng)
-      return res.status(400).json({ success: false, message: "Customer location not available" });
-
-    const [engineerAddress, distanceKm] = await Promise.all([
+    const [engineerAddress] = await Promise.all([
       reverseGeocode(parseFloat(latitude), parseFloat(longitude)),
-      getRoadDistanceKm(parseFloat(latitude), parseFloat(longitude), customerLat, customerLng),
     ]);
 
-    await Promise.all([
-      call.updateOne({ status: "Travel Started", "dates.travelStarted": new Date() }),
-      TravelReimbursement.create({
-        callId:       call._id,
-        engineerInfo: call.engineerInfo,
-        customerInfo: {
-          name:    call.customerInfo.name,
-          phone:   call.customerInfo.phone,
-          address: call.customerInfo.address,
+    await call.updateOne({
+      status: "Travel Started",
+      "dates.travelStarted": new Date(),
+      $push: {
+        "engineerInfo.locations": {
+          address:   engineerAddress,
+          latitude:  parseFloat(latitude),
+          longitude: parseFloat(longitude),
         },
-        travelDate:  new Date(),
-        travelFrom:  { address: engineerAddress, latitude: parseFloat(latitude), longitude: parseFloat(longitude) },
-        travelTo:    { address: call.customerInfo?.location?.address || call.customerInfo.address, latitude: customerLat, longitude: customerLng },
-        travelledKm: distanceKm,
-        status:      "Pending",
-      }),
-    ]);
+      },
+    });
 
-    return res.status(200).json({ success: true, message: "Travel started", distanceKm });
+    return res.status(200).json({ success: true, message: "Travel started" });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -327,7 +302,7 @@ const getPartsMachines = async (req, res) => {
     const machineImagesMap = new Map();
     const machineVariantStockMap = new Map();
     if (machineIds.length > 0) {
-      const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images variants");
+      const machines = await Machine.find({ _id: { $in: machineIds }, status: "Active" }).select("_id images variants");
       machines.forEach(m => {
         machineImagesMap.set(m._id.toString(), m.images);
         const stockMap = new Map();
@@ -339,11 +314,13 @@ const getPartsMachines = async (req, res) => {
     const parts = purchaseRecords.flatMap(record =>
       record.machines
         .filter(m => m.categoryId?.toString() === partsCategoryId)
+        .filter(machine => machine.machineId && machineImagesMap.has(machine.machineId.toString()))
         .flatMap(machine =>
           machine.variants.map(variant => {
             const { quantity, price, discountedPrice, total, willAddToInventory, addedToInventory, ...rest } = variant.toObject();
             const stockMap = machine.machineId ? machineVariantStockMap.get(machine.machineId.toString()) : null;
             const currentStock = stockMap?.get(`${rest.attribute.toString()}_${rest.value.trim().toLowerCase()}`) ?? 0;
+            if (currentStock <= 0) return null;
             return {
               machineId:   machine.machineId,
               machineName: machine.machineName,
@@ -355,7 +332,7 @@ const getPartsMachines = async (req, res) => {
               images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
               variant:     { ...rest, currentStock },
             };
-          })
+          }).filter(Boolean)
         )
     );
 
@@ -365,4 +342,120 @@ const getPartsMachines = async (req, res) => {
   }
 };
 
-module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines };
+const getRoadDistanceKm = async (originLat, originLng, destLat, destLng) => {
+  const { data } = await axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
+    params: {
+      origins:      `${originLat},${originLng}`,
+      destinations: `${destLat},${destLng}`,
+      key: MAPS_KEY,
+    },
+  });
+  const meters = data.rows?.[0]?.elements?.[0]?.distance?.value;
+  if (!meters) throw new Error("Could not calculate distance");
+  return Math.round((meters / 1000) * 100) / 100;
+};
+
+const createReimbursement = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+    const { callId, purpose } = req.body;
+
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    if (!["Service Call", "Go To Office", "Go To Home"].includes(purpose))
+      return res.status(400).json({ success: false, message: "Invalid purpose. Must be Service Call, Go To Office or Go To Home" });
+
+    const call = await ServiceCall.findById(callId);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    if (call.engineerInfo?._id?.toString() !== engineerId)
+      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    if (![ "Completed", "On Hold"].includes(call.status))
+      return res.status(400).json({ success: false, message: "Call must be Completed or On Hold to create reimbursement" });
+
+    const locations = call.engineerInfo?.locations || [];
+    if (locations.length === 0)
+      return res.status(400).json({ success: false, message: "No travel locations found for this call" });
+
+    const lastLocation  = locations[locations.length - 1];
+    const customerLat   = call.customerInfo?.location?.latitude;
+    const customerLng   = call.customerInfo?.location?.longitude;
+
+    if (!customerLat || !customerLng)
+      return res.status(400).json({ success: false, message: "Customer location not available on this call" });
+
+    const engineer = await AdminUser.findById(engineerId).select("engineerLocation");
+    if (!engineer)
+      return res.status(404).json({ success: false, message: "Engineer not found" });
+
+    // ── Validate destination exists for purpose ──
+    if (purpose === "Go To Office") {
+      const adminUser = await AdminUser.findOne({ role: "Admin" }).select("officeLocation");
+      if (!adminUser?.officeLocation?.latitude || !adminUser?.officeLocation?.longitude)
+        return res.status(400).json({ success: false, message: "Office location not set" });
+    }
+    if (purpose === "Go To Home") {
+      if (!engineer.engineerLocation?.latitude || !engineer.engineerLocation?.longitude)
+        return res.status(400).json({ success: false, message: "Home location not set on your profile" });
+    }
+
+    // ── Calculate distances ──
+    const callDistanceKm = await getRoadDistanceKm(
+      lastLocation.latitude, lastLocation.longitude,
+      customerLat, customerLng
+    );
+
+    let totalKm    = callDistanceKm;
+    let travelTo   = { address: call.customerInfo?.location?.address || call.customerInfo?.address, latitude: customerLat, longitude: customerLng };
+
+    if (purpose === "Go To Office") {
+      const adminUser = await AdminUser.findOne({ role: "Admin" }).select("officeLocation");
+      const returnKm = await getRoadDistanceKm(
+        customerLat, customerLng,
+        adminUser.officeLocation.latitude, adminUser.officeLocation.longitude
+      );
+      totalKm  = Math.round((callDistanceKm + returnKm) * 100) / 100;
+      travelTo = { address: adminUser.officeLocation.address || "", latitude: adminUser.officeLocation.latitude, longitude: adminUser.officeLocation.longitude };
+    }
+
+    if (purpose === "Go To Home") {
+      const returnKm = await getRoadDistanceKm(
+        customerLat, customerLng,
+        engineer.engineerLocation.latitude, engineer.engineerLocation.longitude
+      );
+      totalKm  = Math.round((callDistanceKm + returnKm) * 100) / 100;
+      travelTo = { address: engineer.engineerLocation.address || "", latitude: engineer.engineerLocation.latitude, longitude: engineer.engineerLocation.longitude };
+    }
+
+    const reimbursement = await TravelReimbursement.create({
+      callId:      call._id,
+      engineerInfo: {
+        _id:        call.engineerInfo._id,
+        identityId: call.engineerInfo.identityId,
+        name:       call.engineerInfo.name,
+        phone:      call.engineerInfo.phone,
+      },
+      customerInfo: {
+        name:    call.customerInfo.name,
+        phone:   call.customerInfo.phone,
+        address: call.customerInfo.address,
+      },
+      travelDate:  new Date(),
+      purpose,
+      travelFrom:  { address: lastLocation.address || "", latitude: lastLocation.latitude, longitude: lastLocation.longitude },
+      travelTo,
+      travelledKm: totalKm,
+      status:      "Pending",
+    });
+
+    return res.status(201).json({ success: true, data: reimbursement });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, createReimbursement };
+

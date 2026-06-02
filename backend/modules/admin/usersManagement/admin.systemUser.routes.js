@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const multer = require("multer");
-const { getAllSystemUsers, getSystemUserById, createSystemUser, updateSystemUser, sendResetPasswordOtp, resetSystemUserPassword, deleteSystemUser } = require("./admin.systemUser.controller");
+const { getAllSystemUsers, getSystemUserById, createSystemUser, updateSystemUser, sendResetPasswordOtp, resetSystemUserPassword, deleteSystemUser, changeOwnPassword } = require("./admin.systemUser.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 const upload = multer({
@@ -17,7 +17,9 @@ const upload = multer({
 router.use(adminAuthMiddleware);
 
 router.get("/",                          getAllSystemUsers);
-router.get("/:id",                       getSystemUserById);
+router.get("/me",                        getSystemUserById);
+router.patch("/me",                      upload.single("profilePhoto"), updateSystemUser);
+router.patch("/me/change-password",      changeOwnPassword);
 router.post("/",                         upload.single("profilePhoto"), createSystemUser);
 router.patch("/:id",                     upload.single("profilePhoto"), updateSystemUser);
 router.post("/:id/send-reset-otp",       sendResetPasswordOtp);
