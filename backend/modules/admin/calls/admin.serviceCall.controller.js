@@ -469,7 +469,7 @@ const raiseServiceCall = async (req, res) => {
 
     const machineEntries = [];
     for (let i = 0; i < parsedMachines.length; i++) {
-      const { variantId, serialNumber, issueDescription, problemTypeIds = [] } = parsedMachines[i];
+      const { variantId, serialNumber, issueDescription, problemTypeIds = [], serviceCharge } = parsedMachines[i];
       const sn = serialNumber.trim();
 
       let foundMachine = null, foundVariant = null, serialEntry = null;
@@ -489,6 +489,14 @@ const raiseServiceCall = async (req, res) => {
 
       if (!foundVariant)
         return res.status(404).json({ success: false, message: `Variant ${variantId} not found` });
+
+      const isExpired = serialEntry?.contractType?.validTo && new Date(serialEntry.contractType.validTo) < new Date();
+      const notFreeService = !serialEntry?.contractType?.freeService;
+      const requiresCharge = isExpired || notFreeService;
+      if (requiresCharge && (serviceCharge === undefined || serviceCharge === null))
+        return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${serialNumber.trim()}" (${isExpired ? "expired contract" : "non-free service"})` });
+      if (serviceCharge !== undefined && serviceCharge !== null && (typeof serviceCharge !== "number" || serviceCharge < 0))
+        return res.status(400).json({ success: false, message: `serviceCharge must be a non-negative number at index ${i}` });
 
       const ptIds = Array.isArray(problemTypeIds) ? problemTypeIds : [];
       for (const ptId of ptIds) {
@@ -520,6 +528,7 @@ const raiseServiceCall = async (req, res) => {
         problemTypeIds:   ptIds,
         problemTypes:     ptIds.map(id => ptMap.get(id)),
         images,
+        serviceCharge: requiresCharge ? serviceCharge : 0,
       });
     }
 
@@ -536,6 +545,8 @@ const raiseServiceCall = async (req, res) => {
     const customerAddress = parsedCustomerLocation?.address || customer.userLocation?.address || customer.address || "";
     if (!customerAddress)
       return res.status(400).json({ success: false, message: "Customer address is not set" });
+
+    const totalServiceCharges = machineEntries.reduce((sum, m) => sum + (m.serviceCharge || 0), 0);
 
     const serviceCallDoc = new ServiceCall({
       callId: `SC-${callNumber}`,
@@ -557,6 +568,7 @@ const raiseServiceCall = async (req, res) => {
         }),
       },
       machines: machineEntries,
+      totalServiceCharges,
       createdBy: "Admin",
     });
 

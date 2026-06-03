@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const multer = require("multer");
-const { getAll, create, update, remove, downloadSample, importCustomers, exportCustomers } = require("./admin.customer.controller");
+const { getAll, getById, create, update, remove, downloadSample, importCustomers, exportCustomers } = require("./admin.customer.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 const upload = multer({
@@ -25,6 +25,7 @@ router.get("/sample", downloadSample);
 router.get("/export", exportCustomers);
 router.post("/import", upload.single("file"), importCustomers);
 router.get("/", getAll);
+router.get("/:id", getById);
 router.post("/", uploadPhoto.single("profilePhoto"), create);
 router.patch("/:id", uploadPhoto.single("profilePhoto"), update);
 router.delete("/:id", remove);

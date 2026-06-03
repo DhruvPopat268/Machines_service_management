@@ -30,7 +30,9 @@ const machineVariantSchema = new mongoose.Schema(
     issueDescription: { type: String, trim: true, required: true },
     problemTypeIds: { type: [mongoose.Schema.Types.ObjectId], ref: "ProblemType", default: [] },
     problemTypes: { type: [String], default: [] },
-    images: { type: [String], default: [] }
+    images: { type: [String], default: [] },
+    serviceCharge: { type: Number },
+    partsCharge:   { type: Number },
   },
   { _id: false }
 );
@@ -99,6 +101,8 @@ const serviceCallSchema = new mongoose.Schema(
     note: { type: String, trim: true, default: "" },
     callType: { type: String, enum: ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"], default: "Service-Call" },
     createdBy: { type: String, enum: ["Admin", "Customer"], default: "Customer" },
+    totalServiceCharges: { type: Number },
+    totalPartsCharges:   { type: Number },
     beforeWorkImages: { type: [String] },
     onHoldReason: { type: String, trim: true },
   },

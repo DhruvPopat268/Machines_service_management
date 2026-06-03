@@ -528,4 +528,18 @@ const exportCustomers = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, update, remove, downloadSample, importCustomers, exportCustomers };
+const getById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid customer ID" });
+    const customer = await Customer.findById(id).populate("zone", "name code").select("_id name phone email address zone gstNumber userLocation status");
+    if (!customer)
+      return res.status(404).json({ success: false, message: "Customer not found" });
+    return res.status(200).json({ success: true, data: customer });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, create, update, remove, downloadSample, importCustomers, exportCustomers };

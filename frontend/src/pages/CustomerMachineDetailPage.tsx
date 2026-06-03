@@ -35,6 +35,7 @@ interface MachineEntry {
   issueDescription: string;
   images: File[];
   previewUrls: string[];
+  serviceCharge?: number;
 }
 
 const CALL_TYPES = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"] as const;
@@ -90,7 +91,8 @@ const CustomerMachineDetailPage = () => {
 
   // Customer info from first added machine
   const customerInfo = machines[0]?.detail?.customerInfo;
-  const displayAddress = customerLocation?.address || customerInfo?.address || "—";
+  const [liveAddress, setLiveAddress] = useState<string | null>(null);
+  const displayAddress = customerLocation?.address || liveAddress || customerInfo?.address || "—";
 
   // Load problem types once
   useEffect(() => {
@@ -169,9 +171,12 @@ const CustomerMachineDetailPage = () => {
 
       setMachines(prev => [...prev, { detail, problemTypeIds: [], issueDescription: "", images: [], previewUrls: [] }]);
       setSerialInput("");
-      // Set default location from customer info if not already set
-      if (!customerLocation && detail.customerInfo?.address)
-        setCustomerLocation(null); // keep null so backend uses customer.userLocation
+      // Fetch live customer address on first machine added
+      if (!customerInfo) {
+        api.get(`/admin/customers/${detail.customerInfo.customerId}`)
+          .then(res => setLiveAddress(res.data.data?.userLocation?.address || res.data.data?.address || null))
+          .catch(() => {});
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Machine not found");
     } finally {
@@ -194,6 +199,8 @@ const CustomerMachineDetailPage = () => {
   };
 
   const [ptOpenIdx, setPtOpenIdx] = useState<number | null>(null);
+  const [serviceChargeDialog, setServiceChargeDialog] = useState(false);
+  const [serviceCharges, setServiceCharges]           = useState<Record<number, string>>({});
 
   // Renew contract state
   const [contractTypes, setContractTypes]             = useState<{ _id: string; name: string }[]>([]);
@@ -283,28 +290,48 @@ const CustomerMachineDetailPage = () => {
     }));
   };
 
-  const handleSubmit = async () => {
-    if (machines.length === 0) { toast.error("Add at least one machine"); return; }
+  const chargeRequiredIndices = machines
+    .map((m, i) => ({ i, variant: m.detail.variant }))
+    .filter(({ variant }) => {
+      const isExpired = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
+      return isExpired || !variant.contractType?.freeService;
+    })
+    .map(({ i }) => i);
 
+  const handleRaiseCallClick = () => {
+    if (machines.length === 0) { toast.error("Add at least one machine"); return; }
     for (let i = 0; i < machines.length; i++) {
-      const m = machines[i];
-      if (!m.issueDescription.trim()) {
+      if (!machines[i].issueDescription.trim()) {
         toast.error(`Issue description is required for machine ${i + 1}`);
         return;
       }
     }
+    if (chargeRequiredIndices.length > 0) {
+      const unsaved = chargeRequiredIndices.filter(i => machines[i].serviceCharge === undefined);
+      if (unsaved.length > 0) {
+        const initial: Record<number, string> = {};
+        chargeRequiredIndices.forEach(i => { initial[i] = machines[i].serviceCharge !== undefined ? String(machines[i].serviceCharge) : ""; });
+        setServiceCharges(initial);
+        setServiceChargeDialog(true);
+        return;
+      }
+    }
+    handleSubmit();
+  };
 
+  const handleSubmit = async () => {
     setSubmitting(true);
     const fd = new FormData();
     fd.append("customerId", customerInfo!.customerId);
     fd.append("callType", callType);
     if (customerLocation) fd.append("customerLocation", JSON.stringify(customerLocation));
 
-    const machinesPayload = machines.map(m => ({
+    const machinesPayload = machines.map((m, i) => ({
       variantId:        m.detail.variant._id,
       serialNumber:     m.detail.variant.serialNumber,
       issueDescription: m.issueDescription.trim(),
       problemTypeIds:   m.problemTypeIds,
+      ...(m.serviceCharge !== undefined && { serviceCharge: m.serviceCharge }),
     }));
     fd.append("machines", JSON.stringify(machinesPayload));
 
@@ -321,6 +348,25 @@ const CustomerMachineDetailPage = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const confirmServiceCharges = () => {
+    for (const i of chargeRequiredIndices) {
+      const val = serviceCharges[i];
+      if (val === "" || val === undefined) {
+        toast.error(`Service charge is required for S/N: ${machines[i].detail.variant.serialNumber}`);
+        return;
+      }
+      const num = Number(val);
+      if (isNaN(num) || num < 0) {
+        toast.error(`Service charge must be a non-negative number for S/N: ${machines[i].detail.variant.serialNumber}`);
+        return;
+      }
+    }
+    setMachines(prev => prev.map((m, i) =>
+      chargeRequiredIndices.includes(i) ? { ...m, serviceCharge: Number(serviceCharges[i]) } : m
+    ));
+    setServiceChargeDialog(false);
   };
 
   return (
@@ -417,6 +463,7 @@ const CustomerMachineDetailPage = () => {
       {machines.map((entry, idx) => {
         const { machine, variant } = entry.detail;
         const isExpired = variant.contractType?.validTo ? new Date() > new Date(variant.contractType.validTo) : false;
+        const requiresCharge = isExpired || !variant.contractType?.freeService;
 
         return (
           <Card key={variant._id + idx} className="border shadow-sm">
@@ -444,6 +491,20 @@ const CustomerMachineDetailPage = () => {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
+
+              {/* Expired contract warning */}
+              {requiresCharge && (
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+                  <p className="text-xs text-red-700 font-medium">
+                    {isExpired ? "Contract expired — renew to raise a call without service charge" : "Non-free service — service charge required"}
+                  </p>
+                  {isExpired && (
+                    <Button size="sm" className="h-7 text-xs shrink-0 bg-red-600 hover:bg-red-700 text-white" onClick={() => openRenewDialog(entry)}>
+                      <RefreshCw className="h-3 w-3 mr-1" />Renew Contract
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {/* Problem Types multiselect dropdown */}
               <div>
@@ -595,13 +656,77 @@ const CustomerMachineDetailPage = () => {
             </div>
             <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={() => setLocationDialogOpen(true)}>Change</Button>
           </div>
+
+          {/* Saved service charges */}
+          {chargeRequiredIndices.some(i => machines[i].serviceCharge !== undefined) && (
+            <div className="rounded-lg border bg-muted/40 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground">Service Charges</p>
+                <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground" onClick={() => {
+                  const initial: Record<number, string> = {};
+                  chargeRequiredIndices.forEach(j => { initial[j] = machines[j].serviceCharge !== undefined ? String(machines[j].serviceCharge) : ""; });
+                  setServiceCharges(initial);
+                  setServiceChargeDialog(true);
+                }}>Edit</Button>
+              </div>
+              {chargeRequiredIndices.filter(i => machines[i].serviceCharge !== undefined).map(i => {
+                const { machine, variant } = machines[i].detail;
+                const isExp = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
+                return (
+                  <div key={i} className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{machine.machineName}</p>
+                      <p className="text-xs text-muted-foreground font-mono">{variant.serialNumber} · <span className={isExp ? "text-red-600" : "text-orange-600"}>{isExp ? "Expired" : "Non-free service"}</span></p>
+                    </div>
+                    <span className="text-sm font-semibold text-green-600">₹{machines[i].serviceCharge}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="flex justify-end">
-            <Button onClick={handleSubmit} disabled={submitting} className="min-w-32">
+            <Button onClick={handleRaiseCallClick} disabled={submitting} className="min-w-32">
               {submitting ? <Spinner /> : "Raise Call"}
             </Button>
           </div>
         </div>
       )}
+
+      {/* Service Charge Dialog */}
+      <Dialog open={serviceChargeDialog} onOpenChange={setServiceChargeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Service Charge</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Set a service charge for each machine below before raising the call.</p>
+          <div className="space-y-4 py-2">
+            {chargeRequiredIndices.map(i => {
+              const { machine, variant } = machines[i].detail;
+              const isExp = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
+              return (
+                <div key={i} className="space-y-1.5">
+                  <Label className="text-sm">
+                    {machine.machineName} — <span className="font-mono text-xs">{variant.serialNumber}</span>
+                    <span className={`ml-2 text-xs ${isExp ? "text-red-600" : "text-orange-600"}`}>({variant.contractType?.name} · {isExp ? "Expired" : "Non-free service"})</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Enter service charge (₹)"
+                    value={serviceCharges[i] ?? ""}
+                    onChange={e => setServiceCharges(prev => ({ ...prev, [i]: e.target.value }))}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setServiceChargeDialog(false)}>Cancel</Button>
+            <Button onClick={confirmServiceCharges}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

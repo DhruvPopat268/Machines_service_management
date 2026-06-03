@@ -154,7 +154,13 @@ const raiseServiceCall = async (req, res) => {
             if (serialEntry?.contractType?.validTo && new Date(serialEntry.contractType.validTo) < new Date()) {
               return res.status(400).json({
                 success: false,
-                message: `Serial number ${serviceCall.serialNumber} has an expired contract type`
+                message: `Serial number ${serviceCall.serialNumber} has an expired contract`
+              });
+            }
+            if (!serialEntry?.contractType?.freeService) {
+              return res.status(400).json({
+                success: false,
+                message: `Serial number ${serviceCall.serialNumber} does not have a free service contract. Please contact support.`
               });
             }
 

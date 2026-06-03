@@ -277,6 +277,81 @@ const CallDetailsPage = () => {
         </CardContent>
       </Card>
 
+      {/* Charges Section */}
+      {call.machines.some(m => m.serviceCharge !== undefined || m.partsCharge !== undefined) && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <span className="text-base">₹</span> Charges
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Serial No.</TableHead>
+                    <TableHead>Contract</TableHead>
+                    <TableHead className="text-right">Service Charge</TableHead>
+                    <TableHead className="text-right">Parts Charge</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {call.machines.map((machine, index) => {
+                    const sc = machine.serviceCharge ?? 0;
+                    const pc = machine.partsCharge ?? 0;
+                    const hasCharge = machine.serviceCharge !== undefined || machine.partsCharge !== undefined;
+                    if (!hasCharge) return null;
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell className="font-medium">{machine.machineName}</TableCell>
+                        <TableCell className="font-mono text-sm">{machine.serialNumber}</TableCell>
+                        <TableCell className="text-sm">{machine.contractType.name}</TableCell>
+                        <TableCell className="text-right">
+                          {machine.serviceCharge !== undefined
+                            ? <span className="text-green-600 font-medium">₹{machine.serviceCharge}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {machine.partsCharge !== undefined
+                            ? <span className="text-blue-600 font-medium">₹{machine.partsCharge}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">₹{sc + pc}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-8 px-6 py-4 border-t text-sm">
+              {call.totalServiceCharges !== undefined && (
+                <div className="text-right">
+                  <p className="text-muted-foreground">Total Service Charges</p>
+                  <p className="text-green-600 font-semibold text-base">₹{call.totalServiceCharges}</p>
+                </div>
+              )}
+              {call.totalPartsCharges !== undefined && (
+                <div className="text-right">
+                  <p className="text-muted-foreground">Total Parts Charges</p>
+                  <p className="text-blue-600 font-semibold text-base">₹{call.totalPartsCharges}</p>
+                </div>
+              )}
+              {(call.totalServiceCharges !== undefined || call.totalPartsCharges !== undefined) && (
+                <div className="text-right">
+                  <p className="text-muted-foreground">Grand Total</p>
+                  <p className="font-bold text-base">₹{(call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0)}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Attachments Dialog */}
       <Dialog open={!!attachmentsDialog} onOpenChange={() => setAttachmentsDialog(null)}>
         <DialogContent className="max-w-2xl">

@@ -37,6 +37,8 @@ export interface ServiceCall {
     problemTypeIds: string[];
     problemTypes: string[];
     images: string[];
+    serviceCharge?: number;
+    partsCharge?: number;
   }>;
   status: string;
   priority?: string;
@@ -57,6 +59,8 @@ export interface ServiceCall {
   };
   note?: string;
   createdBy?: "Admin" | "Customer";
+  totalServiceCharges?: number;
+  totalPartsCharges?: number;
   createdAt: string;
   updatedAt: string;
 }
