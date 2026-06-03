@@ -354,7 +354,10 @@ const getPartsMachines = async (req, res) => {
     const purchaseRecords = await PurchasedMachine.find({
       "machines.categoryId": new mongoose.Types.ObjectId(partsCategoryId),
       ...(search?.trim() && {
-        "machines.machineName": { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" },
+        $or: [
+          { "machines.machineName": { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } },
+          { "machines.variants.partCodes": search.trim() },
+        ],
       }),
     });
 
@@ -389,7 +392,9 @@ const getPartsMachines = async (req, res) => {
             const stockMap = machine.machineId ? machineVariantStockMap.get(machine.machineId.toString()) : null;
             const currentStock = stockMap?.get(`${rest.attribute.toString()}_${rest.value.trim().toLowerCase()}`) ?? 0;
             if (currentStock <= 0 || !partCodes?.length) return [];
-            return partCodes.map(partCode => ({
+            const matchedPartCodes = search?.trim() ? partCodes.filter(pc => pc === search.trim()) : [];
+            const finalPartCodes = matchedPartCodes.length ? matchedPartCodes : partCodes;
+            return finalPartCodes.map(partCode => ({
               machineId:   machine.machineId,
               machineName: machine.machineName,
               modelNumber: machine.modelNumber,
