@@ -174,7 +174,12 @@ const CustomerMachineDetailPage = () => {
       // Fetch live customer address on first machine added
       if (!customerInfo) {
         api.get(`/admin/customers/${detail.customerInfo.customerId}`)
-          .then(res => setLiveAddress(res.data.data?.userLocation?.address || res.data.data?.address || null))
+          .then(res => {
+            const loc = res.data.data?.userLocation;
+            setLiveAddress(loc?.address || res.data.data?.address || null);
+            if (loc?.latitude && loc?.longitude)
+              setCustomerLocation({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude });
+          })
           .catch(() => {});
       }
     } catch (err: any) {
