@@ -13,6 +13,20 @@ const contractTypeSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const usedPartSchema = new mongoose.Schema(
+  {
+    partCode:    { type: String, trim: true, required: true },
+    partName:    { type: String, trim: true, default: "" },
+    machineId:   { type: mongoose.Schema.Types.ObjectId, ref: "Machine", default: null },
+    machineName: { type: String, trim: true, default: "" },
+    modelNumber: { type: String, trim: true, default: "" },
+    quantity:    { type: Number, required: true },
+    unitPrice:   { type: Number, default: 0 },
+    total:       { type: Number, default: 0 },
+  },
+  { _id: false }
+);
+
 const machineVariantSchema = new mongoose.Schema(
   {
     variantId: { type: mongoose.Schema.Types.ObjectId, required: true },
@@ -33,6 +47,7 @@ const machineVariantSchema = new mongoose.Schema(
     images: { type: [String], default: [] },
     serviceCharge: { type: Number },
     partsCharge:   { type: Number },
+    usedParts:     { type: [usedPartSchema], default: [] },
   },
   { _id: false }
 );
@@ -104,7 +119,11 @@ const serviceCallSchema = new mongoose.Schema(
     totalServiceCharges: { type: Number },
     totalPartsCharges:   { type: Number },
     beforeWorkImages: { type: [String] },
+    afterWorkImages:  { type: [String] },
+    customerSignature: { type: String },
     onHoldReason: { type: String, trim: true },
+    sendToEmail:      { type: Boolean, default: false },
+    sendToWhatsapp:   { type: Boolean, default: false },
   },
   { timestamps: true }
 );

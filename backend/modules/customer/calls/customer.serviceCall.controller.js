@@ -195,7 +195,8 @@ const raiseServiceCall = async (req, res) => {
               issueDescription: serviceCall.issueDescription,
               problemTypeIds: scProblemTypeIds,
               problemTypes: scProblemTypeIds.map(id => problemTypeMap.get(id).name),
-              images: variantImages
+              images: variantImages,
+              serviceCharge: 0,
             });
             found = true;
             break;
@@ -247,6 +248,7 @@ const raiseServiceCall = async (req, res) => {
       },
       machines,
       callType: callType || "Service-Call",
+      totalServiceCharges: 0,
     });
 
     await serviceCallDoc.save();
