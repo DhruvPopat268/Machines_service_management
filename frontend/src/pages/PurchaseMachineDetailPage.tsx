@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2, Package, PackagePlus } from "lucide-react";
+import { ArrowLeft, Building2, Package, PackagePlus, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
@@ -15,9 +16,12 @@ interface PurchaseVariant {
   quantity: number;
   price: number;
   discountedPrice: number | null;
+  sellingPrice: number | null;
+  discountedSellingPrice: number | null;
   total: number;
   willAddToInventory: boolean;
   addedToInventory: boolean;
+  partCodes: string[];
 }
 
 interface PurchaseMachineEntry {
@@ -62,6 +66,7 @@ const PurchaseMachineDetailPage = () => {
   const [loading, setLoading]   = useState(true);
   const [addingSet, setAddingSet] = useState<Set<string>>(new Set());
   const [confirmTarget, setConfirmTarget] = useState<{ mi: number; vi: number } | null>(null);
+  const [partCodeDialog, setPartCodeDialog] = useState<{ machineName: string; variantName: string; variantValue: string; partCodes: string[] } | null>(null);
 
   const handleConfirmAdd = async () => {
     if (!confirmTarget) return;
@@ -178,8 +183,14 @@ const PurchaseMachineDetailPage = () => {
                     <th className="text-left font-medium pb-2 pr-4">Variant</th>
                     <th className="text-left font-medium pb-2 pr-4">Value</th>
                     <th className="text-right font-medium pb-2 pr-4">Qty</th>
+                    {machine.variants.some(v => v.partCodes?.length > 0) && (
+                      <th className="text-center font-medium pb-2 pr-4">Part Codes</th>
+                    )}
                     <th className="text-right font-medium pb-2 pr-4">Price</th>
                     <th className="text-right font-medium pb-2 pr-4">Disc. Price</th>
+                    {machine.variants.some(v => v.partCodes?.length > 0) && (
+                      <th className="text-left font-medium pb-2 pr-4">Part Codes</th>
+                    )}
                     <th className="text-right font-medium pb-2 pr-4">Total</th>
                     <th className="text-center font-medium pb-2 pr-4">Add to Inv.</th>
                     <th className="text-center font-medium pb-2">Added</th>
@@ -191,6 +202,21 @@ const PurchaseMachineDetailPage = () => {
                       <td className="py-2 pr-4">{v.name}</td>
                       <td className="py-2 pr-4">{v.value}</td>
                       <td className="py-2 pr-4 text-right">{v.quantity}</td>
+                      {machine.variants.some(v => v.partCodes?.length > 0) && (
+                        <td className="py-2 pr-4 text-center">
+                          {v.partCodes?.length > 0 ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 text-xs gap-1"
+                              onClick={() => setPartCodeDialog({ machineName: machine.machineName, variantName: v.name, variantValue: v.value, partCodes: v.partCodes })}
+                            >
+                              <Hash className="h-3 w-3" />
+                              {v.partCodes.length} Code{v.partCodes.length !== 1 ? "s" : ""}
+                            </Button>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                      )}
                       <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
                       <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
                       <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
@@ -225,6 +251,32 @@ const PurchaseMachineDetailPage = () => {
           </Card>
         ))}
       </div>
+      {/* Part Codes Dialog */}
+      <Dialog open={!!partCodeDialog} onOpenChange={() => setPartCodeDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Part Codes</DialogTitle>
+            {partCodeDialog && (
+              <p className="text-sm text-muted-foreground">
+                {partCodeDialog.machineName} — {partCodeDialog.variantName}: {partCodeDialog.variantValue}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-2 py-2 max-h-72 overflow-y-auto">
+            {partCodeDialog?.partCodes.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No part codes found</p>
+            ) : (
+              partCodeDialog?.partCodes.map((code, idx) => (
+                <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted">
+                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
+                  <span className="text-sm font-medium font-mono">{code}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={!!confirmTarget} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>

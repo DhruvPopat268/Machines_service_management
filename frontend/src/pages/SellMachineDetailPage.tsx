@@ -18,12 +18,17 @@ interface ContractTypeSnapshot {
   validTo: string;
 }
 
+interface SerialNumberEntry {
+  serialNumber: string;
+  contractType: ContractTypeSnapshot;
+}
+
 interface SaleVariant {
   attribute: string;
   name: string;
   value: string;
   quantity: number;
-  serialNumbers: string[];
+  serialNumbers: SerialNumberEntry[];
   price: number;
   discountedPrice: number | null;
   total: number;
@@ -88,7 +93,7 @@ const SellMachineDetailPage = () => {
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [serialDialog, setSerialDialog] = useState<{ machineName: string; variantName: string; variantValue: string; serialNumbers: string[] } | null>(null);
+  const [serialDialog, setSerialDialog] = useState<{ machineName: string; variantName: string; variantValue: string; serialNumbers: SerialNumberEntry[] } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -194,7 +199,7 @@ const SellMachineDetailPage = () => {
                 </thead>
                 <tbody>
                   {machine.variants.map((v, vi) => {
-                    const contractBadge = getContractTypeBadge(v.contractType.code);
+                    const contractBadge = getContractTypeBadge(v.contractType?.code);
                     return (
                       <tr key={vi} className="border-b last:border-0">
                         <td className="py-2 pr-4">{v.name}</td>
@@ -216,21 +221,21 @@ const SellMachineDetailPage = () => {
                         <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
                         <td className="py-2 pr-4 text-center">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${contractBadge.color}`}>
-                            {v.contractType.name}
+                            {v.contractType?.name ?? "—"}
                           </span>
                         </td>
                         <td className="py-2 pr-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                            {v.contractType.freeService ? "Yes" : "No"}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType?.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {v.contractType?.freeService ? "Yes" : "No"}
                           </span>
                         </td>
                         <td className="py-2 pr-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                            {v.contractType.freeParts ? "Yes" : "No"}
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType?.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {v.contractType?.freeParts ? "Yes" : "No"}
                           </span>
                         </td>
-                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType.validFrom)}</td>
-                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType.validTo)}</td>
+                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType?.validFrom)}</td>
+                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType?.validTo)}</td>
                         <td className="py-2 text-center">
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.deductedFromInventory ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                             {v.deductedFromInventory ? "Yes" : "No"}
@@ -261,10 +266,10 @@ const SellMachineDetailPage = () => {
             {serialDialog?.serialNumbers.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No serial numbers found</p>
             ) : (
-              serialDialog?.serialNumbers.map((sn, idx) => (
+              serialDialog?.serialNumbers.map((entry, idx) => (
                 <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted">
                   <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
-                  <span className="text-sm font-medium font-mono">{sn}</span>
+                  <span className="text-sm font-medium font-mono">{entry.serialNumber}</span>
                 </div>
               ))
             )}

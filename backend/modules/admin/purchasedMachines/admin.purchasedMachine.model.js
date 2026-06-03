@@ -11,7 +11,7 @@ const variantSchema = new mongoose.Schema(
     sellingPrice:           { type: Number, default: null },
     discountedSellingPrice: { type: Number, default: null },
     total:                  { type: Number, required: true },
-    willAddToInventory:     { type: Boolean, default: true },
+    partCodes:              { type: [String], default: [] },
     addedToInventory:       { type: Boolean, default: false },
   }
 );

@@ -71,7 +71,19 @@ interface VariantRow {
   discountedPrice: string;
   sellingPrice: string;
   discountedSellingPrice: string;
+  partCodes: string[];
   willAddToInventory: boolean;
+}
+
+interface PartCodeDialogState {
+  mi: number;
+  vi: number;
+  machineName: string;
+  attributeName: string;
+  value: string;
+  quantity: number;
+  codes: string[];
+  saving: boolean;
 }
 
 interface MachineEntry {
@@ -106,6 +118,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
   const [submitting, setSubmitting]         = useState(false);
   const [createVendorDialog, setCreateVendorDialog] = useState(false);
   const [vendorForm, setVendorForm]         = useState({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" });
+  const [partCodeDialog, setPartCodeDialog] = useState<PartCodeDialogState | null>(null);
   const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const machineInputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +135,51 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     } finally {
       setSearching(false);
     }
+  };
+
+  const openPartCodeDialog = (mi: number, vi: number) => {
+    const entry = entries[mi];
+    const v = entry.variants[vi];
+    const qty = Number(v.quantity) || 0;
+    const codes = [...v.partCodes];
+    while (codes.length < qty) codes.push("");
+    setPartCodeDialog({
+      mi, vi,
+      machineName: entry.machine.name,
+      attributeName: v.attributeName,
+      value: v.value,
+      quantity: qty,
+      codes: codes.slice(0, qty),
+      saving: false,
+    });
+  };
+
+  const savePartCodes = async () => {
+    if (!partCodeDialog) return;
+    const { mi, vi, codes, quantity } = partCodeDialog;
+    for (let i = 0; i < quantity; i++) {
+      if (!codes[i]?.trim()) { toast.error(`Part code ${i + 1} is empty`); return; }
+    }
+    // Frontend duplicate check
+    const trimmed = codes.map(c => c.trim());
+    const unique = new Set(trimmed.map(c => c.toUpperCase()));
+    if (unique.size !== trimmed.length) { toast.error("Duplicate part codes in the list"); return; }
+
+    setPartCodeDialog(prev => prev ? { ...prev, saving: true } : prev);
+    try {
+      const res = await api.post("/admin/purchases/verify-part-codes", { partCodes: trimmed });
+      if (!res.data.available) {
+        toast.error(`Part code(s) already exist: ${res.data.duplicates.join(", ")}`);
+        setPartCodeDialog(prev => prev ? { ...prev, saving: false } : prev);
+        return;
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to verify part codes");
+      setPartCodeDialog(prev => prev ? { ...prev, saving: false } : prev);
+      return;
+    }
+    updateVariant(mi, vi, "partCodes", codes);
+    setPartCodeDialog(null);
   };
 
   const fetchVendors = async () => {
@@ -173,6 +231,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       discountedPrice:        "",
       sellingPrice:           "",
       discountedSellingPrice: "",
+      partCodes:              [],
       willAddToInventory:     true,
     }));
     setEntries((prev) => [...prev, { machine, variants }]);
@@ -219,6 +278,18 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           toast.error(`Selling price is required for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
         }
+        if (isParts && hasQty && !v.partCodes.length) {
+          toast.error(`Part codes are required for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        if (isParts && hasQty && v.partCodes.length !== Number(v.quantity)) {
+          toast.error(`Part codes count must match quantity (${v.quantity}) for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
+        if (isParts && hasQty && v.partCodes.some(c => !c.trim())) {
+          toast.error(`All part codes must be non-empty for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
+          return;
+        }
         if (isParts && v.sellingPrice !== "" && v.discountedSellingPrice !== "" && Number(v.discountedSellingPrice) > Number(v.sellingPrice)) {
           toast.error(`Discounted selling price cannot exceed selling price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
           return;
@@ -240,6 +311,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
             discountedPrice:        v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
             sellingPrice:           v.sellingPrice !== "" ? Number(v.sellingPrice) : null,
             discountedSellingPrice: v.discountedSellingPrice !== "" ? Number(v.discountedSellingPrice) : null,
+            partCodes:              v.partCodes.map(c => c.trim()).filter(Boolean),
             willAddToInventory:     v.willAddToInventory,
           })),
       })).filter((m) => m.variants.length > 0),
@@ -406,6 +478,9 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                             <th className="text-left font-medium pb-2 pr-3">Attribute</th>
                             <th className="text-left font-medium pb-2 pr-3">Value</th>
                             <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
+                            {entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID && (
+                              <th className="text-left font-medium pb-2 pr-3 w-28">Part Codes <span className="text-destructive">*</span></th>
+                            )}
                             <th className="text-left font-medium pb-2 pr-3 w-24">Buying Price <span className="text-destructive">*</span></th>
                             <th className="text-left font-medium pb-2 pr-3 w-24">Discounted Buying Price</th>
                             {entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID && (
@@ -414,7 +489,6 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                 <th className="text-left font-medium pb-2 pr-3 w-24">Discounted Selling Price</th>
                               </>
                             )}
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Total</th>
                             <th className="text-center font-medium pb-2">Add to Inv.</th>
                           </tr>
                         </thead>
@@ -432,6 +506,22 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                   onChange={(e) => updateVariant(mi, vi, "quantity", e.target.value)}
                                 />
                               </td>
+                              {entry.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID && (
+                                <td className="py-1.5 pr-3">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={!v.quantity || Number(v.quantity) === 0}
+                                    onClick={() => openPartCodeDialog(mi, vi)}
+                                  >
+                                    {v.partCodes.length === Number(v.quantity) && v.partCodes.length > 0
+                                      ? <span className="text-green-600">{v.partCodes.length} saved ✓</span>
+                                      : "Enter Codes"}
+                                  </Button>
+                                </td>
+                              )}
                               <td className="py-1.5 pr-3">
                                 <Input
                                   type="number"
@@ -475,15 +565,6 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                                   </td>
                                 </>
                               )}
-                              <td className="py-1.5 pr-3">
-                                {v.quantity && v.price ? (
-                                  <span className="text-xs font-medium text-foreground">
-                                    ₹{((Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity)).toLocaleString()}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">—</span>
-                                )}
-                              </td>
                               <td className="py-1.5 text-center">
                                 {v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" ? (
                                   <Switch
@@ -507,14 +588,29 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
         </div>
 
         <DialogFooter className="flex items-center justify-between gap-4">
-          <div className="text-sm font-medium">
-            Net Total: <span className="text-base font-bold text-green-600">₹{
-              entries.reduce((sum, e) =>
-                sum + e.variants.reduce((vSum, v) =>
-                  vSum + (v.quantity && v.price ? (Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity) : 0)
-                , 0)
-              , 0).toLocaleString()
-            }</span>
+          <div className="flex items-center gap-6 text-sm font-medium">
+            <div>
+              Buying Total: <span className="text-base font-bold text-green-600">₹{
+                entries.reduce((sum, e) =>
+                  sum + e.variants.reduce((vSum, v) =>
+                    vSum + (v.quantity && v.price ? (Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity) : 0)
+                  , 0)
+                , 0).toLocaleString()
+              }</span>
+            </div>
+            {entries.some(e => e.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID) && (
+              <div>
+                Selling Total: <span className="text-base font-bold text-blue-600">₹{
+                  entries.reduce((sum, e) =>
+                    e.machine.category?._id === import.meta.env.VITE_PARTS_CATEGORY_ID
+                      ? sum + e.variants.reduce((vSum, v) =>
+                          vSum + (v.quantity && v.sellingPrice ? (Number(v.discountedSellingPrice) || Number(v.sellingPrice)) * Number(v.quantity) : 0)
+                        , 0)
+                      : sum
+                  , 0).toLocaleString()
+                }</span>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
@@ -525,6 +621,45 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Part Code Dialog */}
+      {partCodeDialog && (
+        <Dialog open={!!partCodeDialog} onOpenChange={(o) => { if (!o) setPartCodeDialog(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Enter Part Codes — {partCodeDialog.machineName}</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">{partCodeDialog.attributeName}: {partCodeDialog.value} · {partCodeDialog.quantity} unit{partCodeDialog.quantity > 1 ? "s" : ""}</p>
+            <div className="space-y-3 py-2">
+              {Array.from({ length: partCodeDialog.quantity }).map((_, i) => {
+                const code = partCodeDialog.codes[i] ?? "";
+                return (
+                  <div key={i} className="space-y-1">
+                    <Label className="text-xs">Unit {i + 1}</Label>
+                    <Input
+                      className="h-8 text-xs"
+                      placeholder={`e.g. PT-00${i + 1}`}
+                      value={code}
+                      onChange={(e) => setPartCodeDialog(prev => {
+                        if (!prev) return prev;
+                        const codes = [...prev.codes];
+                        codes[i] = e.target.value;
+                        return { ...prev, codes };
+                      })}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPartCodeDialog(null)} disabled={partCodeDialog.saving}>Cancel</Button>
+              <Button onClick={savePartCodes} disabled={partCodeDialog.saving}>
+                {partCodeDialog.saving ? <Spinner /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Create Vendor Dialog */}
       <Dialog open={createVendorDialog} onOpenChange={(o) => { if (!o) { setCreateVendorDialog(false); setVendorForm({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" }); } }}>

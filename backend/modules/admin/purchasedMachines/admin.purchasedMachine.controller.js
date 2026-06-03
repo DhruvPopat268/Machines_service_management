@@ -197,6 +197,19 @@ const createPurchase = async (req, res) => {
     };
 
     // Collect all attribute IDs across all machines upfront
+    // Bulk part code uniqueness check across all variants
+    const allPartCodes = machines.flatMap(m => m.variants.flatMap(v => Array.isArray(v.partCodes) ? v.partCodes.map(c => c.trim()).filter(Boolean) : []));
+    if (allPartCodes.length > 0) {
+      const uniqueCodes = new Set(allPartCodes.map(c => c.toUpperCase()));
+      if (uniqueCodes.size !== allPartCodes.length)
+        return abort(400, "Duplicate part codes in submitted list");
+      const existing = await PurchasedMachine.find({ "machines.variants.partCodes": { $in: allPartCodes } }, { "machines.variants.partCodes": 1 }).session(session);
+      const foundCodes = existing.flatMap(p => p.machines.flatMap(m => m.variants.flatMap(v => v.partCodes))).map(c => c.toUpperCase());
+      const duplicates = allPartCodes.filter(c => foundCodes.includes(c.toUpperCase()));
+      if (duplicates.length > 0)
+        return abort(400, `Part code(s) already exist: ${duplicates.slice(0, 5).join(", ")}${duplicates.length > 5 ? ` and ${duplicates.length - 5} more` : ""}`);
+    }
+
     const allAttributeIds = machines.flatMap((m) => m.variants.map((v) => v.attribute)).filter(Boolean);
     const attributes = await Attribute.find({ _id: { $in: allAttributeIds } }).session(session);
     const attrMap = Object.fromEntries(attributes.map((a) => [a._id.toString(), a]));
@@ -219,7 +232,7 @@ const createPurchase = async (req, res) => {
       const purchaseVariants = [];
 
       for (const v of variants) {
-        const { attribute, value, quantity, price, discountedPrice, sellingPrice, discountedSellingPrice, willAddToInventory } = v;
+        const { attribute, value, quantity, price, discountedPrice, sellingPrice, discountedSellingPrice, willAddToInventory, partCodes } = v;
 
         const attrDoc = attrMap[attribute.toString()];
         if (!attrDoc) return abort(404, `Attribute "${attribute}" not found`);
@@ -247,6 +260,7 @@ const createPurchase = async (req, res) => {
           total,
           willAddToInventory: willAddToInventory !== false,
           addedToInventory: false,
+          partCodes: Array.isArray(partCodes) ? partCodes.map(c => c.trim()).filter(Boolean) : [],
         });
       }
 
@@ -643,4 +657,36 @@ const exportToExcel = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createPurchase, addToInventory, exportToExcel };
+const verifyPartCodes = async (req, res) => {
+  try {
+    const { partCodes } = req.body;
+    if (!Array.isArray(partCodes) || partCodes.length === 0)
+      return res.status(400).json({ success: false, message: "partCodes must be a non-empty array" });
+
+    const trimmed = partCodes.map(c => c.trim()).filter(Boolean);
+
+    // Check duplicates within submitted list
+    const unique = new Set(trimmed.map(c => c.toUpperCase()));
+    if (unique.size !== trimmed.length)
+      return res.status(400).json({ success: false, message: "Duplicate part codes in submitted list" });
+
+    // Check against DB
+    const existing = await PurchasedMachine.find(
+      { "machines.variants.partCodes": { $in: trimmed } },
+      { "machines.variants.partCodes": 1 }
+    );
+    const foundCodes = existing.flatMap(p =>
+      p.machines.flatMap(m => m.variants.flatMap(v => v.partCodes))
+    ).map(c => c.toUpperCase());
+
+    const duplicates = trimmed.filter(c => foundCodes.includes(c.toUpperCase()));
+    if (duplicates.length > 0)
+      return res.status(200).json({ success: true, available: false, duplicates });
+
+    return res.status(200).json({ success: true, available: true, duplicates: [] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createPurchase, addToInventory, exportToExcel, verifyPartCodes };

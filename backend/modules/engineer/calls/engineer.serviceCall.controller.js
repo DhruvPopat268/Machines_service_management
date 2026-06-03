@@ -316,12 +316,12 @@ const getPartsMachines = async (req, res) => {
         .filter(m => m.categoryId?.toString() === partsCategoryId)
         .filter(machine => machine.machineId && machineImagesMap.has(machine.machineId.toString()))
         .flatMap(machine =>
-          machine.variants.map(variant => {
-            const { quantity, price, discountedPrice, total, willAddToInventory, addedToInventory, ...rest } = variant.toObject();
+          machine.variants.flatMap(variant => {
+            const { quantity, price, discountedPrice, total, willAddToInventory, addedToInventory, partCodes, ...rest } = variant.toObject();
             const stockMap = machine.machineId ? machineVariantStockMap.get(machine.machineId.toString()) : null;
             const currentStock = stockMap?.get(`${rest.attribute.toString()}_${rest.value.trim().toLowerCase()}`) ?? 0;
-            if (currentStock <= 0) return null;
-            return {
+            if (currentStock <= 0 || !partCodes?.length) return [];
+            return partCodes.map(partCode => ({
               machineId:   machine.machineId,
               machineName: machine.machineName,
               modelNumber: machine.modelNumber,
@@ -329,10 +329,10 @@ const getPartsMachines = async (req, res) => {
               category:    machine.category,
               divisionId:  machine.divisionId,
               division:    machine.division,
-              images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
-              variant:     { ...rest, currentStock },
-            };
-          }).filter(Boolean)
+              images:      machineImagesMap.get(machine.machineId.toString()) || [],
+              variant:     { ...rest, currentStock, partCode },
+            }));
+          })
         )
     );
 

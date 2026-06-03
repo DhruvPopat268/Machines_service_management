@@ -1,10 +1,11 @@
 const router = require("express").Router();
-const { getAll, getById, createPurchase, addToInventory, exportToExcel } = require("./admin.purchasedMachine.controller");
+const { getAll, getById, createPurchase, addToInventory, exportToExcel, verifyPartCodes } = require("./admin.purchasedMachine.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 router.use(adminAuthMiddleware);
 
 router.get("/export",              exportToExcel);
+router.post("/verify-part-codes",  verifyPartCodes);
 router.get("/",                    getAll);
 router.get("/:id",                 getById);
 router.post("/",                   createPurchase);
