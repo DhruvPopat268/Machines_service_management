@@ -200,7 +200,6 @@ const CallDetailsPage = () => {
                   <TableHead>Model</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Division</TableHead>
-                  <TableHead>Variant</TableHead>
                   <TableHead>Contract Type</TableHead>
                   <TableHead>Problem Type</TableHead>
                   <TableHead>Issue Description</TableHead>
@@ -217,7 +216,6 @@ const CallDetailsPage = () => {
                     <TableCell>{machine.modelNumber || "N/A"}</TableCell>
                     <TableCell>{machine.category || "N/A"}</TableCell>
                     <TableCell>{machine.division || "N/A"}</TableCell>
-                    <TableCell>{machine.attributeName}: {machine.attributeValue}</TableCell>
                     <TableCell>
                       <div className="space-y-1 text-sm min-w-[160px]">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -276,6 +274,54 @@ const CallDetailsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Parts Replaced Section */}
+      {call.machines.some((m: any) => m.usedParts?.length > 0) && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Parts Replaced
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Machine (Call)</TableHead>
+                    <TableHead>Part Code</TableHead>
+                    <TableHead>Part Name</TableHead>
+                    <TableHead className="text-right">Qty</TableHead>
+                    <TableHead className="text-right">Selling Price</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {call.machines.flatMap((machine: any, mi: number) =>
+                    (machine.usedParts || []).map((part: any, pi: number) => (
+                      <TableRow key={`${mi}-${pi}`}>
+                        <TableCell>{pi + 1}</TableCell>
+                        <TableCell>
+                          <p className="font-medium">{machine.machineName}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{machine.serialNumber}</p>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{part.partCode}</TableCell>
+                        <TableCell>
+                          <p className="font-medium">{part.machineName}</p>
+                        </TableCell>
+                        <TableCell className="text-right">{part.quantity}</TableCell>
+                        <TableCell className="text-right">₹{part.sellingPrice ?? part.discountedSellingPrice ?? 0}</TableCell>
+                        <TableCell className="text-right font-semibold text-blue-600">₹{part.total}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charges Section */}
       {call.machines.some(m => m.serviceCharge !== undefined || m.partsCharge !== undefined) && (

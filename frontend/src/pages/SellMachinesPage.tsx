@@ -9,757 +9,481 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download } from "lucide-react";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
+const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface CustomerInfo {
-  customerId: string | null;
-  name: string;
-  phone: string;
-  email: string;
-  address: string;
-  zone: string;
-  gstNumber: string;
-}
-
-interface Sale {
-  _id: string;
-  customerInfo: CustomerInfo;
-  machinesCount: number;
-  totalVariants: number;
-  grandTotal: number;
-  createdAt: string;
-}
-
-interface Stats {
-  totalSales: number;
-  totalMachinesSold: number;
-  totalVariantsSold: number;
-  avgSaleValue: number;
-}
-
-interface Customer {
-  _id: string;
-  name: string;
-  phone: string;
-  email: string;
-}
-
-interface MachineVariant {
-  attribute: { _id: string; name: string } | string;
-  value: string;
-  currentStock: number;
-}
-
-interface Machine {
-  _id: string;
-  name: string;
-  category?: { name: string };
-  variants: MachineVariant[];
-}
-
-interface SerialEntry {
-  serialNumber: string;
-  contractTypeId: string;
-  contractType: string;
-  freeService: boolean;
-  freeParts: boolean;
-  validFrom: string;
-  validTo: string;
-}
-
-interface VariantRow {
-  attributeId: string;
-  attributeName: string;
-  value: string;
-  quantity: string;
-  serialEntries: SerialEntry[];
-  price: string;
-  discountedPrice: string;
-  availableStock: number;
-}
-
-interface ContractType {
-  _id: string;
-  name: string;
-  code: string;
-  freeService: boolean;
-  freeParts: boolean;
-}
+interface CustomerInfo { customerId: string | null; name: string; phone: string; email: string; address: string; zone: string; gstNumber: string; }
+interface Sale { _id: string; customerInfo: CustomerInfo; machinesCount: number; grandTotal: number; createdAt: string; }
+interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
+interface Customer { _id: string; name: string; phone: string; email: string; }
+interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
+interface ContractType { _id: string; name: string; code: string; freeService: boolean; freeParts: boolean; }
 
 interface MachineEntry {
   machine: Machine;
-  variants: VariantRow[];
+  quantity: string;
+  sellingPrice: string;
+  discountedSellingPrice: string;
+  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string }[];
+  partCodes: string[];
+}
+
+interface CodesDialogState {
+  mi: number; machineName: string; isParts: boolean;
+  quantity: number;
+  codes: { value: string; contractTypeId: string; validFrom: string; validTo: string }[];
+  saving: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
-  const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
-  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  return { date, time };
+  return {
+    date: `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`,
+    time: d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true}),
+  };
 };
+const toISTDateParam = (h: string) => { const [y,m,d] = h.split("-"); return `${d}/${m}/${String(y).slice(2)}`; };
 
-const toISTDateParam = (htmlDate: string) => {
-  const [yyyy, mm, dd] = htmlDate.split("-");
-  return `${dd}/${mm}/${String(yyyy).slice(2)}`;
-};
-
-// ─── Sale Dialog ──────────────────────────────────────────────────────────────
+// ─── Sell Dialog ──────────────────────────────────────────────────────────────
 
 const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialCustomerId?: string }) => {
-  const [customers, setCustomers]           = useState<Customer[]>([]);
-  const [customerId, setCustomerId]         = useState(initialCustomerId);
-  const [machineSearch, setMachineSearch]   = useState("");
+  const [customers, setCustomers]         = useState<Customer[]>([]);
+  const [customerId, setCustomerId]       = useState(initialCustomerId);
+  const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
+  const [machineSearch, setMachineSearch] = useState("");
   const [machineResults, setMachineResults] = useState<Machine[]>([]);
-  const [searching, setSearching]           = useState(false);
-  const [dropdownOpen, setDropdownOpen]     = useState(false);
-  const [entries, setEntries]               = useState<MachineEntry[]>([]);
-  const [submitting, setSubmitting]         = useState(false);
+  const [searching, setSearching]         = useState(false);
+  const [dropdownOpen, setDropdownOpen]   = useState(false);
+  const [entries, setEntries]             = useState<MachineEntry[]>([]);
+  const [submitting, setSubmitting]       = useState(false);
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
-  const [customerForm, setCustomerForm]     = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
-  const [contractTypes, setContractTypes]   = useState<ContractType[]>([]);
-  const [serialNumberDialog, setSerialNumberDialog] = useState(false);
-  const [currentSerialEdit, setCurrentSerialEdit] = useState<{ mi: number; vi: number; serialEntries: SerialEntry[] } | null>(null);
-  const [checkingSerials, setCheckingSerials] = useState(false);
-  const contractTypesAbortRef = useRef<AbortController | null>(null);
-  const searchRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [customerForm, setCustomerForm]   = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
+  const [codesDialog, setCodesDialog]     = useState<CodesDialogState | null>(null);
+  const ctAbortRef    = useRef<AbortController | null>(null);
+  const searchRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef    = useRef<HTMLDivElement>(null);
   const machineInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMachines = async (search = "") => {
     setSearching(true);
     try {
-      const params: Record<string, string> = { status: "Active", limit: "10" };
-      if (search.trim()) params.search = search.trim();
-      const r = await api.get("/admin/machines", { params });
+      const p: any = { status: "Active", limit: "10" }; if (search.trim()) p.search = search.trim();
+      const r = await api.get("/admin/machines", { params: p });
       setMachineResults(r.data.data);
-    } catch {
-      toast.error("Failed to load machines");
-    } finally {
-      setSearching(false);
-    }
+    } catch { toast.error("Failed to load machines"); }
+    finally { setSearching(false); }
   };
 
   const fetchCustomers = async () => {
-    try {
-      const r = await api.get("/admin/customers", { params: { status: "Active", limit: 100 } });
-      setCustomers(r.data.data);
-    } catch {
-      toast.error("Failed to load customers");
-    }
+    try { const r = await api.get("/admin/customers", { params: { status: "Active", limit: 100 } }); setCustomers(r.data.data); }
+    catch { toast.error("Failed to load customers"); }
   };
 
-  const fetchContractTypes = useCallback(async (searchQuery = "") => {
-    contractTypesAbortRef.current?.abort();
-    const controller = new AbortController();
-    contractTypesAbortRef.current = controller;
-
+  const fetchContractTypes = useCallback(async (q = "") => {
+    ctAbortRef.current?.abort();
+    const ctrl = new AbortController(); ctAbortRef.current = ctrl;
     try {
-      const params: Record<string, string> = { status: "Active", limit: "100" };
-      if (searchQuery) params.search = searchQuery;
-      const r = await api.get("/admin/contract-types", { params, signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setContractTypes(r.data.data);
-      }
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        toast.error("Failed to load contract types");
-      }
-    }
+      const p: any = { status: "Active", limit: "100" }; if (q) p.search = q;
+      const r = await api.get("/admin/contract-types", { params: p, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) setContractTypes(r.data.data);
+    } catch {}
   }, []);
 
-  // sync customerId when initialCustomerId changes
   useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
-
-  // fetch active customers once on open
+  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); }, [open]);
+  useEffect(() => { if (searchRef.current) clearTimeout(searchRef.current); searchRef.current = setTimeout(() => fetchMachines(machineSearch), 400); }, [machineSearch]);
   useEffect(() => {
-    if (!open) return;
-    fetchCustomers();
-    fetchContractTypes();
-    fetchMachines();
-  }, [open]);
-
-  // debounced machine search
-  useEffect(() => {
-    if (searchRef.current) clearTimeout(searchRef.current);
-    searchRef.current = setTimeout(() => fetchMachines(machineSearch), 400);
-  }, [machineSearch]);
-
-  // close dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node))
-        setDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    const h = (e: MouseEvent) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setDropdownOpen(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, []);
 
   const addMachine = (machine: Machine) => {
-    if (entries.find((e) => e.machine._id === machine._id)) {
-      toast.info("Machine already added");
-      return;
-    }
-    const variants: VariantRow[] = machine.variants
-      .filter((v) => v.currentStock > 0)
-      .map((v) => ({
-        attributeId:     typeof v.attribute === "string" ? v.attribute : v.attribute._id,
-        attributeName:   typeof v.attribute === "string" ? "" : v.attribute.name,
-        value:           v.value,
-        quantity:        "",
-        serialEntries:   [],
-        price:           "",
-        discountedPrice: "",
-        availableStock:  v.currentStock,
-      }));
-    
-    if (variants.length === 0) {
-      toast.error("This machine has no variants in stock");
-      return;
-    }
-    
-    setEntries((prev) => [...prev, { machine, variants }]);
-    setMachineSearch("");
-    setDropdownOpen(false);
-    machineInputRef.current?.blur();
+    if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Machine already added"); return; }
+    setEntries((prev) => [...prev, { machine, quantity: "", sellingPrice: "", discountedSellingPrice: "", serialNumbers: [], partCodes: [] }]);
+    setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
 
-  const removeMachine = (machineId: string) =>
-    setEntries((prev) => prev.filter((e) => e.machine._id !== machineId));
+  const removeMachine = (id: string) => setEntries((prev) => prev.filter((e) => e.machine._id !== id));
+  const updateEntry   = (mi: number, field: keyof MachineEntry, value: any) =>
+    setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, [field]: value }));
 
-  const openSerialNumberDialog = (mi: number, vi: number) => {
-    const variant = entries[mi].variants[vi];
-    const qty = Number(variant.quantity) || 0;
-    const existing = variant.serialEntries;
-    const entries_: SerialEntry[] = existing.length > 0
-      ? [...existing]
-      : Array.from({ length: qty }, () => ({ serialNumber: "", contractTypeId: "", contractType: "", freeService: false, freeParts: false, validFrom: "", validTo: "" }));
-    setCurrentSerialEdit({ mi, vi, serialEntries: entries_ });
-    setSerialNumberDialog(true);
+  const openCodesDialog = (mi: number) => {
+    const e      = entries[mi];
+    const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
+    const qty    = Number(e.quantity) || 0;
+    if (isParts) {
+      const existing = e.partCodes.length > 0 ? e.partCodes : Array.from({ length: qty }, () => "");
+      setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, codes: existing.slice(0, qty).map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "" })), saving: false });
+    } else {
+      const existing = e.serialNumbers.length > 0 ? e.serialNumbers : Array.from({ length: qty }, () => ({ serialNumber: "", contractTypeId: "", validFrom: "", validTo: "" }));
+      setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, codes: existing.slice(0, qty).map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo })), saving: false });
+    }
   };
 
-  const handleSerialNumberSave = async () => {
-    if (!currentSerialEdit) return;
-    const { mi, vi, serialEntries } = currentSerialEdit;
+  const saveCodes = async () => {
+    if (!codesDialog) return;
+    const { mi, codes, quantity, isParts } = codesDialog;
 
-    for (let i = 0; i < serialEntries.length; i++) {
-      const e = serialEntries[i];
-      if (!e.serialNumber.trim()) { toast.error(`Fill serial number for entry ${i + 1}`); return; }
-      if (!e.contractTypeId) { toast.error(`Select contract type for serial ${i + 1}`); return; }
-      if (!e.validFrom || !e.validTo) { toast.error(`Enter dates for serial ${i + 1}`); return; }
-      if (new Date(e.validTo) <= new Date(e.validFrom)) { toast.error(`Valid to must be after valid from for serial ${i + 1}`); return; }
+    for (let i = 0; i < quantity; i++) {
+      if (!codes[i]?.value?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is empty`); return; }
+      if (!isParts) {
+        if (!codes[i].contractTypeId) { toast.error(`Select contract type for serial number ${i + 1}`); return; }
+        if (!codes[i].validFrom)      { toast.error(`Enter valid from date for serial number ${i + 1}`); return; }
+        if (!codes[i].validTo)        { toast.error(`Enter valid to date for serial number ${i + 1}`); return; }
+        if (codes[i].validTo <= codes[i].validFrom) { toast.error(`Valid To must be after Valid From for serial number ${i + 1}`); return; }
+      }
     }
 
-    const allSerials = serialEntries.map(e => e.serialNumber.trim());
-    const unique = new Set(allSerials.map(s => s.toUpperCase()));
-    if (unique.size !== allSerials.length) { toast.error("Duplicate serial numbers found"); return; }
+    const trimmedValues = codes.map(c => c.value.trim());
+    const unique = new Set(trimmedValues.map(v => v.toUpperCase()));
+    if (unique.size !== trimmedValues.length) { toast.error("Duplicate codes"); return; }
 
-    setCheckingSerials(true);
+    setCodesDialog((p) => p ? { ...p, saving: true } : p);
     try {
-      await api.post("/admin/sales/check-serials", { serialNumbers: allSerials });
-      setEntries(prev => prev.map((e, i) => i !== mi ? e : {
-        ...e,
-        variants: e.variants.map((v, j) => j !== vi ? v : {
-          ...v,
-          serialEntries: serialEntries.map(se => ({ ...se, serialNumber: se.serialNumber.trim() })),
-        }),
-      }));
-      setSerialNumberDialog(false);
-      setCurrentSerialEdit(null);
-      toast.success("Serial numbers verified and saved");
+      const endpoint = isParts ? "/admin/sales/verify-part-codes" : "/admin/sales/verify-serial-numbers";
+      const key      = isParts ? "partCodes" : "serialNumbers";
+      const res      = await api.post(endpoint, { [key]: trimmedValues });
+      if (!res.data.available) {
+        toast.error(res.data.message || "Verification failed");
+        setCodesDialog((p) => p ? { ...p, saving: false } : p);
+        return;
+      }
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Serial number check failed");
-    } finally {
-      setCheckingSerials(false);
+      toast.error(err?.response?.data?.message || "Verification failed");
+      setCodesDialog((p) => p ? { ...p, saving: false } : p);
+      return;
     }
-  };
 
-  const updateVariant = (mi: number, vi: number, field: keyof VariantRow, value: string | boolean | string[]) => {
-    setEntries((prev) =>
-      prev.map((e, i) => {
-        if (i !== mi) return e;
-        return {
-          ...e,
-          variants: e.variants.map((v, j) => {
-            if (j !== vi) return v;
-            if (field === "quantity") return { ...v, quantity: value as string, serialEntries: [] };
-            return { ...v, [field]: value };
-          }),
-        };
-      })
-    );
+    if (isParts) {
+      updateEntry(mi, "partCodes", trimmedValues);
+    } else {
+      updateEntry(mi, "serialNumbers", codes.map(c => ({ serialNumber: c.value.trim(), contractTypeId: c.contractTypeId, validFrom: c.validFrom, validTo: c.validTo })));
+    }
+    setCodesDialog(null);
   };
 
   const handleSubmit = async () => {
-    if (!customerId) { toast.error("Please select a customer"); return; }
+    if (!customerId)          { toast.error("Please select a customer"); return; }
     if (entries.length === 0) { toast.error("Please add at least one machine"); return; }
 
-    for (const entry of entries) {
-      for (const v of entry.variants) {
-        const hasQty   = v.quantity !== "" && Number(v.quantity) > 0;
-        const hasPrice = v.price !== "";
-        
-        if (hasQty && !hasPrice) {
-          toast.error(`Enter price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-          return;
-        }
-        if (hasPrice && !hasQty) {
-          toast.error(`Enter quantity for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-          return;
-        }
-        
-        if (hasQty && hasPrice && v.serialEntries.length !== Number(v.quantity)) {
-          toast.error(`Add ${v.quantity} serial numbers for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-          return;
-        }
-        
-        if (hasQty && Number(v.quantity) > v.availableStock) {
-          toast.error(`Insufficient stock for ${entry.machine.name} — ${v.attributeName}: ${v.value}. Available: ${v.availableStock}`);
-          return;
-        }
-        if (hasQty && hasPrice && v.discountedPrice !== "" && Number(v.discountedPrice) > Number(v.price)) {
-          toast.error(`Discounted price cannot exceed price for ${entry.machine.name} — ${v.attributeName}: ${v.value}`);
-          return;
-        }
+    for (const e of entries) {
+      if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
+      if (!e.sellingPrice)                         { toast.error(`Enter selling price for ${e.machine.name}`); return; }
+      const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
+      if (isParts) {
+        if (e.partCodes.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} part codes for ${e.machine.name}`); return; }
+      } else {
+        if (e.serialNumbers.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} serial numbers for ${e.machine.name}`); return; }
       }
     }
 
     const payload = {
       customerId,
-      machines: entries.map((e) => ({
-        machineId: e.machine._id,
-        variants: e.variants
-          .filter((v) => v.quantity !== "" && Number(v.quantity) > 0 && v.price !== "" && v.serialEntries.length > 0)
-          .flatMap((v) =>
-            v.serialEntries.map((se) => ({
-              attribute:       v.attributeId,
-              value:           v.value,
-              quantity:        1,
-              serialNumbers:   [{ serialNumber: se.serialNumber, contractTypeId: se.contractTypeId, validFrom: se.validFrom, validTo: se.validTo }],
-              price:           Number(v.price),
-              discountedPrice: v.discountedPrice !== "" ? Number(v.discountedPrice) : null,
-            }))
-          ),
-      })).filter((m) => m.variants.length > 0),
+      machines: entries.map((e) => {
+        const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
+        return {
+          machineId:              e.machine._id,
+          categoryId:             e.machine.category?._id,
+          quantity:               Number(e.quantity),
+          sellingPrice:           Number(e.sellingPrice),
+          discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
+          ...(isParts
+            ? { partCodes: e.partCodes }
+            : { serialNumbers: e.serialNumbers }),
+        };
+      }),
     };
-
-    if (payload.machines.length === 0) {
-      toast.error("Please fill quantity, price, and serial entries for at least one variant");
-      return;
-    }
 
     setSubmitting(true);
     try {
       await api.post("/admin/sales", payload);
       toast.success("Sale recorded successfully");
-      onSuccess();
-      handleClose();
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to record sale");
-    } finally {
-      setSubmitting(false);
-    }
+      onSuccess(); handleClose();
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to record sale"); }
+    finally { setSubmitting(false); }
   };
 
   const handleCreateCustomer = async () => {
-    if (!customerForm.name || !customerForm.phone || !customerForm.email) {
-      toast.error("Name, phone and email are required");
-      return;
-    }
+    if (!customerForm.name || !customerForm.phone || !customerForm.email) { toast.error("Name, phone and email are required"); return; }
     setSubmitting(true);
     try {
       await api.post("/admin/customers", { ...customerForm, status: "Active" });
       toast.success("Customer created successfully");
-      await fetchCustomers();
-      setCreateCustomerDialog(false);
+      await fetchCustomers(); setCreateCustomerDialog(false);
       setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to create customer");
-    } finally {
-      setSubmitting(false);
-    }
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to create customer"); }
+    finally { setSubmitting(false); }
   };
 
-  const handleClose = () => {
-    setCustomerId(initialCustomerId);
-    setMachineSearch("");
-    setMachineResults([]);
-    setDropdownOpen(false);
-    setEntries([]);
-    onClose();
-  };
+  const handleClose = () => { setCustomerId(initialCustomerId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
+
+  const sellingTotal = entries.reduce((s, e) => {
+    if (!e.quantity || !e.sellingPrice) return s;
+    return s + (Number(e.discountedSellingPrice) || Number(e.sellingPrice)) * Number(e.quantity);
+  }, 0);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
-      <DialogContent className="max-w-[80vw] h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Sell Machine</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
 
-        <div className="space-y-6 py-2 flex-1 overflow-y-auto">
-          {/* Customer */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label>Customer <span className="text-destructive">*</span></Label>
-              <Button 
-                type="button" 
-                variant="ghost" 
-                size="sm" 
-                className="h-7 text-xs gap-1.5" 
-                onClick={() => setCreateCustomerDialog(true)}
-              >
-                <Plus className="h-3 w-3" /> Create New Customer
-              </Button>
-            </div>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger className="focus:ring-0 focus:ring-offset-0">
-                <SelectValue placeholder="Select customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => (
-                  <SelectItem key={c._id} value={c._id}>
-                    {c.name} — {c.phone}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+          <div>
+            <h2 className="text-lg font-semibold">Record Machine Sale</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Select a customer and add machines to record a sale</p>
           </div>
+        </div>
 
-          {/* Machine search */}
-          <div className="space-y-1.5">
-            <Label>Add Machine</Label>
-            <div className="relative" ref={wrapperRef}>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  ref={machineInputRef}
-                  className="pl-8"
-                  placeholder="Search machine by name..."
-                  value={machineSearch}
-                  onChange={(e) => setMachineSearch(e.target.value)}
-                  onFocus={() => setDropdownOpen(true)}
-                />
+        {/* Body: two-panel */}
+        <div className="flex flex-1 min-h-0">
+
+          {/* Left panel — customer + machine search */}
+          <div className="w-72 shrink-0 border-r flex flex-col bg-muted/30">
+            <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+
+              {/* Customer */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer <span className="text-destructive">*</span></Label>
+                  <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1" onClick={() => setCreateCustomerDialog(true)}>
+                    <Plus className="h-3 w-3" /> New
+                  </button>
+                </div>
+                <Select value={customerId} onValueChange={setCustomerId}>
+                  <SelectTrigger className="h-9 text-sm bg-background">
+                    <SelectValue placeholder="Select customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        <div>
+                          <p className="font-medium text-sm">{c.name}</p>
+                          <p className="text-xs text-muted-foreground">{c.phone}</p>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              {dropdownOpen && (
-                <div className="absolute z-50 w-full border rounded-md bg-background shadow-md divide-y max-h-48 overflow-y-auto mt-1">
-                  {searching
-                    ? <p className="text-xs text-muted-foreground px-3 py-2">Loading...</p>
-                    : machineResults.length === 0
-                      ? <p className="text-xs text-muted-foreground px-3 py-2">No machines found</p>
-                      : machineResults.map((m) => (
-                          <button
-                            key={m._id}
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
-                            onClick={() => { addMachine(m); }}
-                            onMouseDown={(e) => e.preventDefault()}
-                          >
-                            <span>{m.name}</span>
-                            <span className="text-xs text-muted-foreground">{m.category?.name}</span>
-                          </button>
-                        ))
-                  }
+
+              {/* Divider */}
+              <div className="border-t" />
+
+              {/* Machine search */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Machine</Label>
+                <div className="relative" ref={wrapperRef}>
+                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input ref={machineInputRef} className="pl-8 h-9 text-sm bg-background" placeholder="Search by name..." value={machineSearch}
+                    onChange={(e) => setMachineSearch(e.target.value)} onFocus={() => setDropdownOpen(true)} />
+                  {dropdownOpen && (
+                    <div className="absolute z-50 w-full border rounded-md bg-background shadow-lg divide-y max-h-56 overflow-y-auto mt-1">
+                      {searching
+                        ? <p className="text-xs text-muted-foreground px-3 py-2.5">Loading...</p>
+                        : machineResults.length === 0
+                          ? <p className="text-xs text-muted-foreground px-3 py-2.5">No machines found</p>
+                          : machineResults.map((m) => (
+                              <button key={m._id} type="button"
+                                className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
+                                onClick={() => addMachine(m)} onMouseDown={(e) => e.preventDefault()}>
+                                <span className="text-sm font-medium">{m.name}</span>
+                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
+                              </button>
+                            ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Info note */}
+              <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>Parts machines use part codes. Others need serial numbers with individual contract types.</span>
+              </div>
+
+              {/* Added machine chips */}
+              {entries.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Added ({entries.length})</Label>
+                  <div className="flex flex-col gap-1">
+                    {entries.map((e) => (
+                      <div key={e.machine._id} className="flex items-center justify-between rounded-md bg-background border px-2.5 py-1.5">
+                        <div>
+                          <p className="text-xs font-medium leading-tight">{e.machine.name}</p>
+                          {e.machine.category && <p className="text-[10px] text-muted-foreground">{e.machine.category.name}</p>}
+                        </div>
+                        <button type="button" className="text-destructive hover:text-destructive/80 ml-2 shrink-0" onClick={() => removeMachine(e.machine._id)}>
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Machine entries */}
-          {entries.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>Variants with empty quantity or price will be skipped. Contract type, dates, and serial numbers are configured in the serial number popup. Free Service and Free Parts are auto-populated based on selected contract type. Stock will be automatically deducted.</span>
+          {/* Right panel — machine entries */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {entries.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
+                <Package className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm font-medium">No machines added yet</p>
+                <p className="text-xs mt-1">Search and select machines from the left panel</p>
               </div>
-              {entries.map((entry, mi) => (
-                <div key={entry.machine._id} className="border rounded-lg p-4 space-y-3">
-                  {/* Machine header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{entry.machine.name}</p>
-                      {entry.machine.category && (
-                        <p className="text-xs text-muted-foreground">{entry.machine.category.name}</p>
-                      )}
+            ) : (
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {entries.map((entry, mi) => {
+                  const isParts    = entry.machine.category?._id === PARTS_CATEGORY_ID;
+                  const qty        = Number(entry.quantity) || 0;
+                  const codes      = isParts ? entry.partCodes : entry.serialNumbers;
+                  const codesOk    = codes.length === qty && qty > 0;
+                  return (
+                    <div key={entry.machine._id} className="rounded-xl border bg-background shadow-sm overflow-hidden">
+                      {/* Machine header */}
+                      <div className="flex items-center justify-between px-4 py-3 bg-muted/40 border-b">
+                        <div>
+                          <p className="font-semibold text-sm">{entry.machine.name}</p>
+                          {entry.machine.category && <p className="text-xs text-muted-foreground">{entry.machine.category.name}</p>}
+                        </div>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeMachine(entry.machine._id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      {/* Fields */}
+                      <div className="p-4 space-y-3">
+                        {/* Row 1: qty, codes, selling price, disc price */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Qty <span className="text-destructive">*</span></Label>
+                            <Input type="number" min={1} className="h-8 text-sm" value={entry.quantity}
+                              onChange={(e) => { updateEntry(mi, "quantity", e.target.value); updateEntry(mi, isParts ? "partCodes" : "serialNumbers", []); }} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">{isParts ? "Part Codes" : "Serial Nos"}</Label>
+                            <Button type="button" variant="outline" size="sm"
+                              className={`h-8 text-xs gap-1.5 w-full font-normal ${codesOk ? "border-green-400 text-green-600 bg-green-50" : ""}`}
+                              disabled={!entry.quantity || Number(entry.quantity) === 0}
+                              onClick={() => openCodesDialog(mi)}>
+                              <Hash className="h-3.5 w-3.5" />
+                              {codesOk ? `${codes.length} saved ✓` : `Enter ${isParts ? "Part Codes" : "Serial Nos"}`}
+                            </Button>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Selling Price <span className="text-destructive">*</span></Label>
+                            <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.sellingPrice}
+                              onChange={(e) => updateEntry(mi, "sellingPrice", e.target.value)} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Disc. Selling Price</Label>
+                            <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.discountedSellingPrice}
+                              onChange={(e) => updateEntry(mi, "discountedSellingPrice", e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <Button 
-                      size="icon" 
-                      variant="ghost" 
-                      className="h-7 w-7 text-destructive" 
-                      onClick={() => removeMachine(entry.machine._id)}
-                      aria-label={`Remove ${entry.machine.name}`}
-                      title={`Remove ${entry.machine.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  );
+                })}
+              </div>
+            )}
 
-                  {/* Variants table */}
-                  {entry.variants.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No variants available in stock.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="text-muted-foreground border-b">
-                            <th className="text-left font-medium pb-2 pr-3">Attribute</th>
-                            <th className="text-left font-medium pb-2 pr-3">Value</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-20">Available</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-20">Qty <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-48">Serial Numbers &amp; Contracts <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Price <span className="text-destructive">*</span></th>
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Disc. Price</th>
-                            <th className="text-left font-medium pb-2 pr-3 w-24">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {entry.variants.map((v, vi) => (
-                            <tr key={vi} className="border-b last:border-0">
-                              <td className="py-1.5 pr-3">{v.attributeName}</td>
-                              <td className="py-1.5 pr-3">{v.value}</td>
-                              <td className="py-1.5 pr-3">
-                                <span className={`font-medium ${v.availableStock < 10 ? "text-orange-600" : "text-green-600"}`}>
-                                  {v.availableStock}
-                                </span>
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Input
-                                  type="number"
-                                  min={1}
-                                  max={v.availableStock}
-                                  className="h-7 text-xs w-20"
-                                  value={v.quantity}
-                                  onChange={(e) => updateVariant(mi, vi, "quantity", e.target.value)}
-                                />
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs w-48"
-                                  onClick={() => openSerialNumberDialog(mi, vi)}
-                                  disabled={!v.quantity || Number(v.quantity) === 0}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  {v.serialEntries.length > 0
-                                    ? `${v.serialEntries.length}/${v.quantity} Added`
-                                    : "Add Serial Nos & Contracts"}
-                                </Button>
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  className="h-7 text-xs w-24"
-                                  value={v.price}
-                                  onChange={(e) => updateVariant(mi, vi, "price", e.target.value)}
-                                />
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  className="h-7 text-xs w-24"
-                                  placeholder="—"
-                                  value={v.discountedPrice}
-                                  onChange={(e) => updateVariant(mi, vi, "discountedPrice", e.target.value)}
-                                />
-                              </td>
-                              <td className="py-1.5 pr-3">
-                                {v.quantity && v.price ? (
-                                  <span className="text-xs font-medium text-foreground">
-                                    ₹{((Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity)).toLocaleString()}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">—</span>
-                                )}
-                              </td>
+            {/* Footer */}
+            <div className="border-t px-4 py-3 flex items-center justify-between gap-4 shrink-0 bg-background">
+              <span className="text-sm font-medium">
+                Net Total: <span className="text-base font-bold text-green-600">₹{sellingTotal.toLocaleString()}</span>
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
+                <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
+                  <Plus className="h-4 w-4" />{submitting ? "Recording..." : "Record Sale"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
 
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+      {/* Codes Dialog */}
+      {codesDialog && (
+        <Dialog open onOpenChange={(o) => { if (!o) setCodesDialog(null); }}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Enter {codesDialog.isParts ? "Part Codes" : "Serial Numbers"} — {codesDialog.machineName}</DialogTitle>
+            </DialogHeader>
+            <p className="text-xs text-muted-foreground">{codesDialog.quantity} unit{codesDialog.quantity > 1 ? "s" : ""}</p>
+            <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+              {Array.from({ length: codesDialog.quantity }).map((_, i) => (
+                <div key={i} className="space-y-2 rounded-lg border p-3">
+                  <Label className="text-xs font-semibold">Unit {i + 1}</Label>
+                  <Input className="h-8 text-xs" placeholder={codesDialog.isParts ? `e.g. PT-00${i+1}` : `e.g. SN-00${i+1}`}
+                    value={codesDialog.codes[i]?.value ?? ""}
+                    onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], value: e.target.value }; return { ...p, codes: c }; })} />
+                  {!codesDialog.isParts && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Contract Type <span className="text-destructive">*</span></Label>
+                        <SearchableSelect
+                          options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
+                          value={codesDialog.codes[i]?.contractTypeId ?? ""}
+                          onChange={(v) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], contractTypeId: v }; return { ...p, codes: c }; })}
+                          onSearchChange={fetchContractTypes}
+                          placeholder="Select" searchPlaceholder="Search..."
+                          className="h-8 text-xs"
+                        />
+                        {(() => { const ct = contractTypes.find(ct => ct._id === codesDialog.codes[i]?.contractTypeId); return ct ? <p className="text-[10px] text-muted-foreground">Free Svc: {ct.freeService ? "Yes" : "No"} · Free Parts: {ct.freeParts ? "Yes" : "No"}</p> : null; })()}
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Valid From <span className="text-destructive">*</span></Label>
+                        <Input type="date" className="h-8 text-xs"
+                          value={codesDialog.codes[i]?.validFrom ?? ""}
+                          disabled={!codesDialog.codes[i]?.contractTypeId}
+                          onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validFrom: e.target.value }; return { ...p, codes: c }; })} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Valid To <span className="text-destructive">*</span></Label>
+                        <Input type="date" className="h-8 text-xs"
+                          value={codesDialog.codes[i]?.validTo ?? ""}
+                          disabled={!codesDialog.codes[i]?.contractTypeId}
+                          onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validTo: e.target.value }; return { ...p, codes: c }; })} />
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
             </div>
-          )}
-        </div>
-
-        <DialogFooter className="flex items-center justify-between gap-4">
-          <div className="text-sm font-medium">
-            Net Total: <span className="text-base font-bold text-green-600">₹{
-              entries.reduce((sum, e) =>
-                sum + e.variants.reduce((vSum, v) =>
-                  vSum + (v.quantity && v.price ? (Number(v.discountedPrice) || Number(v.price)) * Number(v.quantity) : 0)
-                , 0)
-              , 0).toLocaleString()
-            }</span>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-              <Plus className="h-4 w-4" />
-              {submitting ? "Recording..." : "Record Sale"}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCodesDialog(null)}>Cancel</Button>
+              <Button onClick={saveCodes} disabled={codesDialog.saving}>{codesDialog.saving ? "Saving..." : "Save"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Create Customer Dialog */}
       <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); } }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Create New Customer</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Create New Customer</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Name <span className="text-destructive">*</span></Label>
-              <Input placeholder="Customer name" value={customerForm.name} onChange={(e) => setCustomerForm((prev) => ({ ...prev, name: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Phone <span className="text-destructive">*</span></Label>
-              <Input placeholder="e.g. 9800000000" value={customerForm.phone} onChange={(e) => setCustomerForm((prev) => ({ ...prev, phone: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email <span className="text-destructive">*</span></Label>
-              <Input type="email" placeholder="customer@example.com" value={customerForm.email} onChange={(e) => setCustomerForm((prev) => ({ ...prev, email: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input placeholder="Full address" value={customerForm.address} onChange={(e) => setCustomerForm((prev) => ({ ...prev, address: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Zone</Label>
-              <Input placeholder="Zone/Area" value={customerForm.zone} onChange={(e) => setCustomerForm((prev) => ({ ...prev, zone: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>GST Number</Label>
-              <Input placeholder="e.g. 27AABCG1234A1Z5" value={customerForm.gstNumber} onChange={(e) => setCustomerForm((prev) => ({ ...prev, gstNumber: e.target.value }))} />
-            </div>
+            <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Customer name" value={customerForm.name} onChange={(e) => setCustomerForm((p) => ({ ...p, name: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Phone <span className="text-destructive">*</span></Label><Input placeholder="e.g. 9800000000" value={customerForm.phone} onChange={(e) => setCustomerForm((p) => ({ ...p, phone: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" placeholder="customer@example.com" value={customerForm.email} onChange={(e) => setCustomerForm((p) => ({ ...p, email: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Address</Label><Input placeholder="Full address" value={customerForm.address} onChange={(e) => setCustomerForm((p) => ({ ...p, address: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Zone</Label><Input placeholder="Zone/Area" value={customerForm.zone} onChange={(e) => setCustomerForm((p) => ({ ...p, zone: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>GST Number</Label><Input placeholder="e.g. 27AABCG1234A1Z5" value={customerForm.gstNumber} onChange={(e) => setCustomerForm((p) => ({ ...p, gstNumber: e.target.value }))} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); }} disabled={submitting}>Cancel</Button>
             <Button onClick={handleCreateCustomer} disabled={submitting}>{submitting ? "Creating..." : "Create Customer"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={serialNumberDialog} onOpenChange={(o) => { if (!o) { setSerialNumberDialog(false); setCurrentSerialEdit(null); } }}>
-        <DialogContent className="max-w-5xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Add Serial Numbers &amp; Contracts</DialogTitle>
-            {currentSerialEdit && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {entries[currentSerialEdit.mi].machine.name} — {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].attributeName}: {entries[currentSerialEdit.mi].variants[currentSerialEdit.vi].value}
-              </p>
-            )}
-          </DialogHeader>
-          {currentSerialEdit && (
-            <div className="flex-1 overflow-auto py-2">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-muted-foreground border-b">
-                    <th className="text-left font-medium pb-2 pr-3 w-8">#</th>
-                    <th className="text-left font-medium pb-2 pr-3">Serial Number <span className="text-destructive">*</span></th>
-                    <th className="text-left font-medium pb-2 pr-3 w-52">Contract Type <span className="text-destructive">*</span></th>
-                    <th className="text-left font-medium pb-2 pr-3 w-36">Valid From <span className="text-destructive">*</span></th>
-                    <th className="text-left font-medium pb-2 pr-3 w-36">Valid To <span className="text-destructive">*</span></th>
-                    <th className="text-center font-medium pb-2 pr-3 w-24">Free Service</th>
-                    <th className="text-center font-medium pb-2 w-24">Free Parts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentSerialEdit.serialEntries.map((se, idx) => (
-                    <tr key={idx} className="border-b last:border-0">
-                      <td className="py-2 pr-3 text-muted-foreground">{idx + 1}</td>
-                      <td className="py-2 pr-3">
-                        <Input
-                          placeholder={`e.g. SN-${String(idx + 1).padStart(6, "0")}`}
-                          value={se.serialNumber}
-                          onChange={(e) => setCurrentSerialEdit(prev => {
-                            if (!prev) return prev;
-                            const updated = [...prev.serialEntries];
-                            updated[idx] = { ...updated[idx], serialNumber: e.target.value };
-                            return { ...prev, serialEntries: updated };
-                          })}
-                          className="h-7 text-xs"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <SearchableSelect
-                          options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
-                          value={se.contractTypeId}
-                          onChange={(val) => {
-                            const selected = contractTypes.find(ct => ct._id === val);
-                            setCurrentSerialEdit(prev => {
-                              if (!prev) return prev;
-                              const updated = [...prev.serialEntries];
-                              updated[idx] = { ...updated[idx], contractTypeId: val, contractType: selected?.name ?? "", freeService: selected?.freeService ?? false, freeParts: selected?.freeParts ?? false };
-                              return { ...prev, serialEntries: updated };
-                            });
-                          }}
-                          onSearchChange={fetchContractTypes}
-                          placeholder="Select contract"
-                          searchPlaceholder="Search..."
-                          className="h-7 text-xs w-52"
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Input
-                          type="date"
-                          className="h-7 text-xs w-36"
-                          value={se.validFrom}
-                          disabled={!se.contractTypeId}
-                          onChange={(e) => setCurrentSerialEdit(prev => {
-                            if (!prev) return prev;
-                            const updated = [...prev.serialEntries];
-                            updated[idx] = { ...updated[idx], validFrom: e.target.value };
-                            return { ...prev, serialEntries: updated };
-                          })}
-                        />
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Input
-                          type="date"
-                          className="h-7 text-xs w-36"
-                          value={se.validTo}
-                          disabled={!se.contractTypeId}
-                          onChange={(e) => setCurrentSerialEdit(prev => {
-                            if (!prev) return prev;
-                            const updated = [...prev.serialEntries];
-                            updated[idx] = { ...updated[idx], validTo: e.target.value };
-                            return { ...prev, serialEntries: updated };
-                          })}
-                        />
-                      </td>
-                      <td className="py-2 pr-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${se.freeService ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {se.freeService ? "Yes" : "No"}
-                        </span>
-                      </td>
-                      <td className="py-2 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${se.freeParts ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {se.freeParts ? "Yes" : "No"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setSerialNumberDialog(false); setCurrentSerialEdit(null); }} disabled={checkingSerials}>Cancel</Button>
-            <Button onClick={handleSerialNumberSave} disabled={checkingSerials}>{checkingSerials ? "Checking..." : "Save"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -776,13 +500,11 @@ const SellMachinesPage = () => {
   const [stats, setStats]                     = useState<Stats | null>(null);
   const [search, setSearch]                   = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [serialNumber, setSerialNumber]         = useState("");
-  const [debouncedSerialNumber, setDebouncedSerialNumber] = useState("");
   const [filters, setFilters]                 = useState<Record<string, string>>({});
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
-  const [pageSize, setPageSize]               = useState(10);
+  const [pageSize]                            = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
@@ -791,393 +513,157 @@ const SellMachinesPage = () => {
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
   const [machineOptions, setMachineOptions]   = useState<{ label: string; value: string }[]>([]);
+  const abortRef         = useRef<AbortController | null>(null);
   const customerAbortRef = useRef<AbortController | null>(null);
   const categoryAbortRef = useRef<AbortController | null>(null);
   const divisionAbortRef = useRef<AbortController | null>(null);
-  const machineAbortRef = useRef<AbortController | null>(null);
+  const machineAbortRef  = useRef<AbortController | null>(null);
 
-  // Debounce search
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 500);
-    return () => clearTimeout(t);
-  }, [search]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const cid = searchParams.get("customerId"); if (cid) { setInitialCustomerId(cid); setDialogOpen(true); } }, [searchParams]);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500);
-    return () => clearTimeout(t);
-  }, [serialNumber]);
-
-  // auto-open dialog if customerId is in query params
-  useEffect(() => {
-    const cid = searchParams.get("customerId");
-    if (cid) {
-      setInitialCustomerId(cid);
-      setDialogOpen(true);
-    }
-  }, [searchParams]);
-
-  // Fetch filter options on mount
-  useEffect(() => {
-    const fetchFilterOptions = async () => {
+    const fetch = async () => {
       try {
-        const [customerRes, categoryRes, divisionRes, machineRes] = await Promise.all([
+        const [cr, catr, dr, mr] = await Promise.all([
           api.get("/admin/customers", { params: { limit: 10 } }),
           api.get("/admin/machine-categories", { params: { limit: 10 } }),
           api.get("/admin/machine-divisions", { params: { limit: 10 } }),
           api.get("/admin/machines", { params: { limit: 10 } }),
         ]);
-        setCustomerOptions(customerRes.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
-        setCategoryOptions(categoryRes.data.data.map((c: any) => ({ label: c.name, value: c._id })));
-        setDivisionOptions(divisionRes.data.data.map((d: any) => ({ label: d.name, value: d._id })));
-        setMachineOptions(machineRes.data.data.map((m: any) => ({ label: m.name, value: m._id })));
-      } catch {
-        toast.error("Failed to load filter options");
-      }
+        setCustomerOptions(cr.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+        setCategoryOptions(catr.data.data.map((c: any) => ({ label: c.name, value: c._id })));
+        setDivisionOptions(dr.data.data.map((d: any) => ({ label: d.name, value: d._id })));
+        setMachineOptions(mr.data.data.map((m: any) => ({ label: m.name, value: m._id })));
+      } catch { toast.error("Failed to load filter options"); }
     };
-    fetchFilterOptions();
+    fetch();
   }, []);
 
-  // Search functions for SearchableSelect
-  const fetchCustomers = useCallback(async (searchQuery: string) => {
-    customerAbortRef.current?.abort();
-    const controller = new AbortController();
-    customerAbortRef.current = controller;
+  const mkSearch = (setFn: any, abortRef: any, url: string, labelFn: (i: any) => string) =>
+    useCallback(async (q: string) => {
+      abortRef.current?.abort(); const ctrl = new AbortController(); abortRef.current = ctrl;
+      try {
+        const p: any = { limit: "100" }; if (q) p.search = q;
+        const res = await api.get(url, { params: p, signal: ctrl.signal });
+        if (!ctrl.signal.aborted) setFn(res.data.data.map((i: any) => ({ label: labelFn(i), value: i._id })));
+      } catch {}
+    }, []);
 
-    try {
-      const params: Record<string, string> = { limit: "100" };
-      if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/customers", { params, signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setCustomerOptions(res.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
-      }
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        console.error("Failed to fetch customers", err);
-      }
-    }
-  }, []);
-
-  const fetchCategories = useCallback(async (searchQuery: string) => {
-    categoryAbortRef.current?.abort();
-    const controller = new AbortController();
-    categoryAbortRef.current = controller;
-
-    try {
-      const params: Record<string, string> = { limit: "100" };
-      if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machine-categories", { params, signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setCategoryOptions(res.data.data.map((c: any) => ({ label: c.name, value: c._id })));
-      }
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        console.error("Failed to fetch categories", err);
-      }
-    }
-  }, []);
-
-  const fetchDivisions = useCallback(async (searchQuery: string) => {
-    divisionAbortRef.current?.abort();
-    const controller = new AbortController();
-    divisionAbortRef.current = controller;
-
-    try {
-      const params: Record<string, string> = { limit: "100" };
-      if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machine-divisions", { params, signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setDivisionOptions(res.data.data.map((d: any) => ({ label: d.name, value: d._id })));
-      }
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        console.error("Failed to fetch divisions", err);
-      }
-    }
-  }, []);
-
-  const fetchMachines = useCallback(async (searchQuery: string) => {
-    machineAbortRef.current?.abort();
-    const controller = new AbortController();
-    machineAbortRef.current = controller;
-
-    try {
-      const params: Record<string, string> = { limit: "100" };
-      if (searchQuery) params.search = searchQuery;
-      const res = await api.get("/admin/machines", { params, signal: controller.signal });
-      if (!controller.signal.aborted) {
-        setMachineOptions(res.data.data.map((m: any) => ({ label: m.name, value: m._id })));
-      }
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        console.error("Failed to fetch machines", err);
-      }
-    }
-  }, []);
-
-  const handleExport = async () => {
-    setExportDialog(false);
-    toast.success("Download starting...");
-    try {
-      const params: Record<string, string> = {};
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
-      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
-      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
-      if (fromDate) params.fromDate = toISTDateParam(fromDate);
-      if (toDate)   params.toDate   = toISTDateParam(toDate);
-
-      const res = await api.get("/admin/sales/export", { params, responseType: "blob" });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "sales_export.xlsx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("Export failed");
-    }
-  };
-
-  const abortRef = useRef<AbortController | null>(null);
+  const fetchCustomers  = mkSearch(setCustomerOptions, customerAbortRef, "/admin/customers",            (c) => `${c.name} - ${c.phone}`);
+  const fetchCategories = mkSearch(setCategoryOptions, categoryAbortRef, "/admin/machine-categories",   (c) => c.name);
+  const fetchDivisions  = mkSearch(setDivisionOptions, divisionAbortRef, "/admin/machine-divisions",    (d) => d.name);
+  const fetchMachines   = mkSearch(setMachineOptions,  machineAbortRef,  "/admin/machines",              (m) => m.name);
 
   const fetchSales = useCallback(async (page = 1) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
+    abortRef.current?.abort(); const ctrl = new AbortController(); abortRef.current = ctrl;
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(pageSize) };
-      if (debouncedSearch) params.search = debouncedSearch;
-      if (filters.customer && filters.customer !== "all" && filters.customer !== "") params.customerId = filters.customer;
-      if (filters.category && filters.category !== "all" && filters.category !== "") params.category = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
-      if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
-      if (debouncedSerialNumber) params.serialNumber = debouncedSerialNumber;
-      if (fromDate) params.fromDate = toISTDateParam(fromDate);
-      if (toDate)   params.toDate   = toISTDateParam(toDate);
-
-      const res = await api.get("/admin/sales", { params, signal: controller.signal });
-      setData(res.data.data);
-      setStats(res.data.stats || null);
-      setPagination({
-        page:       res.data.pagination.page,
-        totalPages: res.data.pagination.totalPages,
-        total:      res.data.pagination.total,
-      });
-    } catch (err: any) {
-      if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
-        toast.error("Failed to fetch sales");
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, [debouncedSearch, debouncedSerialNumber, filters, fromDate, toDate, pageSize]);
+      const p: Record<string, string> = { page: String(page), limit: String(pageSize) };
+      if (debouncedSearch)                                                          p.search     = debouncedSearch;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category   = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division   = filters.division;
+      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId  = filters.machine;
+      if (fromDate) p.fromDate = toISTDateParam(fromDate);
+      if (toDate)   p.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/sales", { params: p, signal: ctrl.signal });
+      setData(res.data.data); setStats(res.data.stats || null);
+      setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
+    } catch (err: any) { if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") toast.error("Failed to fetch sales"); }
+    finally { if (!ctrl.signal.aborted) setLoading(false); }
+  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
 
+  const handleExport = async () => {
+    setExportDialog(false); toast.success("Download starting...");
+    try {
+      const p: Record<string, string> = {};
+      if (debouncedSearch)                                                          p.search     = debouncedSearch;
+      if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category   = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division   = filters.division;
+      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId  = filters.machine;
+      if (fromDate) p.fromDate = toISTDateParam(fromDate);
+      if (toDate)   p.toDate   = toISTDateParam(toDate);
+      const res = await api.get("/admin/sales/export", { params: p, responseType: "blob" });
+      const url = URL.createObjectURL(res.data); const a = document.createElement("a");
+      a.href = url; a.download = "sales_export.xlsx"; a.click(); URL.revokeObjectURL(url);
+    } catch { toast.error("Export failed"); }
+  };
+
   const columns: Column<Sale>[] = [
-    {
-      key: "_id", label: "No.",
-      render: (_s, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * pageSize + i + 1}</span>,
-    },
-    {
-      key: "customerInfo", label: "Customer Info",
-      render: (s) => (
-        <div>
-          <p className="font-medium text-sm">{s.customerInfo.name}</p>
-          <p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p>
-          <p className="text-xs text-muted-foreground">{s.customerInfo.email}</p>
-        </div>
-      ),
-    },
-    {
-      key: "machinesCount", label: "Machines",
-      render: (s) => <span className="font-medium">{s.machinesCount}</span>,
-    },
-    {
-      key: "totalVariants", label: "Total Variants",
-      render: (s) => <span className="font-medium">{s.totalVariants}</span>,
-    },
-    {
-      key: "grandTotal", label: "Total Sold",
-      render: (s) => <span className="font-medium">₹{s.grandTotal.toLocaleString()}</span>,
-    },
-    {
-      key: "createdAt", label: "Sold At",
-      render: (s) => {
-        const { date, time } = formatDateTime(s.createdAt);
-        return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
-      },
-    },
-    {
-      key: "actions", label: "Actions",
-      render: (s) => (
-        <Button 
-          size="sm" 
-          variant="outline" 
-          className="text-xs h-7" 
-          onClick={() => navigate(`/sell-machines/${s._id}`)}
-          aria-label="View sale details"
-          title="View sale details"
-        >
-          <Eye className="h-3 w-3" />
-        </Button>
-      ),
-    },
+    { key: "_id",          label: "No.",          render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
+    { key: "customerInfo", label: "Customer",     render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
+    { key: "machinesCount",label: "Machines",     render: (s) => <span className="font-medium">{s.machinesCount}</span> },
+    { key: "grandTotal",   label: "Total Sold",   render: (s) => <span className="font-medium">₹{s.grandTotal.toLocaleString()}</span> },
+    { key: "createdAt",    label: "Sold At",      render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    { key: "actions",      label: "Actions",      sticky: true, render: (s) => <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button> },
   ];
 
   return (
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader
-            title="Sell Machines"
-            description="Record and manage machine sales to customers"
-            actionLabel="Sell Machine"
-            actionIcon={ShoppingCart}
-            onAction={() => { setInitialCustomerId(""); setDialogOpen(true); }}
-          >
-            <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}>
-              <Download className="h-4 w-4" /> Export
-            </Button>
+          <PageHeader title="Sell Machines" description="Record and manage machine sales to customers" actionLabel="Sell Machine" actionIcon={ShoppingCart} onAction={() => { setInitialCustomerId(""); setDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
 
-          {/* Stats Cards */}
           {stats && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="border-0 shadow-sm">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Sales</p>
-                      <p className="text-2xl font-bold mt-1">₹{stats.totalSales.toLocaleString()}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { label: "Total Sales",          value: `₹${stats.totalSales.toLocaleString()}`,      icon: ShoppingCart, color: "blue"   },
+                { label: "Total Machines Sold",  value: stats.totalMachinesSold,                       icon: Package,      color: "green"  },
+                { label: "Avg Sale Value",        value: `₹${stats.avgSaleValue.toLocaleString()}`,    icon: ShoppingCart, color: "orange" },
+              ].map((s) => (
+                <Card key={s.label} className="border-0 shadow-sm">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div><p className="text-sm text-muted-foreground">{s.label}</p><p className="text-2xl font-bold mt-1">{s.value}</p></div>
+                      <div className={`h-12 w-12 rounded-full bg-${s.color}-100 flex items-center justify-center`}>
+                        <s.icon className={`h-6 w-6 text-${s.color}-600`} />
+                      </div>
                     </div>
-                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                      <ShoppingCart className="h-6 w-6 text-blue-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-sm">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Machines Sold</p>
-                      <p className="text-2xl font-bold mt-1">{stats.totalMachinesSold}</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
-                      <Package className="h-6 w-6 text-green-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-sm">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Variants Sold</p>
-                      <p className="text-2xl font-bold mt-1">{stats.totalVariantsSold}</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
-                      <Package className="h-6 w-6 text-purple-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-sm">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Avg Sale Value</p>
-                      <p className="text-2xl font-bold mt-1">₹{stats.avgSaleValue.toLocaleString()}</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-orange-100 flex items-center justify-center">
-                      <ShoppingCart className="h-6 w-6 text-orange-600" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
 
-          {/* Row 1: Search + Date Range + Clear */}
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by customer, machine, model..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+              <Input placeholder="Search by customer, machine, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
-              </div>
-              {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
-                  <X className="h-4 w-4 mr-1" /> Clear
-                </Button>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
               )}
             </div>
           </div>
 
-          {/* Row 2: Filters right-aligned */}
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customer: v }))} onSearchChange={fetchCustomers} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machine: v }))} onSearchChange={fetchMachines} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
-            <Input
-              placeholder="Serial number..."
-              value={serialNumber}
-              onChange={(e) => setSerialNumber(e.target.value)}
-              className="w-[160px] h-9 text-sm"
-            />
+            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(p => ({ ...p, customer: v }))} onSearchChange={fetchCustomers}  placeholder="Customer" searchPlaceholder="Search customers..."  className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Machine"  searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
           </div>
-          <div>
-            <DataTable columns={columns} data={data} pageSize={999} />
-          </div>
-          <Pagination
-            page={pagination.page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
-            pageSize={pageSize}
-            onPageChange={fetchSales}
-          />
+
+          <DataTable columns={columns} data={data} pageSize={999} />
+          <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={pageSize} onPageChange={fetchSales} />
         </>
       )}
 
-      <SellMachineDialog
-        open={dialogOpen}
-        onClose={() => { setDialogOpen(false); setInitialCustomerId(""); navigate("/sell-machines", { replace: true }); }}
-        onSuccess={() => fetchSales(1)}
-        initialCustomerId={initialCustomerId}
-      />
+      <SellMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialCustomerId(""); navigate("/sell-machines", { replace: true }); }} onSuccess={() => fetchSales(1)} initialCustomerId={initialCustomerId} />
 
-      {/* Export Confirm Dialog */}
       <Dialog open={exportDialog} onOpenChange={setExportDialog}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Export Sales Data</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground py-4">
-            Do you want to download all sales data as an Excel file?
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>
-            <Button onClick={handleExport}>Yes, Download</Button>
-          </DialogFooter>
+          <DialogHeader><DialogTitle>Export Sales Data</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground py-4">Do you want to download all sales data as an Excel file?</p>
+          <DialogFooter><Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button><Button onClick={handleExport}>Yes, Download</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

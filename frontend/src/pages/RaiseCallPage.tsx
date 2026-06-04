@@ -27,7 +27,8 @@ interface CustomerMachine {
   divisionId: string;
   division: string;
   images: string[];
-  variant: { _id: string; name: string; value: string; serialNumber: string; contractType: { name: string; validFrom: string; validTo: string } };
+  serialNumber: string;
+  contractType: { name: string; validFrom: string; validTo: string };
 }
 
 const LIMIT = 10;
@@ -164,7 +165,7 @@ const RaiseCallPage = () => {
     setRenewing(true);
     try {
       await api.patch("/admin/sales/renew-contract", {
-        serialNumber:      renewDialog.variant.serialNumber,
+        serialNumber:      renewDialog.serialNumber,
         newContractTypeId: renewContractTypeId,
         newValidFrom:      renewValidFrom,
         newValidTo:        renewValidTo,
@@ -200,7 +201,7 @@ const RaiseCallPage = () => {
     },
     {
       key: "serialNumber", label: "Serial Number",
-      render: (m) => <span>{m.variant?.serialNumber || "—"}</span>,
+      render: (m) => <span>{m.serialNumber || "—"}</span>,
     },
     {
       key: "category", label: "Category",
@@ -211,16 +212,12 @@ const RaiseCallPage = () => {
       render: (m) => <span>{m.division || "—"}</span>,
     },
     {
-      key: "variant", label: "Variant",
-      render: (m) => <span>{m.variant?.name && m.variant?.value ? `${m.variant.name} : ${m.variant.value}` : "—"}</span>,
-    },
-    {
       key: "contractType", label: "Contract Type",
       render: (m) => {
-        const isExpired = m.variant?.contractType?.validTo ? new Date() > new Date(m.variant.contractType.validTo) : false;
+        const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
         return (
           <div>
-            <span>{m.variant?.contractType?.name || "—"}</span>
+            <span>{m.contractType?.name || "—"}</span>
             <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700" }`}>
               {isExpired ? "Expired" : "Active"}
             </span>
@@ -231,10 +228,10 @@ const RaiseCallPage = () => {
     {
       key: "actions", label: "Actions",
       render: (m) => {
-        const isExpired = m.variant?.contractType?.validTo ? new Date() > new Date(m.variant.contractType.validTo) : false;
+        const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
         return (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.variant?.serialNumber)}`)}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
               <Eye className="h-4 w-4" /> View
             </Button>
             {isExpired && (
@@ -242,7 +239,7 @@ const RaiseCallPage = () => {
                 <RefreshCw className="h-3.5 w-3.5" /> Renew Contract
               </Button>
             )}
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.variant?.serialNumber)}`)}>
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
               <PhoneCall className="h-3.5 w-3.5" /> Raise Call
             </Button>
           </div>
@@ -314,7 +311,7 @@ const RaiseCallPage = () => {
       <Dialog open={!!renewDialog} onOpenChange={() => setRenewDialog(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Renew Contract — {renewDialog?.variant?.serialNumber}</DialogTitle>
+            <DialogTitle>Renew Contract — {renewDialog?.serialNumber}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

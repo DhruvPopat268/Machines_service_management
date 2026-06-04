@@ -156,12 +156,7 @@ const getAll = async (req, res) => {
       InventoryLog.countDocuments(query),
     ]);
 
-    const data = logs.map((l) => {
-      const obj          = l.toObject();
-      obj.machinesCount  = l.machines.length;
-      obj.totalVariants  = l.machines.reduce((sum, m) => sum + m.variants.length, 0);
-      return obj;
-    });
+    const data = logs.map((l) => ({ ...l.toObject(), machinesCount: l.machines.length }));
 
     res.status(200).json({
       success: true,
@@ -183,11 +178,7 @@ const getById = async (req, res) => {
     if (!log)
       return res.status(404).json({ success: false, message: "Inventory log not found" });
 
-    const obj         = log.toObject();
-    obj.machinesCount = log.machines.length;
-    obj.totalVariants = log.machines.reduce((sum, m) => sum + m.variants.length, 0);
-
-    res.status(200).json({ success: true, data: obj });
+    res.status(200).json({ success: true, data: { ...log.toObject(), machinesCount: log.machines.length } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -329,25 +320,23 @@ const exportInventoryLogs = async (req, res) => {
       const isPurchased = log.action === "purchased";
       
       log.machines.forEach((machine) => {
-        machine.variants.forEach((variant) => {
           rows.push({
-            "Company Name": log.vendorInfo?.companyName || "",
-            "Vendor Name": log.vendorInfo?.name || "",
-            "Vendor Contact": log.vendorInfo?.phone || "",
-            "Customer Name": log.customerInfo?.name || "",
-            "Customer Contact": log.customerInfo?.phone || "",
-            "Machine Name": machine.machineName,
-            "Model Number": machine.modelNumber || "",
-            "Category": machine.category || "",
-            "Division": machine.division || "",
-            "Attribute": variant.name,
-            "Value": variant.value,
-            "Action": isPurchased ? "Purchased" : "Sold",
-            "Qty Change": variant.qtyChange,
+            "Company Name":    log.vendorInfo?.companyName || "",
+            "Vendor Name":     log.vendorInfo?.name || "",
+            "Vendor Contact":  log.vendorInfo?.phone || "",
+            "Customer Name":   log.customerInfo?.name || "",
+            "Customer Contact":log.customerInfo?.phone || "",
+            "Machine Name":    machine.machineName,
+            "Model Number":    machine.modelNumber || "",
+            "Category":        machine.category || "",
+            "Division":        machine.division || "",
+            "Action":          isPurchased ? "Purchased" : "Sold",
+            "Quantity":        machine.quantity,
+            "Serial Numbers":  (machine.serialNumbers || []).join(", "),
+            "Part Codes":      (machine.partCodes || []).join(", "),
             [isPurchased ? "Purchase Date" : "Sale Date"]: created.date,
             [isPurchased ? "Purchase Time" : "Sale Time"]: created.time,
           });
-        });
       });
     });
 

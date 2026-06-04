@@ -13,7 +13,8 @@ const getReimbursements = async (req, res) => {
       query["engineerInfo._id"] = new mongoose.Types.ObjectId(engineerId);
     }
 
-    if (status) query.status = status;
+    if (status)  query.status  = status;
+    if (req.query.purpose) query.purpose = req.query.purpose;
 
     if (fromDate || toDate) {
       query.travelDate = {};
@@ -32,7 +33,7 @@ const getReimbursements = async (req, res) => {
     const [records, total] = await Promise.all([
       TravelReimbursement.find(query)
         .populate("callId", "callId")
-        .sort({ travelDate: -1 })
+        .sort({ createdAt: -1, _id: 1 })
         .skip(skip)
         .limit(limitNum),
       TravelReimbursement.countDocuments(query),

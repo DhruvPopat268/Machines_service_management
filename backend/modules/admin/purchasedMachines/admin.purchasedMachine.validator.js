@@ -10,76 +10,61 @@ const validateCreatePurchase = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, variants } = machines[mi];
-    const machineLabel = `Machine ${mi + 1}`;
+    const { machineId, quantity, buyingPrice, discountedBuyingPrice, sellingPrice, discountedSellingPrice, serialNumbers, partCodes } = machines[mi];
+    const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
-      return `${machineLabel}: invalid or missing machine ID`;
+      return `${label}: invalid or missing machine ID`;
 
-    if (!Array.isArray(variants) || variants.length === 0)
-      return `${machineLabel}: variants array is required and must not be empty`;
+    if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
+      return `${label}: quantity must be a positive number`;
 
-    for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice, sellingPrice, discountedSellingPrice, willAddToInventory } = variants[vi];
-      const label = `${machineLabel} Variant ${vi + 1}`;
+    if (buyingPrice == null || (typeof buyingPrice === "string" && buyingPrice.trim() === ""))
+      return `${label}: buyingPrice is required`;
+    const numPrice = Number(buyingPrice);
+    if (isNaN(numPrice)) return `${label}: buyingPrice must be a valid number`;
+    if (numPrice < 0)    return `${label}: buyingPrice must be a non-negative number`;
 
-      if (!attribute || !mongoose.isValidObjectId(attribute))
-        return `${label}: invalid or missing attribute ID`;
-
-      if (!value || !String(value).trim())
-        return `${label}: value is required`;
-
-      if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
-        return `${label}: quantity must be a positive number`;
-
-      // Strict validation for price
-      if (price == null)
-        return `${label}: price is required`;
-      if (typeof price === "string" && price.trim() === "")
-        return `${label}: price cannot be empty`;
-      const numPrice = Number(price);
-      if (Number.isNaN(numPrice))
-        return `${label}: price must be a valid number`;
-      if (numPrice < 0)
-        return `${label}: price must be a non-negative number`;
-
-      // Strict validation for discountedPrice
-      if (discountedPrice !== undefined && discountedPrice !== null) {
-        if (typeof discountedPrice === "string" && discountedPrice.trim() === "")
-          return `${label}: discounted price cannot be empty`;
-        const numDiscountedPrice = Number(discountedPrice);
-        if (Number.isNaN(numDiscountedPrice))
-          return `${label}: discounted price must be a valid number`;
-        if (numDiscountedPrice < 0)
-          return `${label}: discounted price must be a non-negative number`;
-        if (numDiscountedPrice > numPrice)
-          return `${label}: discounted price cannot be greater than price`;
-      }
-
-      // Validation for sellingPrice
-      if (sellingPrice !== undefined && sellingPrice !== null) {
-        const numSellingPrice = Number(sellingPrice);
-        if (Number.isNaN(numSellingPrice))
-          return `${label}: selling price must be a valid number`;
-        if (numSellingPrice < 0)
-          return `${label}: selling price must be a non-negative number`;
-      }
-
-      // Validation for discountedSellingPrice
-      if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
-        const numDiscountedSellingPrice = Number(discountedSellingPrice);
-        if (Number.isNaN(numDiscountedSellingPrice))
-          return `${label}: discounted selling price must be a valid number`;
-        if (numDiscountedSellingPrice < 0)
-          return `${label}: discounted selling price must be a non-negative number`;
-        const numSellingPrice = Number(sellingPrice);
-        if (!Number.isNaN(numSellingPrice) && numDiscountedSellingPrice > numSellingPrice)
-          return `${label}: discounted selling price cannot be greater than selling price`;
-      }
-
-      if (willAddToInventory !== undefined && typeof willAddToInventory !== "boolean")
-        return `${label}: willAddToInventory must be a boolean`;
+    if (discountedBuyingPrice !== undefined && discountedBuyingPrice !== null) {
+      const n = Number(discountedBuyingPrice);
+      if (isNaN(n))        return `${label}: discountedBuyingPrice must be a valid number`;
+      if (n < 0)           return `${label}: discountedBuyingPrice must be a non-negative number`;
+      if (n > numPrice)    return `${label}: discountedBuyingPrice cannot be greater than buyingPrice`;
     }
+
+    if (sellingPrice !== undefined && sellingPrice !== null) {
+      const n = Number(sellingPrice);
+      if (isNaN(n)) return `${label}: sellingPrice must be a valid number`;
+      if (n < 0)    return `${label}: sellingPrice must be a non-negative number`;
+    }
+
+    if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
+      const n  = Number(discountedSellingPrice);
+      const ns = Number(sellingPrice);
+      if (isNaN(n))              return `${label}: discountedSellingPrice must be a valid number`;
+      if (n < 0)                 return `${label}: discountedSellingPrice must be a non-negative number`;
+      if (!isNaN(ns) && n > ns)  return `${label}: discountedSellingPrice cannot be greater than sellingPrice`;
+    }
+
+    if (serialNumbers !== undefined) {
+      if (!Array.isArray(serialNumbers))
+        return `${label}: serialNumbers must be an array`;
+      if (serialNumbers.length !== Number(quantity))
+        return `${label}: serialNumbers count must match quantity (${quantity})`;
+      if (serialNumbers.some((s) => !s || !String(s).trim()))
+        return `${label}: all serial numbers must be non-empty strings`;
+      const unique = new Set(serialNumbers.map((s) => String(s).trim().toUpperCase()));
+      if (unique.size !== serialNumbers.length)
+        return `${label}: duplicate serial numbers in submitted list`;
+    }
+
+    if (partCodes !== undefined) {
+      if (!Array.isArray(partCodes))
+        return `${label}: partCodes must be an array`;
+      if (partCodes.some((c) => !c || !String(c).trim()))
+        return `${label}: all part codes must be non-empty strings`;
+    }
+
   }
 
   return null;

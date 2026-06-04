@@ -1,25 +1,17 @@
 const mongoose = require("mongoose");
 
-const variantSchema = new mongoose.Schema(
-  {
-    name:          { type: String, trim: true, required: true },
-    value:         { type: String, trim: true, required: true },
-    qtyChange:     { type: String, trim: true, required: true },
-    serialNumbers: { type: [String], default: [] },
-  },
-  { _id: false }
-);
-
 const machineEntrySchema = new mongoose.Schema(
   {
-    machineId:   { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
-    machineName: { type: String, trim: true, required: true },
-    modelNumber: { type: String, trim: true, default: "" },
-    categoryId:  { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
-    category:    { type: String, trim: true, default: "" },
-    divisionId:  { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },
-    division:    { type: String, trim: true, default: "" },
-    variants:    { type: [variantSchema], required: true },
+    machineId:     { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
+    machineName:   { type: String, trim: true, required: true },
+    modelNumber:   { type: String, trim: true, default: "" },
+    categoryId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
+    category:      { type: String, trim: true, default: "" },
+    divisionId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },
+    division:      { type: String, trim: true, default: "" },
+    quantity:      { type: Number, required: true },
+    serialNumbers: { type: [String] },
+    partCodes:     { type: [String] },
   },
   { _id: false }
 );

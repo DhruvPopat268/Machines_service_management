@@ -19,13 +19,13 @@ interface Machine {
   _id: string;
   name: string;
   modelNumber: string;
-  serialNumber: string;
   hsnCode: string;
-  partCode: string;
   gstPercentage: number | null;
   category: { _id: string; name: string } | null;
   division: { _id: string; name: string } | null;
-  variants: { attribute: { _id: string; name: string }; value: string; lowStockThreshold: number; currentStock: number; stockStatus: "In Stock" | "Low Stock" | "Out of Stock" }[];
+  lowStockThreshold: number;
+  currentStock: number;
+  stockStatus: "In Stock" | "Low Stock" | "Out of Stock";
   images: string[];
   notes: string;
   status: "Active" | "Inactive";
@@ -242,67 +242,33 @@ const MachinesPage = () => {
   };
 
   const columns: Column<Machine>[] = [
-    { key: "_id", label: "No.", render: (_m, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
-    {
-      key: "images", label: "Image", render: (m) => m.images?.[0]
+    { key: "_id",    label: "No.",   className: "w-12",                render: (_m, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "images", label: "Image", className: "w-20",               render: (m) => m.images?.[0]
         ? <img src={m.images[0]} alt={m.name} className="h-14 w-14 object-cover rounded-md border" />
         : <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">No img</div>,
     },
-    { key: "name",        label: "Name",     render: (m) => <span className="font-medium">{m.name}</span> },
-    { key: "modelNumber", label: "Model",    render: (m) => <span className="text-sm">{m.modelNumber || "—"}</span> },
-    { key: "category",    label: "Category", render: (m) => <span className="text-sm">{m.category?.name || "—"}</span> },
-    { key: "division",    label: "Division", render: (m) => <span className="text-sm">{m.division?.name || "—"}</span> },
+    { key: "name",        label: "Name",          className: "min-w-[180px] max-w-[220px]", render: (m) => <span className="font-medium block truncate max-w-[200px]" title={m.name}>{m.name}</span> },
+    { key: "modelNumber", label: "Model Number",   className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.modelNumber || "—"}</span> },
+    { key: "category",   label: "Category",       className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.category?.name || "—"}</span> },
+    { key: "division",   label: "Division",       className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.division?.name || "—"}</span> },
+    { key: "currentStock",     label: "Current Stock",   className: "min-w-[130px] text-center", render: (m) => <span className="text-sm font-medium">{m.currentStock}</span> },
     {
-      key: "variants", label: "Variants", className: "text-center", render: (m) => (
-        <div className="space-y-1">
-          {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs flex items-center justify-center gap-1 py-0.5">
-              <span className="bg-muted px-1.5 py-0.5 rounded text-muted-foreground leading-none">{v.attribute?.name}</span>
-              <span className="font-medium leading-none">{v.value}</span>
-            </div>
-          )) : <span className="text-muted-foreground text-xs">—</span>}
-        </div>
+      key: "stockStatus", label: "Stock Status", className: "min-w-[130px] text-center",
+      render: (m) => (
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
+          m.stockStatus === "In Stock"  ? "bg-green-100 text-green-700"  :
+          m.stockStatus === "Low Stock" ? "bg-yellow-100 text-yellow-700" :
+                                          "bg-red-100 text-red-700"
+        }`}>{m.stockStatus}</span>
       ),
     },
-    {
-      key: "currentStock", label: "Current Stock", className: "text-center w-[250px]", render: (m) => (
-        <div className="space-y-1">
-          {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs font-medium py-0.5 flex items-center justify-center">{v.currentStock}</div>
-          )) : <span className="text-muted-foreground text-xs">—</span>}
-        </div>
-      ),
+    { key: "lowStockThreshold", label: "Low Stock Alert", className: "min-w-[140px] text-center",
+      render: (m) => m.lowStockThreshold === -1
+        ? <span className="text-muted-foreground text-xs">Disabled</span>
+        : <span className="text-sm font-medium">{m.lowStockThreshold}</span>,
     },
     {
-      key: "stockStatus", label: "Stock Status", className: "text-center w-[300px]", render: (m) => (
-        <div className="space-y-1">
-          {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="py-0.5 flex items-center justify-center">
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
-                v.stockStatus === "In Stock"  ? "bg-green-100 text-green-700"  :
-                v.stockStatus === "Low Stock" ? "bg-yellow-100 text-yellow-700" :
-                                                "bg-red-100 text-red-700"
-              }`}>{v.stockStatus}</span>
-            </div>
-          )) : <span className="text-muted-foreground text-xs">—</span>}
-        </div>
-      ),
-    },
-    {
-      key: "lowStockThreshold", label: "Low Stock Alert", className: "text-center w-[350px]", render: (m) => (
-        <div className="space-y-1">
-          {m.variants?.length > 0 ? m.variants.map((v, i) => (
-            <div key={i} className="text-xs py-0.5 flex items-center justify-center">
-              {v.lowStockThreshold === -1
-                ? <span className="text-muted-foreground">Disabled</span>
-                : <span className="font-medium">{v.lowStockThreshold}</span>}
-            </div>
-          )) : <span className="text-muted-foreground text-xs">—</span>}
-        </div>
-      ),
-    },
-    {
-      key: "status", label: "Status", render: (m) => (
+      key: "status", label: "Status", className: "min-w-[130px]", render: (m) => (
         <div className="flex items-center gap-2">
           <Switch checked={m.status === "Active"} onCheckedChange={() => toggleStatus(m)} />
           <span className={m.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{m.status}</span>
@@ -310,26 +276,26 @@ const MachinesPage = () => {
       ),
     },
     {
-      key: "source", label: "Source", render: (m) => (
+      key: "source", label: "Source", className: "min-w-[110px]", render: (m) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
           m.source === "imported" ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
         }`}>{m.source === "imported" ? "Imported" : "Manual"}</span>
       ),
     },
     {
-      key: "createdAt", label: "Created At", className: "w-[150px]", render: (m) => {
+      key: "createdAt", label: "Created At", className: "min-w-[120px]", render: (m) => {
         const { date, time } = formatDateTime(m.createdAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
     },
     {
-      key: "updatedAt", label: "Updated At", className: "w-[150px]", render: (m) => {
+      key: "updatedAt", label: "Updated At", className: "min-w-[120px]", render: (m) => {
         const { date, time } = formatDateTime(m.updatedAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
     },
     {
-      key: "actions", label: "Actions", sticky: true, render: (m) => (
+      key: "actions", label: "Actions", sticky: true, className: "min-w-[100px]", render: (m) => (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}`)} title="View">
             <Eye className="h-4 w-4" />

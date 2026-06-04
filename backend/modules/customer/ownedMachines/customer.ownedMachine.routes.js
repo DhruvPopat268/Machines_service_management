@@ -1,6 +1,5 @@
 const express = require("express");
-const { getOwnedMachines, getVariantDetail } = require("./customer.ownedMachine.controller");
-const { validateVariantId } = require("./customer.ownedMachine.validator");
+const { getOwnedMachines, getMachineDetail } = require("./customer.ownedMachine.controller");
 const customerAuthMiddleware = require("../../../middleware/customer.auth.middleware");
 
 const router = express.Router();
@@ -9,6 +8,6 @@ router.use(customerAuthMiddleware);
 
 router.get("/all", getOwnedMachines);
 router.get("/", getOwnedMachines);
-router.get("/:variantId", validateVariantId, getVariantDetail);
+router.get("/:serialNumber", getMachineDetail);
 
 module.exports = router;

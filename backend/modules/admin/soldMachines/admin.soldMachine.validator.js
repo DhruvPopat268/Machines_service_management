@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
+
 const validateCreateSale = (body) => {
   const { customerId, machines } = body;
 
@@ -10,74 +12,59 @@ const validateCreateSale = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, variants } = machines[mi];
-    const machineLabel = `Machine ${mi + 1}`;
+    const { machineId, categoryId, quantity, sellingPrice, discountedSellingPrice, serialNumbers, partCodes } = machines[mi];
+    const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
-      return `${machineLabel}: invalid or missing machine ID`;
+      return `${label}: invalid or missing machine ID`;
 
-    if (!Array.isArray(variants) || variants.length === 0)
-      return `${machineLabel}: variants array is required and must not be empty`;
+    if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
+      return `${label}: quantity must be a positive number`;
 
-    for (let vi = 0; vi < variants.length; vi++) {
-      const { attribute, value, quantity, price, discountedPrice, serialNumbers } = variants[vi];
-      const label = `${machineLabel} Variant ${vi + 1}`;
+    if (sellingPrice == null || (typeof sellingPrice === "string" && sellingPrice.trim() === ""))
+      return `${label}: sellingPrice is required`;
+    const numPrice = Number(sellingPrice);
+    if (isNaN(numPrice)) return `${label}: sellingPrice must be a valid number`;
+    if (numPrice < 0)    return `${label}: sellingPrice must be a non-negative number`;
 
-      if (!attribute || !mongoose.isValidObjectId(attribute))
-        return `${label}: invalid or missing attribute ID`;
+    if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
+      const n = Number(discountedSellingPrice);
+      if (isNaN(n))     return `${label}: discountedSellingPrice must be a valid number`;
+      if (n < 0)        return `${label}: discountedSellingPrice must be a non-negative number`;
+      if (n > numPrice) return `${label}: discountedSellingPrice cannot be greater than sellingPrice`;
+    }
 
-      if (!value || !String(value).trim())
-        return `${label}: value is required`;
+    const isParts = categoryId && categoryId.toString() === PARTS_CATEGORY_ID;
 
-      if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
-        return `${label}: quantity must be a positive number`;
-
-      if (price == null)
-        return `${label}: price is required`;
-      if (typeof price === "string" && price.trim() === "")
-        return `${label}: price cannot be empty`;
-      const numPrice = Number(price);
-      if (Number.isNaN(numPrice))
-        return `${label}: price must be a valid number`;
-      if (numPrice < 0)
-        return `${label}: price must be a non-negative number`;
-
-      if (discountedPrice !== undefined && discountedPrice !== null) {
-        if (typeof discountedPrice === "string" && discountedPrice.trim() === "")
-          return `${label}: discounted price cannot be empty`;
-        const numDiscountedPrice = Number(discountedPrice);
-        if (Number.isNaN(numDiscountedPrice))
-          return `${label}: discounted price must be a valid number`;
-        if (numDiscountedPrice < 0)
-          return `${label}: discounted price must be a non-negative number`;
-        if (numDiscountedPrice > numPrice)
-          return `${label}: discounted price cannot be greater than price`;
-      }
-
+    if (isParts) {
+      if (!Array.isArray(partCodes) || partCodes.length === 0)
+        return `${label}: partCodes are required for parts category machines`;
+      if (partCodes.length !== Number(quantity))
+        return `${label}: partCodes count must match quantity (${quantity})`;
+      if (partCodes.some((c) => !c || !String(c).trim()))
+        return `${label}: all part codes must be non-empty strings`;
+    } else {
       if (!Array.isArray(serialNumbers) || serialNumbers.length === 0)
-        return `${label}: serialNumbers array is required`;
-
+        return `${label}: serialNumbers are required`;
       if (serialNumbers.length !== Number(quantity))
-        return `${label}: serialNumbers count must match quantity`;
+        return `${label}: serialNumbers count must match quantity (${quantity})`;
 
       for (let si = 0; si < serialNumbers.length; si++) {
         const entry = serialNumbers[si];
-        const slabel = `${label} Serial ${si + 1}`;
-
+        const slabel = `${label} serial ${si + 1}`;
+        if (!entry || typeof entry !== "object")
+          return `${slabel}: must be an object with serialNumber and contract fields`;
         if (!entry.serialNumber || !String(entry.serialNumber).trim())
           return `${slabel}: serialNumber is required`;
-
         if (!entry.contractTypeId || !mongoose.isValidObjectId(entry.contractTypeId))
-          return `${slabel}: invalid or missing contract type ID`;
-
+          return `${slabel}: invalid or missing contractTypeId`;
         if (!entry.validFrom || !entry.validTo)
           return `${slabel}: validFrom and validTo are required`;
-
-        const fromDate = new Date(entry.validFrom);
-        const toDate   = new Date(entry.validTo);
-        if (isNaN(fromDate.getTime())) return `${slabel}: invalid validFrom date`;
-        if (isNaN(toDate.getTime()))   return `${slabel}: invalid validTo date`;
-        if (toDate <= fromDate)        return `${slabel}: validTo must be after validFrom`;
+        const from = new Date(entry.validFrom);
+        const to   = new Date(entry.validTo);
+        if (isNaN(from.getTime())) return `${slabel}: invalid validFrom date`;
+        if (isNaN(to.getTime()))   return `${slabel}: invalid validTo date`;
+        if (to <= from)            return `${slabel}: validTo must be after validFrom`;
       }
     }
   }

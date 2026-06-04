@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, SlidersHorizontal, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -93,7 +93,6 @@ function InventorySection({ collapsed }: { collapsed: boolean }) {
   if (collapsed) return (
     <SidebarMenu>
       {[
-        { url: "/attributes", icon: SlidersHorizontal },
         { url: "/machine-divisions", icon: Layers }, { url: "/machine-categories", icon: Tag },
         { url: "/machines", icon: HardDrive }, { url: "/machines/add", icon: HardDrive },
         { url: "/inventory-logs", icon: FileText },
@@ -112,16 +111,6 @@ function InventorySection({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="space-y-0.5">
       <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <NavLink to="/attributes" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-              <span className="flex items-center gap-2">
-                <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
-                <span>Attributes</span>
-              </span>
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
             <NavLink to="/machine-divisions" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">

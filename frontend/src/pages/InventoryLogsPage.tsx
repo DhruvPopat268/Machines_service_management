@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
-import { FilterBar } from "@/components/FilterBar";
 import { PageHeader } from "@/components/PageHeader";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Eye, Download } from "lucide-react";
+import { Eye, Download, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -31,7 +34,6 @@ interface InventoryLog {
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
   machinesCount: number;
-  totalVariants: number;
   createdAt: string;
 }
 
@@ -58,7 +60,7 @@ const InventoryLogsPage = () => {
   const [fromDate, setFromDate]               = useState("");
   const [toDate, setToDate]                   = useState("");
   const [loading, setLoading]                 = useState(true);
-  const [pageSize, setPageSize]               = useState(10);
+  const [pageSize]                            = useState(10);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [exportDialog, setExportDialog]       = useState(false);
 
@@ -300,10 +302,6 @@ const InventoryLogsPage = () => {
       render: (l) => <span className="font-medium">{l.machinesCount}</span>,
     },
     {
-      key: "totalVariants", label: "Total Variants",
-      render: (l) => <span className="font-medium">{l.totalVariants}</span>,
-    },
-    {
       key: "action", label: "Action",
       render: (l) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -346,52 +344,71 @@ const InventoryLogsPage = () => {
               <Download className="h-4 w-4" /> Export
             </Button>
           </PageHeader>
-          <FilterBar
-            searchValue={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search by machine, model, vendor, customer, phone..."
-            searchTitle="Search with machine name, model no, vendor info or customer info"
-            searchableFilters={[
-              { key: "vendor", placeholder: "Vendor", searchPlaceholder: "Search vendors...", options: vendors, onSearch: fetchVendors, disabled: !!(filters.customer && filters.customer !== "all" && filters.customer !== "") },
-              { key: "customer", placeholder: "Customer", searchPlaceholder: "Search customers...", options: customers, onSearch: fetchCustomers, disabled: !!(filters.vendor && filters.vendor !== "all" && filters.vendor !== "") },
-              { key: "category", placeholder: "Category", searchPlaceholder: "Search categories...", options: categories, onSearch: fetchCategories },
-              { key: "division", placeholder: "Division", searchPlaceholder: "Search divisions...", options: divisions, onSearch: fetchDivisions },
-              { key: "machine", placeholder: "Machine", searchPlaceholder: "Search machines...", options: machines, onSearch: fetchMachines },
-            ]}
-            filters={[
-              { key: "action", label: "Action", options: [{ label: "Purchased", value: "purchased" }, { label: "Sold", value: "sold" }] },
-            ]}
-            filterValues={filters}
-            onFilterChange={(k, v) => {
-              const newFilters = { ...filters, [k]: v };
-              // Auto-set action based on vendor/customer selection
-              if (k === "vendor" && v && v !== "all" && v !== "") {
-                newFilters.action = "purchased";
-                newFilters.customer = ""; // Clear customer when vendor is selected
-              } else if (k === "customer" && v && v !== "all" && v !== "") {
-                newFilters.action = "sold";
-                newFilters.vendor = ""; // Clear vendor when customer is selected
-              } else if (k === "vendor" && (!v || v === "all" || v === "")) {
-                // Clear action when vendor is cleared
-                if (filters.action === "purchased") newFilters.action = "";
-              } else if (k === "customer" && (!v || v === "all" || v === "")) {
-                // Clear action when customer is cleared
-                if (filters.action === "sold") newFilters.action = "";
-              }
-              setFilters(newFilters);
-            }}
-            showDateRange
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
-            pageSize={pageSize}
-            onPageSizeChange={(size) => { 
-              setPageSize(size);
-            }}
-            totalCount={pagination.total}
-          />
+
+          {/* Row 1: search + date range + clear */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search by machine, vendor, customer, phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: searchable selects + action filter */}
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Select
+              value={filters.action ?? ""}
+              onValueChange={(v) => {
+                const newFilters = { ...filters, action: v };
+                if (!v || v === "all") {
+                  newFilters.vendor   = "";
+                  newFilters.customer = "";
+                }
+                setFilters(newFilters);
+              }}
+            >
+              <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Action" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="purchased">Purchased</SelectItem>
+                <SelectItem value="sold">Sold</SelectItem>
+              </SelectContent>
+            </Select>
+            <SearchableSelect
+              options={vendors} value={filters.vendor ?? ""}
+              onChange={(v) => {
+                const nf = { ...filters, vendor: v, customer: "" };
+                if (v && v !== "all" && v !== "") nf.action = "purchased";
+                else if (filters.action === "purchased") nf.action = "";
+                setFilters(nf);
+              }}
+              onSearchChange={fetchVendors}
+              placeholder="Vendor" searchPlaceholder="Search vendors..."
+              className="w-[160px] h-9 text-sm"
+              disabled={!!(filters.customer && filters.customer !== "all" && filters.customer !== "")}
+            />
+            <SearchableSelect
+              options={customers} value={filters.customer ?? ""}
+              onChange={(v) => {
+                const nf = { ...filters, customer: v, vendor: "" };
+                if (v && v !== "all" && v !== "") nf.action = "sold";
+                else if (filters.action === "sold") nf.action = "";
+                setFilters(nf);
+              }}
+              onSearchChange={fetchCustomers}
+              placeholder="Customer" searchPlaceholder="Search customers..."
+              className="w-[160px] h-9 text-sm"
+              disabled={!!(filters.vendor && filters.vendor !== "all" && filters.vendor !== "")}
+            />
+            <SearchableSelect options={categories} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisions}  value={filters.division  ?? ""} onChange={(v) => setFilters(p => ({ ...p, division:  v }))} onSearchChange={fetchDivisions}  placeholder="Division"  searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machines}   value={filters.machine   ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:   v }))} onSearchChange={fetchMachines}   placeholder="Machine"   searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
+          </div>
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination
             page={pagination.page}

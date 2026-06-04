@@ -292,14 +292,13 @@ const getChargesSummary = async (req, res) => {
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
-    if (!Array.isArray(usedParts) || usedParts.length === 0)
-      return res.status(400).json({ success: false, message: "usedParts must be a non-empty array" });
+    const hasUsedParts = Array.isArray(usedParts) && usedParts.length > 0;
 
-    for (const p of usedParts) {
-      if (!p.partCode || typeof p.partCode !== "string")
-        return res.status(400).json({ success: false, message: "Each usedPart must have a partCode" });
-      if (!p.quantity || typeof p.quantity !== "number" || p.quantity <= 0)
-        return res.status(400).json({ success: false, message: `Invalid quantity for partCode: ${p.partCode}` });
+    if (hasUsedParts) {
+      for (const p of usedParts) {
+        if (!p || typeof p !== "string")
+          return res.status(400).json({ success: false, message: "Each usedPart must be a non-empty string partCode" });
+      }
     }
 
     const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id");
@@ -309,36 +308,50 @@ const getChargesSummary = async (req, res) => {
     if (call.engineerInfo?._id?.toString() !== req.engineer.id)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
 
-    const partCodesList = usedParts.map(p => p.partCode.trim());
+    const serviceCharges = call.totalServiceCharges ?? 0;
+
+    if (!hasUsedParts)
+      return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges } });
+
+    const partCodesList = usedParts.map(p => p.trim());
 
     const purchaseRecords = await PurchasedMachine.find(
-      { "machines.variants.partCodes": { $in: partCodesList } },
-      { "machines.variants.partCodes": 1, "machines.variants.sellingPrice": 1, "machines.variants.discountedSellingPrice": 1 }
+      { "machines.partCodes.partCode": { $in: partCodesList } },
+      { "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
     );
 
     // Build map: partCode -> unit price
     const priceMap = new Map();
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
-        for (const variant of machine.variants) {
-          const unitPrice = variant.discountedSellingPrice ?? variant.sellingPrice ?? 0;
-          for (const code of variant.partCodes) {
-            if (partCodesList.includes(code.trim())) {
-              priceMap.set(code.trim(), unitPrice);
-            }
+        const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
+        for (const entry of (machine.partCodes || [])) {
+          if (partCodesList.includes(entry.partCode.trim())) {
+            priceMap.set(entry.partCode.trim(), unitPrice);
           }
         }
       }
     }
 
-    // Validate all part codes were found
     const notFound = partCodesList.filter(c => !priceMap.has(c));
     if (notFound.length > 0)
       return res.status(404).json({ success: false, message: `Part code(s) not found: ${notFound.join(", ")}` });
 
-    const serviceCharges = call.totalServiceCharges ?? 0;
-    const partsCharges   = Math.round(usedParts.reduce((sum, p) => sum + (priceMap.get(p.partCode.trim()) * p.quantity), 0) * 100) / 100;
-    const totalCharges   = Math.round((serviceCharges + partsCharges) * 100) / 100;
+    // Check none are already sold
+    const alreadySold = [];
+    for (const record of purchaseRecords) {
+      for (const machine of record.machines) {
+        for (const entry of (machine.partCodes || [])) {
+          if (partCodesList.includes(entry.partCode.trim()) && entry.status === "sold")
+            alreadySold.push(entry.partCode.trim());
+        }
+      }
+    }
+    if (alreadySold.length > 0)
+      return res.status(400).json({ success: false, message: `Part code(s) already sold: ${alreadySold.join(", ")}` });
+
+    const partsCharges = Math.round(partCodesList.reduce((sum, pc) => sum + (priceMap.get(pc) ?? 0), 0) * 100) / 100;
+    const totalCharges = Math.round((serviceCharges + partsCharges) * 100) / 100;
 
     return res.status(200).json({ success: true, data: { serviceCharges, partsCharges, totalCharges } });
   } catch (err) {
@@ -351,12 +364,14 @@ const getPartsMachines = async (req, res) => {
     const partsCategoryId = process.env.PARTS_CATEGORY_ID;
     const { search } = req.query;
 
+    const escaped = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
     const purchaseRecords = await PurchasedMachine.find({
       "machines.categoryId": new mongoose.Types.ObjectId(partsCategoryId),
       ...(search?.trim() && {
         $or: [
-          { "machines.machineName": { $regex: search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } },
-          { "machines.variants.partCodes": search.trim() },
+          { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
         ],
       }),
     });
@@ -371,43 +386,43 @@ const getPartsMachines = async (req, res) => {
     )];
 
     const machineImagesMap = new Map();
-    const machineVariantStockMap = new Map();
     if (machineIds.length > 0) {
-      const machines = await Machine.find({ _id: { $in: machineIds }, status: "Active" }).select("_id images variants");
-      machines.forEach(m => {
-        machineImagesMap.set(m._id.toString(), m.images);
-        const stockMap = new Map();
-        m.variants.forEach(v => stockMap.set(`${v.attribute.toString()}_${v.value.trim().toLowerCase()}`, v.currentStock));
-        machineVariantStockMap.set(m._id.toString(), stockMap);
-      });
+      const machines = await Machine.find({ _id: { $in: machineIds }, status: "Active" }).select("_id images");
+      machines.forEach(m => machineImagesMap.set(m._id.toString(), m.images));
     }
 
-    const parts = purchaseRecords.flatMap(record =>
-      record.machines
-        .filter(m => m.categoryId?.toString() === partsCategoryId)
-        .filter(machine => machine.machineId && machineImagesMap.has(machine.machineId.toString()))
-        .flatMap(machine =>
-          machine.variants.flatMap(variant => {
-            const { quantity, price, discountedPrice, total, willAddToInventory, addedToInventory, partCodes, ...rest } = variant.toObject();
-            const stockMap = machine.machineId ? machineVariantStockMap.get(machine.machineId.toString()) : null;
-            const currentStock = stockMap?.get(`${rest.attribute.toString()}_${rest.value.trim().toLowerCase()}`) ?? 0;
-            if (currentStock <= 0 || !partCodes?.length) return [];
-            const matchedPartCodes = search?.trim() ? partCodes.filter(pc => pc === search.trim()) : [];
-            const finalPartCodes = matchedPartCodes.length ? matchedPartCodes : partCodes;
-            return finalPartCodes.map(partCode => ({
-              machineId:   machine.machineId,
-              machineName: machine.machineName,
-              modelNumber: machine.modelNumber,
-              categoryId:  machine.categoryId,
-              category:    machine.category,
-              divisionId:  machine.divisionId,
-              division:    machine.division,
-              images:      machineImagesMap.get(machine.machineId.toString()) || [],
-              variant:     { ...rest, currentStock, partCode },
-            }));
-          })
-        )
-    );
+    // One entry per available part code
+    const parts = [];
+    for (const record of purchaseRecords) {
+      for (const machine of record.machines) {
+        if (machine.categoryId?.toString() !== partsCategoryId) continue;
+        if (!machine.machineId || !machineImagesMap.has(machine.machineId.toString())) continue;
+
+        for (const entry of (machine.partCodes || [])) {
+          if (entry.status !== "available") continue;
+          if (search?.trim()) {
+            const s = search.trim().toLowerCase();
+            const matchesPartCode   = entry.partCode.toLowerCase().includes(s);
+            const matchesMachineName = machine.machineName.toLowerCase().includes(s);
+            if (!matchesPartCode && !matchesMachineName) continue;
+          }
+
+          parts.push({
+            machineId:              machine.machineId,
+            machineName:            machine.machineName,
+            modelNumber:            machine.modelNumber || "",
+            categoryId:             machine.categoryId,
+            category:               machine.category,
+            divisionId:             machine.divisionId,
+            division:               machine.division,
+            sellingPrice:           machine.sellingPrice ?? 0,
+            discountedSellingPrice: machine.discountedSellingPrice ?? null,
+            images:                 machineImagesMap.get(machine.machineId.toString()) || [],
+            partCode:               entry.partCode,
+          });
+        }
+      }
+    }
 
     return res.status(200).json({ success: true, data: parts });
   } catch (err) {
@@ -423,8 +438,9 @@ const getRoadDistanceKm = async (originLat, originLng, destLat, destLng) => {
       key: MAPS_KEY,
     },
   });
-  const meters = data.rows?.[0]?.elements?.[0]?.distance?.value;
-  if (!meters) throw new Error("Could not calculate distance");
+  const element = data.rows?.[0]?.elements?.[0];
+  const meters = element?.distance?.value;
+  if (meters == null) throw new Error("Could not calculate distance");
   return Math.round((meters / 1000) * 100) / 100;
 };
 
@@ -476,55 +492,59 @@ const createReimbursement = async (req, res) => {
     }
 
     // ── Calculate distances ──
-    const callDistanceKm = await getRoadDistanceKm(
-      lastLocation.latitude, lastLocation.longitude,
-      customerLat, customerLng
-    );
+    const customerAddress = call.customerInfo?.location?.address || call.customerInfo?.address;
+    const customerPoint   = { address: customerAddress, latitude: customerLat, longitude: customerLng };
+    const fromPoint       = { address: lastLocation.address || "", latitude: lastLocation.latitude, longitude: lastLocation.longitude };
 
-    let totalKm    = callDistanceKm;
-    let travelTo   = { address: call.customerInfo?.location?.address || call.customerInfo?.address, latitude: customerLat, longitude: customerLng };
+    const engineerInfo = {
+      _id:        call.engineerInfo._id,
+      identityId: call.engineerInfo.identityId,
+      name:       call.engineerInfo.name,
+      phone:      call.engineerInfo.phone,
+    };
+    const customerInfo = {
+      name:    call.customerInfo.name,
+      phone:   call.customerInfo.phone,
+      address: call.customerInfo.address,
+    };
+
+    if (purpose === "Service Call") {
+      const km = await getRoadDistanceKm(lastLocation.latitude, lastLocation.longitude, customerLat, customerLng);
+      const reimbursement = await TravelReimbursement.create({
+        callId: call._id, engineerInfo, customerInfo,
+        travelDate: new Date(), purpose,
+        travelFrom: fromPoint, travelTo: customerPoint,
+        travelledKm: km, status: "Pending",
+      });
+      return res.status(201).json({ success: true, data: reimbursement });
+    }
 
     if (purpose === "Go To Office") {
       const adminUser = await AdminUser.findOne({ role: "Admin" }).select("officeLocation");
-      const returnKm = await getRoadDistanceKm(
-        customerLat, customerLng,
-        adminUser.officeLocation.latitude, adminUser.officeLocation.longitude
-      );
-      totalKm  = Math.round((callDistanceKm + returnKm) * 100) / 100;
-      travelTo = { address: adminUser.officeLocation.address || "", latitude: adminUser.officeLocation.latitude, longitude: adminUser.officeLocation.longitude };
+      const officePoint = { address: adminUser.officeLocation.address || "", latitude: adminUser.officeLocation.latitude, longitude: adminUser.officeLocation.longitude };
+      const [leg1Km, leg2Km] = await Promise.all([
+        getRoadDistanceKm(lastLocation.latitude, lastLocation.longitude, customerLat, customerLng),
+        getRoadDistanceKm(customerLat, customerLng, adminUser.officeLocation.latitude, adminUser.officeLocation.longitude),
+      ]);
+      const records = await TravelReimbursement.insertMany([
+        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" },
+        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Office",  travelFrom: customerPoint, travelTo: officePoint,   travelledKm: leg2Km, status: "Pending" },
+      ]);
+      return res.status(201).json({ success: true, data: records });
     }
 
     if (purpose === "Go To Home") {
-      const returnKm = await getRoadDistanceKm(
-        customerLat, customerLng,
-        engineer.engineerLocation.latitude, engineer.engineerLocation.longitude
-      );
-      totalKm  = Math.round((callDistanceKm + returnKm) * 100) / 100;
-      travelTo = { address: engineer.engineerLocation.address || "", latitude: engineer.engineerLocation.latitude, longitude: engineer.engineerLocation.longitude };
+      const homePoint = { address: engineer.engineerLocation.address || "", latitude: engineer.engineerLocation.latitude, longitude: engineer.engineerLocation.longitude };
+      const [leg1Km, leg2Km] = await Promise.all([
+        getRoadDistanceKm(lastLocation.latitude, lastLocation.longitude, customerLat, customerLng),
+        getRoadDistanceKm(customerLat, customerLng, engineer.engineerLocation.latitude, engineer.engineerLocation.longitude),
+      ]);
+      const records = await TravelReimbursement.insertMany([
+        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" },
+        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Home",   travelFrom: customerPoint, travelTo: homePoint,      travelledKm: leg2Km, status: "Pending" },
+      ]);
+      return res.status(201).json({ success: true, data: records });
     }
-
-    const reimbursement = await TravelReimbursement.create({
-      callId:      call._id,
-      engineerInfo: {
-        _id:        call.engineerInfo._id,
-        identityId: call.engineerInfo.identityId,
-        name:       call.engineerInfo.name,
-        phone:      call.engineerInfo.phone,
-      },
-      customerInfo: {
-        name:    call.customerInfo.name,
-        phone:   call.customerInfo.phone,
-        address: call.customerInfo.address,
-      },
-      travelDate:  new Date(),
-      purpose,
-      travelFrom:  { address: lastLocation.address || "", latitude: lastLocation.latitude, longitude: lastLocation.longitude },
-      travelTo,
-      travelledKm: totalKm,
-      status:      "Pending",
-    });
-
-    return res.status(201).json({ success: true, data: reimbursement });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -562,8 +582,8 @@ const completeCall = async (req, res) => {
           return abort(400, "Each usedPart must have a partCode");
         if (!p.quantity || typeof p.quantity !== "number" || p.quantity <= 0)
           return abort(400, `Invalid quantity for partCode: ${p.partCode}`);
-        if (!p.variantId || !mongoose.isValidObjectId(p.variantId))
-          return abort(400, `Each usedPart must have a valid variantId (the call machine it was used on)`);
+        if (!p.serialNumber || typeof p.serialNumber !== "string")
+          return abort(400, `Each usedPart must have a serialNumber (the call machine it was used on)`);
       }
     }
 
@@ -601,47 +621,42 @@ const completeCall = async (req, res) => {
     const variantPartsMap = new Map(); // call variantId -> [usedPart docs]
 
     if (hasUsedParts) {
-      // Validate all variantIds exist in this call
-      const callVariantIds = new Set(call.machines.map(m => m.variantId.toString()));
+      // Validate all serialNumbers exist in this call
+      const callSerialNumbers = new Set(call.machines.map(m => m.serialNumber));
       for (const p of parsedUsedParts) {
-        if (!p.variantId || !mongoose.isValidObjectId(p.variantId))
-          return abort(400, `Each usedPart must have a valid variantId`);
-        if (!callVariantIds.has(p.variantId))
-          return abort(400, `variantId ${p.variantId} does not belong to this call`);
+        if (!p.serialNumber || typeof p.serialNumber !== "string")
+          return abort(400, `Each usedPart must have a serialNumber (the call machine it was used on)`);
+        if (!callSerialNumbers.has(p.serialNumber))
+          return abort(400, `serialNumber ${p.serialNumber} does not belong to this call`);
       }
 
       const partCodesList = parsedUsedParts.map(p => p.partCode.trim());
 
       const purchaseRecords = await PurchasedMachine.find(
-        { "machines.variants.partCodes": { $in: partCodesList } },
+        { "machines.partCodes.partCode": { $in: partCodesList } },
         { "machines.machineId": 1, "machines.machineName": 1, "machines.modelNumber": 1,
           "machines.categoryId": 1, "machines.category": 1, "machines.divisionId": 1, "machines.division": 1,
-          "machines.variants.partCodes": 1, "machines.variants.attribute": 1, "machines.variants.name": 1,
-          "machines.variants.value": 1, "machines.variants.sellingPrice": 1, "machines.variants.discountedSellingPrice": 1 }
+          "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
       ).session(session);
 
-      // Build partCode -> { unitPrice, machineId, machineName, modelNumber, categoryId, category, divisionId, division, attribute, name, value }
+      // Build partCode -> { unitPrice, machineId, machineName, ... }
       const partInfoMap = new Map();
       for (const record of purchaseRecords) {
         for (const machine of record.machines) {
-          for (const variant of machine.variants) {
-            const unitPrice = variant.discountedSellingPrice ?? variant.sellingPrice ?? 0;
-            for (const code of variant.partCodes) {
-              if (partCodesList.includes(code.trim())) {
-                partInfoMap.set(code.trim(), {
-                  unitPrice,
-                  machineId:   machine.machineId,
-                  machineName: machine.machineName,
-                  modelNumber: machine.modelNumber || "",
-                  categoryId:  machine.categoryId,
-                  category:    machine.category || "",
-                  divisionId:  machine.divisionId,
-                  division:    machine.division || "",
-                  attribute:   variant.attribute,
-                  name:        variant.name,
-                  value:       variant.value,
-                });
-              }
+          const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
+          for (const entry of (machine.partCodes || [])) {
+            if (partCodesList.includes(entry.partCode.trim())) {
+              partInfoMap.set(entry.partCode.trim(), {
+                unitPrice,
+                machineId:              machine.machineId,
+                machineName:            machine.machineName,
+                categoryId:             machine.categoryId,
+                category:               machine.category || "",
+                divisionId:             machine.divisionId,
+                division:               machine.division || "",
+                sellingPrice:           machine.sellingPrice ?? 0,
+                discountedSellingPrice: machine.discountedSellingPrice ?? 0,
+              });
             }
           }
         }
@@ -651,59 +666,50 @@ const completeCall = async (req, res) => {
       if (notFound.length > 0)
         return abort(404, `Part code(s) not found: ${notFound.join(", ")}`);
 
-      // Group quantities by machineId + attribute + value for bulk stock deduction
-      // Map key: `${machineId}_${attribute}_${value}`
+      // Group quantities by machineId for stock deduction
       const deductionMap = new Map();
       for (const p of parsedUsedParts) {
         const info      = partInfoMap.get(p.partCode.trim());
-        const deductKey = `${info.machineId}_${info.attribute}_${info.value.trim().toLowerCase()}`;
+        const deductKey = info.machineId.toString();
         if (deductionMap.has(deductKey)) {
           deductionMap.get(deductKey).quantity += p.quantity;
         } else {
-          deductionMap.set(deductKey, { ...info, quantity: p.quantity });
+          deductionMap.set(deductKey, { ...info, partCode: p.partCode.trim(), quantity: p.quantity });
         }
         const lineTotal = Math.round(info.unitPrice * p.quantity * 100) / 100;
         partsCharges    = Math.round((partsCharges + lineTotal) * 100) / 100;
 
-        // Group into variantPartsMap for storing on the call machine
-        if (!variantPartsMap.has(p.variantId)) variantPartsMap.set(p.variantId, []);
-        variantPartsMap.get(p.variantId).push({
-          partCode:    p.partCode.trim(),
-          partName:    info.name,
-          machineId:   info.machineId,
-          machineName: info.machineName,
-          modelNumber: info.modelNumber,
-          quantity:    p.quantity,
-          unitPrice:   info.unitPrice,
-          total:       lineTotal,
+        // Group into variantPartsMap keyed by call machine serialNumber
+        const callMachineKey = p.serialNumber || "unknown";
+        if (!variantPartsMap.has(callMachineKey)) variantPartsMap.set(callMachineKey, []);
+        variantPartsMap.get(callMachineKey).push({
+          partCode:               p.partCode.trim(),
+          machineId:              info.machineId,
+          machineName:            info.machineName,
+          categoryId:             info.categoryId,
+          category:               info.category,
+          sellingPrice:           info.sellingPrice,
+          discountedSellingPrice: info.discountedSellingPrice,
+          quantity:               p.quantity,
+          total:                  lineTotal,
         });
       }
 
-      // Deduct stock and build log entries
+      // Deduct stock
       for (const [, item] of deductionMap) {
         const updated = await Machine.findOneAndUpdate(
-          {
-            _id: item.machineId,
-            "variants.attribute": item.attribute,
-            "variants.value":     item.value,
-            "variants.currentStock": { $gte: item.quantity },
-          },
-          { $inc: { "variants.$.currentStock": -item.quantity } },
+          { _id: item.machineId, currentStock: { $gte: item.quantity } },
+          { $inc: { currentStock: -item.quantity } },
           { new: true, session }
         );
 
         if (!updated)
-          return abort(400, `Insufficient stock for part: ${item.name} - ${item.value}`);
+          return abort(400, `Insufficient stock for part: ${item.machineName}`);
 
-        const updatedVariant = updated.variants.find(
-          v => v.attribute.toString() === item.attribute.toString() &&
-               v.value.trim().toLowerCase() === item.value.trim().toLowerCase()
-        );
-        const newStatus = resolveStockStatus(updatedVariant.currentStock, updatedVariant.lowStockThreshold);
-
+        const newStatus = resolveStockStatus(updated.currentStock, updated.lowStockThreshold);
         await Machine.updateOne(
-          { _id: item.machineId, "variants.attribute": item.attribute, "variants.value": item.value },
-          { $set: { "variants.$.stockStatus": newStatus } },
+          { _id: item.machineId },
+          { $set: { stockStatus: newStatus } },
           { session }
         );
 
@@ -712,20 +718,17 @@ const completeCall = async (req, res) => {
           logMachineMap.set(machineKey, {
             machineId:   item.machineId,
             machineName: item.machineName,
-            modelNumber: item.modelNumber,
             categoryId:  item.categoryId,
             category:    item.category,
             divisionId:  item.divisionId,
             division:    item.division,
-            variants:    [],
+            quantity:    item.quantity,
+            partCodes:   [item.partCode],
           });
+        } else {
+          logMachineMap.get(machineKey).partCodes.push(item.partCode);
+          logMachineMap.get(machineKey).quantity += item.quantity;
         }
-        logMachineMap.get(machineKey).variants.push({
-          name:          item.name,
-          value:         item.value,
-          qtyChange:     `-${item.quantity}`,
-          serialNumbers: [],
-        });
       }
 
       // Create inventory log
@@ -741,7 +744,17 @@ const completeCall = async (req, res) => {
             zone:       call.customerInfo.zone || "",
             gstNumber:  call.customerInfo.gstNumber || "",
           },
-          machines: [...logMachineMap.values()],
+          machines: [...logMachineMap.values()].map(e => ({
+            machineId:     e.machineId,
+            machineName:   e.machineName,
+            categoryId:    e.categoryId,
+            category:      e.category,
+            divisionId:    e.divisionId,
+            division:      e.division,
+            quantity:      e.quantity,
+            partCodes:     e.partCodes,
+            serialNumbers: [],
+          })),
         }],
         { session }
       );
@@ -754,11 +767,10 @@ const completeCall = async (req, res) => {
     // Build per-machine field updates
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
-      const mParts       = variantPartsMap.get(m.variantId.toString()) || [];
+      const mParts       = variantPartsMap.get(m.serialNumber) || [];
       const mPartsCharge = Math.round(mParts.reduce((s, p) => s + p.total, 0) * 100) / 100;
-      machineSetFields[`machines.${idx}.serviceCharge`] = 0;
-      machineSetFields[`machines.${idx}.partsCharge`]   = mPartsCharge;
-      machineSetFields[`machines.${idx}.usedParts`]     = mParts;
+      machineSetFields[`machines.${idx}.partsCharge`] = mPartsCharge;
+      machineSetFields[`machines.${idx}.usedParts`]   = mParts;
     });
 
     await call.updateOne(

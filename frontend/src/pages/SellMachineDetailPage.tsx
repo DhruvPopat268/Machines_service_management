@@ -8,6 +8,8 @@ import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
 
+const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+
 interface ContractTypeSnapshot {
   contractTypeId: string;
   name: string;
@@ -20,28 +22,28 @@ interface ContractTypeSnapshot {
 
 interface SerialNumberEntry {
   serialNumber: string;
-  contractType: ContractTypeSnapshot;
+  contractType: ContractTypeSnapshot | null;
 }
 
-interface SaleVariant {
-  attribute: string;
-  name: string;
-  value: string;
-  quantity: number;
-  serialNumbers: SerialNumberEntry[];
-  price: number;
-  discountedPrice: number | null;
-  total: number;
-  contractType: ContractTypeSnapshot;
-  deductedFromInventory: boolean;
+interface PartCodeEntry {
+  partCode: string;
+  contractType: ContractTypeSnapshot | null;
 }
 
 interface SaleMachineEntry {
   machineId: string;
   machineName: string;
+  modelNumber: string;
+  categoryId: string;
   category: string;
-  variants: SaleVariant[];
-  machineTotalSold: number;
+  divisionId: string;
+  division: string;
+  quantity: number;
+  sellingPrice: number;
+  discountedSellingPrice: number | null;
+  sellingTotal: number;
+  serialNumbers?: SerialNumberEntry[];
+  partCodes?: PartCodeEntry[];
 }
 
 interface CustomerInfo {
@@ -60,9 +62,7 @@ interface SaleDetail {
   machines: SaleMachineEntry[];
   grandTotal: number;
   machinesCount: number;
-  totalVariants: number;
   createdAt: string;
-  updatedAt: string;
 }
 
 const formatDateTime = (iso: string) => {
@@ -78,22 +78,12 @@ const formatDate = (dateStr: string | undefined) => {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 };
 
-const getContractTypeBadge = (code: string) => {
-  const types: Record<string, { color: string }> = {
-    OUT: { color: "bg-blue-100 text-blue-700" },
-    RNT: { color: "bg-purple-100 text-purple-700" },
-    LSE: { color: "bg-orange-100 text-orange-700" },
-  };
-  
-  return types[code] || types.OUT;
-};
-
 const SellMachineDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [serialDialog, setSerialDialog] = useState<{ machineName: string; variantName: string; variantValue: string; serialNumbers: SerialNumberEntry[] } | null>(null);
+  const [codesDialog, setCodesDialog] = useState<{ title: string; items: Array<{ code: string; contractType: ContractTypeSnapshot | null }> } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -125,12 +115,11 @@ const SellMachineDetailPage = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: "Machines",       value: sale.machinesCount },
-          { label: "Total Variants", value: sale.totalVariants },
-          { label: "Total Sold",     value: `₹${sale.grandTotal.toLocaleString()}` },
-          { label: "Sold At",        value: formatDateTime(sale.createdAt) },
+          { label: "Machines",   value: sale.machinesCount },
+          { label: "Total Sold", value: `₹${sale.grandTotal.toLocaleString()}` },
+          { label: "Sold At",    value: formatDateTime(sale.createdAt) },
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">
             <CardContent className="pt-4">
@@ -168,111 +157,69 @@ const SellMachineDetailPage = () => {
 
       {/* Machines */}
       <div className="space-y-4">
-        {sale.machines.map((machine, mi) => (
-          <Card key={mi} className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                <span>{machine.machineName}</span>
-                {machine.category && <span className="text-xs font-normal text-muted-foreground">— {machine.category}</span>}
-                <span className="ml-auto text-sm font-semibold">₹{machine.machineTotalSold.toLocaleString()}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground border-b text-xs">
-                    <th className="text-left font-medium pb-2 pr-4">Variant</th>
-                    <th className="text-left font-medium pb-2 pr-4">Value</th>
-                    <th className="text-right font-medium pb-2 pr-4">Qty</th>
-                    <th className="text-center font-medium pb-2 pr-4">Serial Numbers</th>
-                    <th className="text-right font-medium pb-2 pr-4">Price</th>
-                    <th className="text-right font-medium pb-2 pr-4">Disc. Price</th>
-                    <th className="text-right font-medium pb-2 pr-4">Total</th>
-                    <th className="text-center font-medium pb-2 pr-4">Contract</th>
-                    <th className="text-center font-medium pb-2 pr-4">Free Service</th>
-                    <th className="text-center font-medium pb-2 pr-4">Free Parts</th>
-                    <th className="text-center font-medium pb-2 pr-4">Valid From</th>
-                    <th className="text-center font-medium pb-2 pr-4">Valid To</th>
-                    <th className="text-center font-medium pb-2">Stock Deducted</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {machine.variants.map((v, vi) => {
-                    const contractBadge = getContractTypeBadge(v.contractType?.code);
-                    return (
-                      <tr key={vi} className="border-b last:border-0">
-                        <td className="py-2 pr-4">{v.name}</td>
-                        <td className="py-2 pr-4">{v.value}</td>
-                        <td className="py-2 pr-4 text-right">{v.quantity}</td>
-                        <td className="py-2 pr-4 text-center">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-6 text-xs gap-1"
-                            onClick={() => setSerialDialog({ machineName: machine.machineName, variantName: v.name, variantValue: v.value, serialNumbers: v.serialNumbers || [] })}
-                          >
-                            <Hash className="h-3 w-3" />
-                            {v.serialNumbers?.length ?? 0} Serial{(v.serialNumbers?.length ?? 0) !== 1 ? "s" : ""}
-                          </Button>
-                        </td>
-                        <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
-                        <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
-                        <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
-                        <td className="py-2 pr-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${contractBadge.color}`}>
-                            {v.contractType?.name ?? "—"}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType?.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                            {v.contractType?.freeService ? "Yes" : "No"}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.contractType?.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                            {v.contractType?.freeParts ? "Yes" : "No"}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType?.validFrom)}</td>
-                        <td className="py-2 pr-4 text-center text-xs">{formatDate(v.contractType?.validTo)}</td>
-                        <td className="py-2 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.deductedFromInventory ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {v.deductedFromInventory ? "Yes" : "No"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        ))}
+        {sale.machines.map((m, mi) => {
+          const isParts = m.categoryId === PARTS_CATEGORY_ID;
+          const items   = isParts
+            ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType }))
+            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, contractType: e.contractType }));
+          return (
+            <Card key={mi} className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  <span>{m.machineName}</span>
+                  {m.modelNumber && <span className="text-xs font-normal text-muted-foreground">({m.modelNumber})</span>}
+                  {m.category && <span className="text-xs font-normal text-muted-foreground">— {m.category}</span>}
+                  <span className="ml-auto text-sm font-semibold">₹{m.sellingTotal.toLocaleString()}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+                  <div><p className="text-muted-foreground text-xs">Quantity</p><p className="font-medium">{m.quantity}</p></div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">{isParts ? "Part Codes" : "Serial Numbers"}</p>
+                    {items.length > 0
+                      ? <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 mt-1"
+                          onClick={() => setCodesDialog({ title: `${isParts ? "Part Codes" : "Serial Numbers"} — ${m.machineName}`, items })}>
+                          <Hash className="h-3.5 w-3.5" />{items.length} {isParts ? "Part Code" : "Serial Number"}{items.length !== 1 ? "s" : ""}
+                        </Button>
+                      : <p className="font-medium">—</p>}
+                  </div>
+                  <div><p className="text-muted-foreground text-xs">Selling Price</p><p className="font-medium">₹{m.sellingPrice.toLocaleString()}</p></div>
+                  {m.discountedSellingPrice != null && <div><p className="text-muted-foreground text-xs">Disc. Selling Price</p><p className="font-medium">₹{m.discountedSellingPrice.toLocaleString()}</p></div>}
+                  {m.division && <div><p className="text-muted-foreground text-xs">Division</p><p className="font-medium">{m.division}</p></div>}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
-      {/* Serial Numbers Dialog */}
-      <Dialog open={!!serialDialog} onOpenChange={() => setSerialDialog(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Serial Numbers</DialogTitle>
-            {serialDialog && (
-              <p className="text-sm text-muted-foreground">
-                {serialDialog.machineName} — {serialDialog.variantName}: {serialDialog.variantValue}
-              </p>
-            )}
-          </DialogHeader>
-          <div className="space-y-2 py-2 max-h-72 overflow-y-auto">
-            {serialDialog?.serialNumbers.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No serial numbers found</p>
-            ) : (
-              serialDialog?.serialNumbers.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted">
-                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
-                  <span className="text-sm font-medium font-mono">{entry.serialNumber}</span>
+      <div className="flex justify-end">
+        <p className="text-sm font-medium">Grand Total: <span className="text-lg font-bold text-green-600">₹{sale.grandTotal.toLocaleString()}</span></p>
+      </div>
+
+      {/* Codes Dialog */}
+      <Dialog open={!!codesDialog} onOpenChange={() => setCodesDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{codesDialog?.title}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            {codesDialog?.items.map((item, idx) => (
+              <div key={idx} className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground font-medium">#{idx + 1}</span>
+                  <span className="text-sm font-medium font-mono">{item.code}</span>
                 </div>
-              ))
-            )}
+                {item.contractType && (
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t">
+                    <div><p className="text-muted-foreground">Contract</p><p className="font-medium">{item.contractType.name} ({item.contractType.code})</p></div>
+                    <div><p className="text-muted-foreground">Free Svc</p><span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeService ? "Yes" : "No"}</span></div>
+                    <div><p className="text-muted-foreground">Free Parts</p><span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeParts ? "Yes" : "No"}</span></div>
+                    <div><p className="text-muted-foreground">Valid</p><p className="font-medium">{formatDate(item.contractType.validFrom)} → {formatDate(item.contractType.validTo)}</p></div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

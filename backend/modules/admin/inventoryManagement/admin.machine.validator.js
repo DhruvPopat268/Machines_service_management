@@ -2,26 +2,7 @@ const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif"];
 const MAX_IMAGE_SIZE_MB  = 5;
 const MAX_IMAGES         = 5;
 
-const validateVariants = (variants) => {
-  let parsed = variants;
-  if (typeof variants === "string") {
-    try { parsed = JSON.parse(variants); } catch { return "Invalid variants format"; }
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0)
-    return "At least one variant is required";
-  for (let i = 0; i < parsed.length; i++) {
-    const v = parsed[i];
-    if (!v.attribute)            return `Variant ${i + 1}: attribute is required`;
-    if (!v.value || !String(v.value).trim()) return `Variant ${i + 1}: value is required`;
-    if (v.lowStockThreshold === undefined || v.lowStockThreshold === null || v.lowStockThreshold === "")
-      return `Variant ${i + 1}: lowStockThreshold is required`;
-    const threshold = Number(v.lowStockThreshold);
-    if (isNaN(threshold)) return `Variant ${i + 1}: lowStockThreshold must be a number`;
-  }
-  return null;
-};
-
-const validateCreateMachine = ({ name, category, division, modelNumber, gstPercentage, status, variants }) => {
+const validateCreateMachine = ({ name, category, division, modelNumber, gstPercentage, status }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
   if (!category)
@@ -37,12 +18,10 @@ const validateCreateMachine = ({ name, category, division, modelNumber, gstPerce
   }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
-  const variantError = validateVariants(variants);
-  if (variantError) return variantError;
   return null;
 };
 
-const validateUpdateMachine = ({ name, modelNumber, division, gstPercentage, status, variants }) => {
+const validateUpdateMachine = ({ name, modelNumber, division, gstPercentage, status }) => {
   if (name !== undefined && (typeof name !== "string" || !name.trim()))
     return "Name must be a non-empty string";
   if (modelNumber !== undefined && (typeof modelNumber !== "string" || !modelNumber.trim()))
@@ -56,10 +35,6 @@ const validateUpdateMachine = ({ name, modelNumber, division, gstPercentage, sta
   }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
-  if (variants !== undefined) {
-    const variantError = validateVariants(variants);
-    if (variantError) return variantError;
-  }
   return null;
 };
 
@@ -72,20 +47,4 @@ const validateImageFile = (file) => {
   return null;
 };
 
-const validateImportMachineRow = (row, rowNum) => {
-  const name        = String(row.name        || "").trim();
-  const modelNumber = String(row.modelnumber || "").trim();
-  const status      = String(row.status      || "").trim();
-  if (!name) return `Row ${rowNum}: name is required`;
-  if (!modelNumber) return `Row ${rowNum}: modelNumber is required`;
-  if (!row.category || !String(row.category).trim()) return `Row ${rowNum}: category is required`;
-  if (!row.division || !String(row.division).trim()) return `Row ${rowNum}: division is required`;
-  if (status && !["Active", "Inactive"].includes(status)) return `Row ${rowNum}: status must be Active or Inactive`;
-  if (row.gstpercentage !== undefined && row.gstpercentage !== "") {
-    const gst = Number(row.gstpercentage);
-    if (isNaN(gst) || gst < 0 || gst > 100) return `Row ${rowNum}: gstPercentage must be between 0 and 100`;
-  }
-  return null;
-};
-
-module.exports = { validateCreateMachine, validateUpdateMachine, validateImageFile, validateImportMachineRow, MAX_IMAGES, ALLOWED_EXTENSIONS };
+module.exports = { validateCreateMachine, validateUpdateMachine, validateImageFile, MAX_IMAGES, ALLOWED_EXTENSIONS };

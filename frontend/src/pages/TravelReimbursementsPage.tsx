@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { Pagination } from "@/components/Pagination";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ interface Reimbursement {
   travelFrom: { address: string; latitude: number; longitude: number };
   travelTo: { address: string; latitude: number; longitude: number };
   travelledKm: number;
+  purpose: string;
   status: string;
   createdAt: string;
 }
@@ -40,6 +42,7 @@ const TravelReimbursementsPage = () => {
   const [loading, setLoading]         = useState(true);
   const [engineerId, setEngineerId]   = useState("");
   const [status, setStatus]           = useState("");
+  const [purpose, setPurpose]         = useState("");
   const [fromDate, setFromDate]       = useState("");
   const [toDate, setToDate]           = useState("");
   const [engineers, setEngineers]     = useState<{ _id: string; name: string }[]>([]);
@@ -59,6 +62,7 @@ const TravelReimbursementsPage = () => {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
       if (engineerId) params.engineerId = engineerId;
       if (status)     params.status     = status;
+      if (purpose)    params.purpose    = purpose;
       if (fromDate)   params.fromDate   = fromDate;
       if (toDate)     params.toDate     = toDate;
 
@@ -75,11 +79,12 @@ const TravelReimbursementsPage = () => {
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
-  const hasFilters = engineerId || status || fromDate || toDate;
+  const hasFilters = engineerId || status || purpose || fromDate || toDate;
 
   const columns: Column<Reimbursement>[] = [
     { key: "no",          label: "No.",      render: (_, i) => <span className="font-medium">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     { key: "callId",      label: "Call ID",   render: (r) => <span className="font-medium text-foreground">{r.callId?.callId}</span> },
+    { key: "purpose",     label: "Purpose",   render: (r) => <Badge variant="outline" className="text-xs">{r.purpose}</Badge> },
     { key: "engineer",    label: "Engineer", render: (r) => (
       <div>
         <p className="font-medium">{r.engineerInfo.name}</p>
@@ -132,6 +137,19 @@ const TravelReimbursementsPage = () => {
             </div>
 
             <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Purpose</Label>
+              <Select value={purpose || "all"} onValueChange={(v) => setPurpose(v === "all" ? "" : v)}>
+                <SelectTrigger className="w-[160px]"><SelectValue placeholder="All Purposes" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Purposes</SelectItem>
+                  <SelectItem value="Service Call">Service Call</SelectItem>
+                  <SelectItem value="Go To Office">Go To Office</SelectItem>
+                  <SelectItem value="Go To Home">Go To Home</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Status</Label>
               <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
                 <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Status" /></SelectTrigger>
@@ -154,7 +172,7 @@ const TravelReimbursementsPage = () => {
             </div>
 
             {hasFilters && (
-              <Button variant="outline" size="sm" className="h-9" onClick={() => { setEngineerId(""); setStatus(""); setFromDate(""); setToDate(""); }}>
+              <Button variant="outline" size="sm" className="h-9" onClick={() => { setEngineerId(""); setStatus(""); setPurpose(""); setFromDate(""); setToDate(""); }}>
                 <X className="h-4 w-4 mr-1" /> Clear
               </Button>
             )}

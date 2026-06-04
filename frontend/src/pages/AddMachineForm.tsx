@@ -7,26 +7,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { SearchableSelect } from "@/components/SearchableSelect";
 import { PageHeader } from "@/components/PageHeader";
-import { ArrowLeft, Plus, Trash2, ImagePlus, X, Pencil, Crown } from "lucide-react";
+import { ArrowLeft, Plus, ImagePlus, X, Pencil, Crown } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import api from "@/lib/axiosInterceptor";
 
-interface Variant {
-  attribute: string;
-  value: string;
-  lowStockThreshold: string;
-}
-
-interface CategoryOption  { _id: string; name: string; }
+interface CategoryOption { _id: string; name: string; }
 interface DivisionOption  { _id: string; name: string; }
-interface AttributeOption { _id: string; name: string; }
 
 type ImageItem = { preview: string; file?: File };
-
-const emptyVariant = (): Variant => ({ attribute: "", value: "", lowStockThreshold: "" });
 
 interface AddMachineFormProps {
   type: "Machine" | "Accessory";
@@ -42,27 +32,22 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
 
   const [categories,  setCategories]  = useState<CategoryOption[]>([]);
   const [divisions,   setDivisions]   = useState<DivisionOption[]>([]);
-  const [attributes,  setAttributes]  = useState<AttributeOption[]>([]);
   const [submitting,  setSubmitting]  = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit || isView);
 
   const [form, setForm] = useState({
     name: "", modelNumber: "", category: "",
-    division: "", hsnCode: "", gstPercentage: "", partCode: "",
+    division: "", hsnCode: "", gstPercentage: "", lowStockThreshold: "",
     status: "Active" as "Active" | "Inactive", notes: "",
   });
 
-  const [variants, setVariants] = useState<Variant[]>([emptyVariant()]);
-
-  const [allImages,  setAllImages]  = useState<ImageItem[]>([]);
-  const [dragIndex,  setDragIndex]  = useState<number | null>(null);
+  const [allImages, setAllImages] = useState<ImageItem[]>([]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const [categoryDialog, setCategoryDialog] = useState(false);
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "", status: "Active" as "Active" | "Inactive" });
   const [divisionDialog, setDivisionDialog] = useState(false);
   const [divisionForm, setDivisionForm] = useState({ name: "", description: "", status: "Active" as "Active" | "Inactive" });
-  const [attributeDialog, setAttributeDialog] = useState(false);
-  const [attributeForm, setAttributeForm] = useState({ name: "", machineCategory: "", description: "", status: "Active" as "Active" | "Inactive" });
   const [creatingNew, setCreatingNew] = useState(false);
 
   const totalImageCount = allImages.length;
@@ -70,32 +55,18 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [catRes, divRes, attrRes] = await Promise.all([
+        const [catRes, divRes] = await Promise.all([
           api.get("/admin/machine-categories", { params: { limit: 100, status: "Active" } }),
           api.get("/admin/machine-divisions",  { params: { limit: 100, status: "Active" } }),
-          api.get("/admin/attributes",         { params: { limit: 1000, status: "Active" } }),
         ]);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
-        // Attributes come with populated machineCategory from backend
-        setAttributes(attrRes.data.data);
       } catch {
         toast.error("Failed to load form options");
       }
     };
     fetchOptions();
   }, []);
-
-  // Filter attributes based on selected category
-  const filteredAttributes = form.category
-    ? attributes.filter((attr: any) => {
-        // Handle both populated (object) and non-populated (string) machineCategory
-        const attrCategoryId = typeof attr.machineCategory === 'object' 
-          ? attr.machineCategory?._id 
-          : attr.machineCategory;
-        return attrCategoryId === form.category;
-      })
-    : [];
 
   useEffect(() => {
     if (!isEdit && !isView) return;
@@ -105,22 +76,17 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         const res = await api.get(`/admin/machines/${id}`);
         const m   = res.data.data;
         setForm({
-          name:          m.name          ?? "",
-          modelNumber:   m.modelNumber   ?? "",
-          category:      m.category?._id ?? "",
-          division:      m.division?._id ?? "",
-          hsnCode:       m.hsnCode       ?? "",
-          gstPercentage: m.gstPercentage != null ? String(m.gstPercentage) : "",
-          partCode:      m.partCode      ?? "",
-          status:        m.status        ?? "Active",
-          notes:         m.notes         ?? "",
+          name:              m.name              ?? "",
+          modelNumber:       m.modelNumber       ?? "",
+          category:          m.category?._id     ?? "",
+          division:          m.division?._id     ?? "",
+          hsnCode:           m.hsnCode           ?? "",
+          gstPercentage:     m.gstPercentage != null ? String(m.gstPercentage) : "",
+          lowStockThreshold: m.lowStockThreshold != null ? String(m.lowStockThreshold) : "",
+          status:            m.status            ?? "Active",
+          notes:             m.notes             ?? "",
         });
         setAllImages((m.images ?? []).map((url: string) => ({ preview: url })));
-        setVariants(
-          m.variants?.length
-            ? m.variants.map((v: any) => ({ attribute: v.attribute?._id ?? "", value: v.value ?? "", lowStockThreshold: v.lowStockThreshold != null ? String(v.lowStockThreshold) : "" }))
-            : [emptyVariant()]
-        );
       } catch {
         toast.error("Failed to load machine details");
       } finally {
@@ -130,13 +96,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     fetchMachine();
   }, [id, isEdit, isView]);
 
-  const setField = (key: string, value: string, skipVariantClear = false) => {
-    setForm((p) => ({ ...p, [key]: value }));
-    // Clear variants when category changes (but not when programmatically setting)
-    if (key === "category" && value !== form.category && !skipVariantClear) {
-      setVariants([emptyVariant()]);
-    }
-  };
+  const setField = (key: string, value: string) => setForm((p) => ({ ...p, [key]: value }));
 
   const handleCreateCategory = async () => {
     if (!categoryForm.name.trim()) return toast.error("Category name is required");
@@ -170,23 +130,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     }
   };
 
-  const handleCreateAttribute = async () => {
-    if (!attributeForm.name.trim()) return toast.error("Attribute name is required");
-    if (!attributeForm.machineCategory) return toast.error("Machine category is required");
-    setCreatingNew(true);
-    try {
-      const res = await api.post("/admin/attributes", attributeForm);
-      toast.success("Attribute created successfully");
-      setAttributes((prev) => [...prev, res.data.data]);
-      setAttributeDialog(false);
-      setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" });
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to create attribute");
-    } finally {
-      setCreatingNew(false);
-    }
-  };
-
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files     = Array.from(e.target.files || []);
     const remaining = 5 - totalImageCount;
@@ -197,7 +140,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
 
   const removeImage = (idx: number) => {
     setAllImages((prev) => {
-      if (!prev[idx].file) return prev.filter((_, i) => i !== idx); // existing URL
+      if (!prev[idx].file) return prev.filter((_, i) => i !== idx);
       URL.revokeObjectURL(prev[idx].preview);
       return prev.filter((_, i) => i !== idx);
     });
@@ -217,42 +160,29 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
   };
   const onDragEnd = () => setDragIndex(null);
 
-  const updateVariant = (vi: number, key: keyof Variant, value: string) =>
-    setVariants((prev) => prev.map((v, i) => i === vi ? { ...v, [key]: value } : v));
-
-  const addVariant    = () => setVariants((prev) => [...prev, emptyVariant()]);
-  const removeVariant = (vi: number) => setVariants((prev) => prev.filter((_, i) => i !== vi));
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error("Name is required");
     if (!form.category)    return toast.error("Category is required");
     if (!form.division)    return toast.error("Division is required");
-    const validVariants = variants.filter((v) => v.attribute && v.value.trim());
-    if (validVariants.length === 0) return toast.error("At least one variant with attribute and value is required");
+    if (allImages.length === 0) return toast.error("At least one image is required");
 
     setSubmitting(true);
     try {
       const fd = new FormData();
-      fd.append("name",          form.name.trim());
-      fd.append("modelNumber",   form.modelNumber);
-      fd.append("hsnCode",       form.hsnCode);
-      fd.append("partCode",      form.partCode);
-      fd.append("gstPercentage", form.gstPercentage);
-      fd.append("category",      form.category);
-      fd.append("division",      form.division);
-      fd.append("status",        form.status);
-      fd.append("notes",         form.notes);
+      fd.append("name",              form.name.trim());
+      fd.append("modelNumber",       form.modelNumber);
+      fd.append("hsnCode",           form.hsnCode);
+      fd.append("gstPercentage",     form.gstPercentage);
+      fd.append("lowStockThreshold", form.lowStockThreshold !== "" ? form.lowStockThreshold : "-1");
+      fd.append("category",          form.category);
+      fd.append("division",          form.division);
+      fd.append("status",            form.status);
+      fd.append("notes",             form.notes);
 
-      fd.append("variants", JSON.stringify(
-        validVariants.map((v) => ({ attribute: v.attribute, value: v.value.trim(), lowStockThreshold: v.lowStockThreshold !== "" ? Number(v.lowStockThreshold) : -1 }))
-      ));
-
-      // split back: existing kept URLs (in order) and new files (in order)
       const existingImages = allImages.filter((img) => !img.file).map((img) => img.preview);
       const newFiles       = allImages.filter((img) => !!img.file).map((img) => img.file!);
 
-      // imageOrder preserves full drag-drop order: existing URLs or "new:N" tokens for new files
       let newIdx = 0;
       const imageOrder = allImages.map((img) => img.file ? `new:${newIdx++}` : img.preview);
 
@@ -301,10 +231,14 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Basic Information</p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Machine name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
-              <div className="space-y-2"><Label>Model Number</Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
-              <div className="space-y-2"><Label>Part Code</Label><Input placeholder="e.g. MC-X200-001" value={form.partCode} onChange={(e) => setField("partCode", e.target.value)} disabled={isReadOnly} /></div>
+              <div className="space-y-2"><Label>Model Number <span className="text-destructive">*</span></Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={form.hsnCode} onChange={(e) => setField("hsnCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>GST %</Label><Input type="number" placeholder="e.g. 18" min={0} max={100} value={form.gstPercentage} onChange={(e) => setField("gstPercentage", e.target.value)} disabled={isReadOnly} /></div>
+              <div className="space-y-2">
+                <Label>Low Stock Threshold</Label>
+                <Input type="number" placeholder="e.g. 5 or -1 to disable" min={-1} value={form.lowStockThreshold} onChange={(e) => setField("lowStockThreshold", e.target.value)} disabled={isReadOnly} />
+                <p className="text-xs text-muted-foreground">Set <span className="font-medium text-foreground">0</span>+ for alerts · <span className="font-medium text-foreground">-1</span> to disable</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -322,13 +256,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>{categories.map((c) => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
-                {form.category && filteredAttributes.length === 0 && (
-                  <p className="text-xs text-amber-600">No attributes found for this category. Please add attributes first.</p>
-                )}
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Division</Label>
+                  <Label>Division <span className="text-destructive">*</span></Label>
                   {!isReadOnly && <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setDivisionDialog(true)}><Plus className="h-3 w-3 mr-1" />Create New</Button>}
                 </div>
                 <Select value={form.division} onValueChange={(v) => setField("division", v)} disabled={isReadOnly}>
@@ -337,63 +268,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
                 </Select>
               </div>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-0 shadow-sm">
-          <CardContent className="pt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Variants</p>
-                {!form.category && <p className="text-xs text-amber-600">Please select a category first to add variants</p>}
-              </div>
-              <div className="flex gap-2">
-                {!isReadOnly && form.category && <Button type="button" variant="ghost" size="sm" onClick={() => { setAttributeForm({ name: "", machineCategory: form.category, description: "", status: "Active" }); setAttributeDialog(true); }}><Plus className="h-3.5 w-3.5 mr-1" />Create Attribute</Button>}
-                {!isReadOnly && form.category && <Button type="button" variant="outline" size="sm" onClick={addVariant}><Plus className="h-3.5 w-3.5 mr-1" />Add Variant</Button>}
-              </div>
-            </div>
-            {!form.category ? (
-              <div className="border rounded-lg p-8 text-center">
-                <p className="text-sm text-muted-foreground">Select a category to enable variants</p>
-              </div>
-            ) : (
-              variants.map((variant, vi) => (
-                <div key={vi} className="border rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Variant {vi + 1}</span>
-                    {variants.length > 1 && !isReadOnly && (
-                      <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeVariant(vi)}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 items-start">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Attribute</Label>
-                      <Select value={variant.attribute} onValueChange={(v) => updateVariant(vi, "attribute", v)} disabled={isReadOnly}>
-                        <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select attribute" /></SelectTrigger>
-                        <SelectContent>
-                          {filteredAttributes.length === 0 ? (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">No attributes available for this category</div>
-                          ) : (
-                            filteredAttributes.map((a) => <SelectItem key={a._id} value={a._id}>{a.name}</SelectItem>)
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Value</Label>
-                      <Input className="h-9 text-sm" placeholder="e.g. Red, 500ml" value={variant.value} onChange={(e) => updateVariant(vi, "value", e.target.value)} disabled={isReadOnly} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs">Low Stock Threshold</Label>
-                      <Input type="number" placeholder="e.g. 5 or -1 to disable" min={-1} value={variant.lowStockThreshold} onChange={(e) => updateVariant(vi, "lowStockThreshold", e.target.value)} disabled={isReadOnly} />
-                      <p className="text-xs text-muted-foreground">Set <span className="font-medium text-foreground">0</span>+ for alerts · <span className="font-medium text-foreground">-1</span> to disable</p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
           </CardContent>
         </Card>
 
@@ -500,38 +374,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setDivisionDialog(false); setDivisionForm({ name: "", description: "", status: "Active" }); }}>Cancel</Button>
             <Button onClick={handleCreateDivision} disabled={creatingNew}>{creatingNew ? "Creating..." : "Create"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Attribute Dialog */}
-      <Dialog open={attributeDialog} onOpenChange={(open) => { if (!open) { setAttributeDialog(false); setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" }); } }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Create Attribute</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Machine Category <span className="text-destructive">*</span></Label>
-              <SearchableSelect 
-                options={categories.map((c) => ({ label: c.name, value: c._id }))} 
-                value={attributeForm.machineCategory} 
-                onChange={(v) => setAttributeForm((p) => ({ ...p, machineCategory: v }))} 
-                placeholder="Select category" 
-                searchPlaceholder="Search categories..." 
-              />
-            </div>
-            <div className="space-y-2"><Label>Attribute Name <span className="text-destructive">*</span></Label><Input placeholder="e.g. Color, Voltage, Power (kW)" value={attributeForm.name} onChange={(e) => setAttributeForm((p) => ({ ...p, name: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Description</Label><Textarea placeholder="Brief description of this attribute" value={attributeForm.description} onChange={(e) => setAttributeForm((p) => ({ ...p, description: e.target.value }))} /></div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={attributeForm.status} onValueChange={(v) => setAttributeForm((p) => ({ ...p, status: v as "Active" | "Inactive" }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setAttributeDialog(false); setAttributeForm({ name: "", machineCategory: "", description: "", status: "Active" }); }}>Cancel</Button>
-            <Button onClick={handleCreateAttribute} disabled={creatingNew}>{creatingNew ? "Creating..." : "Create"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

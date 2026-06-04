@@ -22,11 +22,8 @@ interface MachineDetail {
   };
   machine: {
     machineId: string; machineName: string; modelNumber: string;
-    categoryId: string; category: string; divisionId: string; division: string; images: string[];
-  };
-  variant: {
-    _id: string; name: string; value: string; serialNumber: string;
-    contractType: ContractTypeInfo;
+    categoryId: string; category: string; divisionId: string; division: string;
+    serialNumber: string; contractType: ContractTypeInfo; images: string[];
   };
   createdAt: string;
   updatedAt: string;
@@ -113,8 +110,8 @@ const CustomerOwnedMachinePage = () => {
   if (loading) return <div className="space-y-6"><Spinner /></div>;
   if (!detail) return <div className="text-center py-12 text-muted-foreground">Machine not found</div>;
 
-  const { customerInfo, machine, variant } = detail;
-  const ct = variant.contractType;
+  const { customerInfo, machine } = detail;
+  const ct = machine.contractType;
   const isExpired = ct?.validTo ? new Date() > new Date(ct.validTo) : false;
 
   return (
@@ -128,7 +125,7 @@ const CustomerOwnedMachinePage = () => {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Machine Detail</h1>
-            <p className="text-muted-foreground text-sm mt-1">Serial No: {variant.serialNumber}</p>
+            <p className="text-muted-foreground text-sm mt-1">Serial No: {machine.serialNumber}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -175,8 +172,7 @@ const CustomerOwnedMachinePage = () => {
             <InfoRow label="Model Number"  value={machine.modelNumber} />
             <InfoRow label="Category"      value={machine.category} />
             <InfoRow label="Division"      value={machine.division} />
-            <InfoRow label="Variant"       value={`${variant.name} : ${variant.value}`} />
-            <InfoRow label="Serial Number" value={variant.serialNumber} />
+            <InfoRow label="Serial Number" value={machine.serialNumber} />
           </div>
         </CardContent>
       </Card>
@@ -210,7 +206,7 @@ const CustomerOwnedMachinePage = () => {
       <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Renew Contract — {variant.serialNumber}</DialogTitle>
+            <DialogTitle>Renew Contract — {machine.serialNumber}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

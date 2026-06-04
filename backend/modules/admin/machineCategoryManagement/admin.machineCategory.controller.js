@@ -4,8 +4,6 @@ const MachineCategory = require("./admin.machineCategory.model");
 const { validateCreateCategory, validateUpdateCategory, validateImportCategoryRow, caseInsensitiveNameRegex } = require("./admin.machineCategory.validator");
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 
-const Attribute = require("../attributeManagement/admin.attribute.model");
-
 const getAll = async (req, res) => {
   try {
     const { search, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -138,18 +136,6 @@ const remove = async (req, res) => {
       return res.status(404).json({ success: false, message: "Category not found" });
 
     res.status(200).json({ success: true, message: "Category deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-
-const getAttributeCount = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!mongoose.isValidObjectId(id))
-      return res.status(400).json({ success: false, message: "Invalid category ID" });
-    const count = await Attribute.countDocuments({ machineCategory: id });
-    res.status(200).json({ success: true, count });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -293,4 +279,4 @@ const exportCategories = async (req, res) => {
   }
 };
 
-module.exports = { getAll, create, update, remove, getAttributeCount, downloadSample, importCategories, exportCategories };
+module.exports = { getAll, create, update, remove, downloadSample, importCategories, exportCategories };

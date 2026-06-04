@@ -5,7 +5,7 @@ const { toZonedTime } = require("date-fns-tz");
 const getOwnedMachines = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const isAllRoute = req.path === '/all';
+    const isAllRoute = req.path === "/all";
     const page  = parseInt(req.query.page)  || 1;
     const limit = parseInt(req.query.limit) || 12;
     const skip  = (page - 1) * limit;
@@ -24,64 +24,44 @@ const getOwnedMachines = async (req, res) => {
     const currentDateIST = toZonedTime(new Date(), "Asia/Kolkata");
 
     const machineIds = [...new Set(
-      soldRecords.flatMap(record =>
-        record.machines.map(machine => machine.machineId).filter(id => id)
-      )
+      soldRecords.flatMap(record => record.machines.map(m => m.machineId).filter(Boolean))
     )];
 
-    const machines = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
-    const machineImagesMap = new Map(machines.map(m => [m._id.toString(), m.images]));
+    const machineList = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
+    const machineImagesMap = new Map(machineList.map(m => [m._id.toString(), m.images]));
 
-    const allVariants = soldRecords.flatMap(record =>
+    const allMachines = soldRecords.flatMap(record =>
       record.machines.flatMap(machine =>
-        machine.variants.flatMap(variant => {
-          const variantObj = variant.toObject();
-
-          // One entry per serialNumber entry — each carries its own contractType
-          return (variantObj.serialNumbers || []).map((entry) => {
-            const contractType = { ...entry.contractType };
-            const validToIST = toZonedTime(contractType.validTo, "Asia/Kolkata");
-            contractType.isContractExpired = validToIST < currentDateIST;
-
-            return {
-              machineId:   machine.machineId,
-              machineName: machine.machineName,
-              modelNumber: machine.modelNumber,
-              categoryId:  machine.categoryId,
-              category:    machine.category,
-              divisionId:  machine.divisionId,
-              division:    machine.division,
-              images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
-              variant: {
-                _id:             variantObj._id,
-                attribute:       variantObj.attribute,
-                name:            variantObj.name,
-                value:           variantObj.value,
-                quantity:        variantObj.quantity,
-                price:           variantObj.price,
-                discountedPrice: variantObj.discountedPrice,
-                total:           variantObj.total,
-                deductedFromInventory: variantObj.deductedFromInventory,
-                serialNumber:    entry.serialNumber,
-                contractType,
-              },
-              createdAt: record.createdAt,
-              updatedAt: record.updatedAt,
-            };
-          });
+        (machine.serialNumbers || []).map(entry => {
+          const contractType = entry.contractType ? { ...entry.contractType.toObject?.() ?? entry.contractType } : null;
+          if (contractType?.validTo) {
+            contractType.isContractExpired = toZonedTime(contractType.validTo, "Asia/Kolkata") < currentDateIST;
+          }
+          return {
+            machineId:    machine.machineId,
+            machineName:  machine.machineName,
+            modelNumber:  machine.modelNumber,
+            categoryId:   machine.categoryId,
+            category:     machine.category,
+            divisionId:   machine.divisionId,
+            division:     machine.division,
+            images:       machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+            serialNumber: entry.serialNumber,
+            contractType,
+            createdAt:    record.createdAt,
+            updatedAt:    record.updatedAt,
+          };
         })
       )
     );
 
-    const total          = allVariants.length;
-    const resultVariants = isAllRoute ? allVariants : allVariants.slice(skip, skip + limit);
+    const total         = allMachines.length;
+    const resultMachines = isAllRoute ? allMachines : allMachines.slice(skip, skip + limit);
 
     return res.status(200).json({
       success: true,
-      data: { customerInfo, machines: resultVariants },
-      ...(!isAllRoute && {
-        pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
-      }),
+      data: { customerInfo, machines: resultMachines },
+      ...(!isAllRoute && { pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } }),
     });
   } catch (error) {
     console.error("Error fetching owned machines:", error);
@@ -89,54 +69,32 @@ const getOwnedMachines = async (req, res) => {
   }
 };
 
-const getVariantDetail = async (req, res) => {
+const getMachineDetail = async (req, res) => {
   try {
     const customerId = req.customer.id;
-    const { variantId } = req.params;
-    const { serialNumber } = req.query;
+    const { serialNumber } = req.params;
+
+    if (!serialNumber?.trim())
+      return res.status(400).json({ success: false, message: "serialNumber is required" });
 
     const soldRecord = await SoldMachine.findOne({
       "customerInfo.customerId": customerId,
-      "machines.variants._id": variantId,
+      "machines.serialNumbers.serialNumber": serialNumber.trim(),
     });
 
-    if (!soldRecord) {
-      return res.status(404).json({ success: false, message: "Variant not found" });
-    }
+    if (!soldRecord)
+      return res.status(404).json({ success: false, message: "Machine not found" });
 
     const currentDateIST = toZonedTime(new Date(), "Asia/Kolkata");
-    let variantDetail = null;
     let machineDetail = null;
 
     for (const machine of soldRecord.machines) {
-      const variant = machine.variants.find(v => v._id.toString() === variantId);
-      if (variant) {
-        const variantObj = variant.toObject();
-
-        // Find the matching serial entry, fallback to first
-        const entry = serialNumber
-          ? (variantObj.serialNumbers || []).find(e => e.serialNumber === serialNumber) || variantObj.serialNumbers?.[0]
-          : variantObj.serialNumbers?.[0];
-
-        const contractType = entry ? { ...entry.contractType } : null;
-        if (contractType) {
-          const validToIST = toZonedTime(contractType.validTo, "Asia/Kolkata");
-          contractType.isContractExpired = validToIST < currentDateIST;
+      const entry = (machine.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
+      if (entry) {
+        const contractType = entry.contractType ? { ...entry.contractType.toObject?.() ?? entry.contractType } : null;
+        if (contractType?.validTo) {
+          contractType.isContractExpired = toZonedTime(contractType.validTo, "Asia/Kolkata") < currentDateIST;
         }
-
-        variantDetail = {
-          _id:             variantObj._id,
-          attribute:       variantObj.attribute,
-          name:            variantObj.name,
-          value:           variantObj.value,
-          quantity:        variantObj.quantity,
-          price:           variantObj.price,
-          discountedPrice: variantObj.discountedPrice,
-          total:           variantObj.total,
-          deductedFromInventory: variantObj.deductedFromInventory,
-          serialNumber:    entry?.serialNumber ?? null,
-          contractType,
-        };
 
         let images = [];
         if (machine.machineId) {
@@ -145,13 +103,15 @@ const getVariantDetail = async (req, res) => {
         }
 
         machineDetail = {
-          machineId:   machine.machineId,
-          machineName: machine.machineName,
-          modelNumber: machine.modelNumber,
-          categoryId:  machine.categoryId,
-          category:    machine.category,
-          divisionId:  machine.divisionId,
-          division:    machine.division,
+          machineId:    machine.machineId,
+          machineName:  machine.machineName,
+          modelNumber:  machine.modelNumber,
+          categoryId:   machine.categoryId,
+          category:     machine.category,
+          divisionId:   machine.divisionId,
+          division:     machine.division,
+          serialNumber: entry.serialNumber,
+          contractType,
           images,
         };
         break;
@@ -163,15 +123,14 @@ const getVariantDetail = async (req, res) => {
       data: {
         customerInfo: soldRecord.customerInfo,
         machine:      machineDetail,
-        variant:      variantDetail,
         createdAt:    soldRecord.createdAt,
         updatedAt:    soldRecord.updatedAt,
       },
     });
   } catch (error) {
-    console.error("Error fetching variant detail:", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch variant detail" });
+    console.error("Error fetching machine detail:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch machine detail" });
   }
 };
 
-module.exports = { getOwnedMachines, getVariantDetail };
+module.exports = { getOwnedMachines, getMachineDetail };

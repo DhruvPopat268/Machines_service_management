@@ -1,45 +1,36 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2, Package, PackagePlus, Hash } from "lucide-react";
+import { ArrowLeft, Building2, Package, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
 
-interface PurchaseVariant {
-  attribute: string;
-  name: string;
-  value: string;
-  quantity: number;
-  price: number;
-  discountedPrice: number | null;
-  sellingPrice: number | null;
-  discountedSellingPrice: number | null;
-  total: number;
-  willAddToInventory: boolean;
-  addedToInventory: boolean;
-  partCodes: string[];
-}
+const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+
+interface SerialNumberEntry { serialNumber: string; status: "available" | "sold"; }
+interface PartCodeEntry     { partCode: string;     status: "available" | "sold"; }
 
 interface PurchaseMachineEntry {
   machineId: string;
   machineName: string;
+  modelNumber: string;
+  categoryId: string;
   category: string;
-  variants: PurchaseVariant[];
-  machineTotalPurchased: number;
+  division: string;
+  quantity: number;
+  buyingPrice: number;
+  discountedBuyingPrice: number | null;
+  sellingPrice: number | null;
+  discountedSellingPrice: number | null;
+  buyingTotal: number;
+  serialNumbers?: SerialNumberEntry[];
+  partCodes?: PartCodeEntry[];
 }
 
-interface VendorInfo {
-  vendorId: string | null;
-  name: string;
-  companyName: string;
-  phone: string;
-  email: string;
-  gstNumber: string;
-}
+interface VendorInfo { vendorId: string | null; name: string; companyName: string; phone: string; email: string; gstNumber: string; }
 
 interface PurchaseDetail {
   _id: string;
@@ -47,16 +38,12 @@ interface PurchaseDetail {
   machines: PurchaseMachineEntry[];
   grandTotal: number;
   machinesCount: number;
-  totalVariants: number;
   createdAt: string;
-  updatedAt: string;
 }
 
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
-  const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
-  const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  return `${date} ${time}`;
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)} ${d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true})}`;
 };
 
 const PurchaseMachineDetailPage = () => {
@@ -64,50 +51,15 @@ const PurchaseMachineDetailPage = () => {
   const navigate = useNavigate();
   const [purchase, setPurchase] = useState<PurchaseDetail | null>(null);
   const [loading, setLoading]   = useState(true);
-  const [addingSet, setAddingSet] = useState<Set<string>>(new Set());
-  const [confirmTarget, setConfirmTarget] = useState<{ mi: number; vi: number } | null>(null);
-  const [partCodeDialog, setPartCodeDialog] = useState<{ machineName: string; variantName: string; variantValue: string; partCodes: string[] } | null>(null);
-
-  const handleConfirmAdd = async () => {
-    if (!confirmTarget) return;
-    const { mi, vi } = confirmTarget;
-    setConfirmTarget(null);
-    const key = `${mi}-${vi}`;
-    setAddingSet((prev) => new Set(prev).add(key));
-    try {
-      await api.patch(`/admin/purchases/${id}/add-inventory`, {
-        machines: [{ machineIndex: mi, variantIndexes: [vi] }],
-      });
-      setPurchase((prev) => {
-        if (!prev) return prev;
-        const machines = prev.machines.map((m, mIdx) =>
-          mIdx !== mi ? m : {
-            ...m,
-            variants: m.variants.map((v, vIdx) =>
-              vIdx !== vi ? v : { ...v, addedToInventory: true }
-            ),
-          }
-        );
-        return { ...prev, machines };
-      });
-      toast.success("Added to inventory");
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to add to inventory");
-    } finally {
-      setAddingSet((prev) => { const s = new Set(prev); s.delete(key); return s; });
-    }
-  };
+  const [codesDialog, setCodesDialog] = useState<{ title: string; items: Array<{ code: string; status: "available" | "sold" }> } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
       try {
         const res = await api.get(`/admin/purchases/${id}`);
         setPurchase(res.data.data);
-      } catch (err: any) {
-        toast.error(err.response?.data?.message || "Failed to fetch purchase details");
-      } finally {
-        setLoading(false);
-      }
+      } catch (err: any) { toast.error(err.response?.data?.message || "Failed to fetch purchase details"); }
+      finally { setLoading(false); }
     };
     fetch();
   }, [id]);
@@ -117,183 +69,103 @@ const PurchaseMachineDetailPage = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Purchase Details</h1>
-        </div>
+        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
+        <h1 className="text-2xl font-bold text-foreground">Purchase Details</h1>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Machines",       value: purchase.machinesCount },
-          { label: "Total Variants", value: purchase.totalVariants },
-          { label: "Total Purchased",    value: `₹${purchase.grandTotal.toLocaleString()}` },
+          { label: "Machines",        value: purchase.machinesCount },
+          { label: "Grand Total",     value: `₹${purchase.grandTotal.toLocaleString()}` },
           { label: "Purchased At",    value: formatDateTime(purchase.createdAt) },
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">
-            <CardContent className="pt-4">
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-              <p className="text-lg font-semibold mt-1">{s.value}</p>
-            </CardContent>
+            <CardContent className="pt-4"><p className="text-xs text-muted-foreground">{s.label}</p><p className="text-lg font-semibold mt-1">{s.value}</p></CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Vendor Info */}
       <Card className="border-0 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Building2 className="h-4 w-4" /> Vendor Info
-          </CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Building2 className="h-4 w-4" /> Vendor Info</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
             <div><p className="text-muted-foreground">Company</p><p className="font-medium">{purchase.vendorInfo.companyName}</p></div>
             <div><p className="text-muted-foreground">Name</p><p className="font-medium">{purchase.vendorInfo.name}</p></div>
             <div><p className="text-muted-foreground">Phone</p><p className="font-medium">{purchase.vendorInfo.phone}</p></div>
             <div><p className="text-muted-foreground">Email</p><p className="font-medium">{purchase.vendorInfo.email}</p></div>
-            {purchase.vendorInfo.gstNumber && (
-              <div><p className="text-muted-foreground">GST No.</p><p className="font-medium">{purchase.vendorInfo.gstNumber}</p></div>
-            )}
+            {purchase.vendorInfo.gstNumber && <div><p className="text-muted-foreground">GST No.</p><p className="font-medium">{purchase.vendorInfo.gstNumber}</p></div>}
           </div>
         </CardContent>
       </Card>
 
-      {/* Machines */}
       <div className="space-y-4">
-        {purchase.machines.map((machine, mi) => (
-          <Card key={mi} className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                <span>{machine.machineName}</span>
-                {machine.category && <span className="text-xs font-normal text-muted-foreground">— {machine.category}</span>}
-                <span className="ml-auto text-sm font-semibold">₹{machine.machineTotalPurchased.toLocaleString()}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground border-b text-xs">
-                    <th className="text-left font-medium pb-2 pr-4">Variant</th>
-                    <th className="text-left font-medium pb-2 pr-4">Value</th>
-                    <th className="text-right font-medium pb-2 pr-4">Qty</th>
-                    {machine.variants.some(v => v.partCodes?.length > 0) && (
-                      <th className="text-center font-medium pb-2 pr-4">Part Codes</th>
-                    )}
-                    <th className="text-right font-medium pb-2 pr-4">Price</th>
-                    <th className="text-right font-medium pb-2 pr-4">Disc. Price</th>
-                    {machine.variants.some(v => v.partCodes?.length > 0) && (
-                      <th className="text-left font-medium pb-2 pr-4">Part Codes</th>
-                    )}
-                    <th className="text-right font-medium pb-2 pr-4">Total</th>
-                    <th className="text-center font-medium pb-2 pr-4">Add to Inv.</th>
-                    <th className="text-center font-medium pb-2">Added</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {machine.variants.map((v, vi) => (
-                    <tr key={vi} className="border-b last:border-0">
-                      <td className="py-2 pr-4">{v.name}</td>
-                      <td className="py-2 pr-4">{v.value}</td>
-                      <td className="py-2 pr-4 text-right">{v.quantity}</td>
-                      {machine.variants.some(v => v.partCodes?.length > 0) && (
-                        <td className="py-2 pr-4 text-center">
-                          {v.partCodes?.length > 0 ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 text-xs gap-1"
-                              onClick={() => setPartCodeDialog({ machineName: machine.machineName, variantName: v.name, variantValue: v.value, partCodes: v.partCodes })}
-                            >
-                              <Hash className="h-3 w-3" />
-                              {v.partCodes.length} Code{v.partCodes.length !== 1 ? "s" : ""}
-                            </Button>
-                          ) : <span className="text-muted-foreground text-xs">—</span>}
-                        </td>
-                      )}
-                      <td className="py-2 pr-4 text-right">₹{v.price.toLocaleString()}</td>
-                      <td className="py-2 pr-4 text-right">{v.discountedPrice !== null ? `₹${v.discountedPrice?.toLocaleString()}` : "—"}</td>
-                      <td className="py-2 pr-4 text-right font-medium">₹{v.total.toLocaleString()}</td>
-                      <td className="py-2 pr-4 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.willAddToInventory ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"}`}>
-                          {v.willAddToInventory ? "Yes" : "No"}
-                        </span>
-                      </td>
-                      <td className="py-2 text-center">
-                        {!v.addedToInventory ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 px-2 text-xs gap-1"
-                            disabled={addingSet.has(`${mi}-${vi}`)}
-                            onClick={() => setConfirmTarget({ mi, vi })}
-                          >
-                            <PackagePlus className="h-3 w-3" />
-                            {addingSet.has(`${mi}-${vi}`) ? "Adding..." : "Add to Inv."}
-                          </Button>
-                        ) : (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${v.addedToInventory ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                            {v.addedToInventory ? "Done" : "—"}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      {/* Part Codes Dialog */}
-      <Dialog open={!!partCodeDialog} onOpenChange={() => setPartCodeDialog(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Part Codes</DialogTitle>
-            {partCodeDialog && (
-              <p className="text-sm text-muted-foreground">
-                {partCodeDialog.machineName} — {partCodeDialog.variantName}: {partCodeDialog.variantValue}
-              </p>
-            )}
-          </DialogHeader>
-          <div className="space-y-2 py-2 max-h-72 overflow-y-auto">
-            {partCodeDialog?.partCodes.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No part codes found</p>
-            ) : (
-              partCodeDialog?.partCodes.map((code, idx) => (
-                <div key={idx} className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted">
-                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
-                  <span className="text-sm font-medium font-mono">{code}</span>
+        {purchase.machines.map((m, mi) => {
+          const isParts = m.categoryId === PARTS_CATEGORY_ID;
+          const items   = isParts
+            ? (m.partCodes || []).map(e => ({ code: e.partCode, status: e.status }))
+            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, status: e.status }));
+          const availableCount = items.filter(e => e.status === "available").length;
+          const soldCount      = items.filter(e => e.status === "sold").length;
+          return (
+            <Card key={mi} className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  <span>{m.machineName}</span>
+                  {m.modelNumber && <span className="text-xs font-normal text-muted-foreground">({m.modelNumber})</span>}
+                  {m.category && <span className="text-xs font-normal text-muted-foreground">— {m.category}</span>}
+                  <span className="ml-auto text-sm font-semibold">₹{m.buyingTotal.toLocaleString()}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+                  <div><p className="text-muted-foreground text-xs">Quantity</p><p className="font-medium">{m.quantity}</p></div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">{isParts ? "Part Codes" : "Serial Numbers"}</p>
+                    {items.length > 0
+                      ? <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 mt-1"
+                          onClick={() => setCodesDialog({ title: `${isParts ? "Part Codes" : "Serial Numbers"} — ${m.machineName}`, items })}>
+                          <Hash className="h-3.5 w-3.5" />{items.length} {isParts ? "Part Code" : "Serial Number"}{items.length !== 1 ? "s" : ""}
+                          {soldCount > 0 && <span className="ml-1 text-red-500">({soldCount} sold)</span>}
+                        </Button>
+                      : <p className="font-medium">—</p>}
+                  </div>
+                  <div><p className="text-muted-foreground text-xs">Buying Price</p><p className="font-medium">₹{m.buyingPrice.toLocaleString()}</p></div>
+                  {m.discountedBuyingPrice != null && <div><p className="text-muted-foreground text-xs">Disc. Buying Price</p><p className="font-medium">₹{m.discountedBuyingPrice.toLocaleString()}</p></div>}
+                  {m.sellingPrice != null && <div><p className="text-muted-foreground text-xs">Selling Price</p><p className="font-medium">₹{m.sellingPrice.toLocaleString()}</p></div>}
+                  {m.discountedSellingPrice != null && <div><p className="text-muted-foreground text-xs">Disc. Selling Price</p><p className="font-medium">₹{m.discountedSellingPrice.toLocaleString()}</p></div>}
                 </div>
-              ))
-            )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div className="flex justify-end">
+        <p className="text-sm font-medium">Grand Total: <span className="text-lg font-bold text-green-600">₹{purchase.grandTotal.toLocaleString()}</span></p>
+      </div>
+
+      <Dialog open={!!codesDialog} onOpenChange={() => setCodesDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>{codesDialog?.title}</DialogTitle></DialogHeader>
+          <div className="space-y-2 py-2 max-h-72 overflow-y-auto">
+            {codesDialog?.items.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-md bg-muted">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
+                  <span className="text-sm font-medium font-mono">{item.code}</span>
+                </div>
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  item.status === "sold" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+                }`}>
+                  {item.status === "sold" ? "Sold" : "Available"}
+                </span>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={!!confirmTarget} onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Add to Inventory?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmTarget && purchase && (() => {
-                const v = purchase.machines[confirmTarget.mi].variants[confirmTarget.vi];
-                return `Are you sure you want to add "${v.name}: ${v.value}" (qty: ${v.quantity}) to inventory? This cannot be undone.`;
-              })()}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmAdd}>Confirm</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

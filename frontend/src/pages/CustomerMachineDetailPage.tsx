@@ -23,8 +23,7 @@ interface ContractType {
 
 interface MachineDetail {
   customerInfo: { customerId: string; name: string; phone: string; email: string; address: string; zone: string };
-  machine: { machineId: string; machineName: string; modelNumber: string; category: string; division: string; images: string[] };
-  variant: { _id: string; name: string; value: string; serialNumber: string; contractType: ContractType };
+  machine: { machineId: string; machineName: string; modelNumber: string; category: string; division: string; serialNumber: string; contractType: ContractType; images: string[] };
 }
 
 interface ProblemType { _id: string; name: string; }
@@ -153,7 +152,7 @@ const CustomerMachineDetailPage = () => {
     if (!trimmed) return;
 
     // Prevent duplicates
-    if (machines.some(m => m.detail.variant.serialNumber === trimmed)) {
+    if (machines.some(m => m.detail.machine.serialNumber === trimmed)) {
       toast.error("Machine already added");
       return;
     }
@@ -237,16 +236,16 @@ const CustomerMachineDetailPage = () => {
     setRenewing(true);
     try {
       await api.patch("/admin/sales/renew-contract", {
-        serialNumber:      renewDialog.detail.variant.serialNumber,
+        serialNumber:      renewDialog.detail.machine.serialNumber,
         newContractTypeId: renewContractTypeId,
         newValidFrom:      renewValidFrom,
         newValidTo:        renewValidTo,
       });
       toast.success("Contract renewed successfully");
       // Refresh the machine detail
-      const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: renewDialog.detail.variant.serialNumber } });
+      const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: renewDialog.detail.machine.serialNumber } });
       setMachines(prev => prev.map(m =>
-        m.detail.variant.serialNumber === renewDialog.detail.variant.serialNumber
+        m.detail.machine.serialNumber === renewDialog.detail.machine.serialNumber
           ? { ...m, detail: res.data.data }
           : m
       ));
@@ -296,10 +295,10 @@ const CustomerMachineDetailPage = () => {
   };
 
   const chargeRequiredIndices = machines
-    .map((m, i) => ({ i, variant: m.detail.variant }))
-    .filter(({ variant }) => {
-      const isExpired = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
-      return isExpired || !variant.contractType?.freeService;
+    .map((m, i) => ({ i, machine: m.detail.machine }))
+    .filter(({ machine }) => {
+      const isExpired = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
+      return isExpired || !machine.contractType?.freeService;
     })
     .map(({ i }) => i);
 
@@ -332,8 +331,7 @@ const CustomerMachineDetailPage = () => {
     if (customerLocation) fd.append("customerLocation", JSON.stringify(customerLocation));
 
     const machinesPayload = machines.map((m, i) => ({
-      variantId:        m.detail.variant._id,
-      serialNumber:     m.detail.variant.serialNumber,
+      serialNumber:     m.detail.machine.serialNumber,
       issueDescription: m.issueDescription.trim(),
       problemTypeIds:   m.problemTypeIds,
       ...(m.serviceCharge !== undefined && { serviceCharge: m.serviceCharge }),
@@ -359,12 +357,12 @@ const CustomerMachineDetailPage = () => {
     for (const i of chargeRequiredIndices) {
       const val = serviceCharges[i];
       if (val === "" || val === undefined) {
-        toast.error(`Service charge is required for S/N: ${machines[i].detail.variant.serialNumber}`);
+        toast.error(`Service charge is required for S/N: ${machines[i].detail.machine.serialNumber}`);
         return;
       }
       const num = Number(val);
       if (isNaN(num) || num < 0) {
-        toast.error(`Service charge must be a non-negative number for S/N: ${machines[i].detail.variant.serialNumber}`);
+        toast.error(`Service charge must be a non-negative number for S/N: ${machines[i].detail.machine.serialNumber}`);
         return;
       }
     }
@@ -466,12 +464,12 @@ const CustomerMachineDetailPage = () => {
 
       {/* Machine Cards */}
       {machines.map((entry, idx) => {
-        const { machine, variant } = entry.detail;
-        const isExpired = variant.contractType?.validTo ? new Date() > new Date(variant.contractType.validTo) : false;
-        const requiresCharge = isExpired || !variant.contractType?.freeService;
+        const { machine } = entry.detail;
+        const isExpired = machine.contractType?.validTo ? new Date() > new Date(machine.contractType.validTo) : false;
+        const requiresCharge = isExpired || !machine.contractType?.freeService;
 
         return (
-          <Card key={variant._id + idx} className="border shadow-sm">
+          <Card key={machine.serialNumber + idx} className="border shadow-sm">
             <CardContent className="pt-4 space-y-4">
 
               {/* Machine header row */}
@@ -479,17 +477,16 @@ const CustomerMachineDetailPage = () => {
                 <div>
                   <p className="font-semibold">{machine.machineName}</p>
                   <p className="text-xs text-muted-foreground">
-                    S/N: <span className="font-mono">{variant.serialNumber}</span>
+                    S/N: <span className="font-mono">{machine.serialNumber}</span>
                     {" · "}{machine.category}{" · "}{machine.division}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Variant: {variant.name} : {variant.value}
-                    {" · "}Contract: {variant.contractType?.name}
+                    Contract: {machine.contractType?.name}
                     {" "}
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
                       {isExpired ? "Expired" : "Active"}
                     </span>
-                    {" · "}Valid To: {formatDate(variant.contractType?.validTo)}
+                    {" · "}Valid To: {formatDate(machine.contractType?.validTo)}
                   </p>
                 </div>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeMachine(idx)}>
@@ -609,7 +606,7 @@ const CustomerMachineDetailPage = () => {
       <Dialog open={!!renewDialog} onOpenChange={() => setRenewDialog(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Renew Contract — {renewDialog?.detail.variant.serialNumber}</DialogTitle>
+            <DialogTitle>Renew Contract — {renewDialog?.detail.machine.serialNumber}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -675,13 +672,13 @@ const CustomerMachineDetailPage = () => {
                 }}>Edit</Button>
               </div>
               {chargeRequiredIndices.filter(i => machines[i].serviceCharge !== undefined).map(i => {
-                const { machine, variant } = machines[i].detail;
-                const isExp = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
+                const { machine } = machines[i].detail;
+                const isExp = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
                 return (
                   <div key={i} className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">{machine.machineName}</p>
-                      <p className="text-xs text-muted-foreground font-mono">{variant.serialNumber} · <span className={isExp ? "text-red-600" : "text-orange-600"}>{isExp ? "Expired" : "Non-free service"}</span></p>
+                      <p className="text-xs text-muted-foreground font-mono">{machine.serialNumber} · <span className={isExp ? "text-red-600" : "text-orange-600"}>{isExp ? "Expired" : "Non-free service"}</span></p>
                     </div>
                     <span className="text-sm font-semibold text-green-600">₹{machines[i].serviceCharge}</span>
                   </div>
@@ -707,13 +704,13 @@ const CustomerMachineDetailPage = () => {
           <p className="text-sm text-muted-foreground">Set a service charge for each machine below before raising the call.</p>
           <div className="space-y-4 py-2">
             {chargeRequiredIndices.map(i => {
-              const { machine, variant } = machines[i].detail;
-              const isExp = variant.contractType?.validTo && new Date() > new Date(variant.contractType.validTo);
+              const { machine } = machines[i].detail;
+              const isExp = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
               return (
                 <div key={i} className="space-y-1.5">
                   <Label className="text-sm">
-                    {machine.machineName} — <span className="font-mono text-xs">{variant.serialNumber}</span>
-                    <span className={`ml-2 text-xs ${isExp ? "text-red-600" : "text-orange-600"}`}>({variant.contractType?.name} · {isExp ? "Expired" : "Non-free service"})</span>
+                    {machine.machineName} — <span className="font-mono text-xs">{machine.serialNumber}</span>
+                    <span className={`ml-2 text-xs ${isExp ? "text-red-600" : "text-orange-600"}`}>({machine.contractType?.name} · {isExp ? "Expired" : "Non-free service"})</span>
                   </Label>
                   <Input
                     type="number"

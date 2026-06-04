@@ -31,10 +31,10 @@ const getCalls = async (req, res) => {
     }
 
     if (problemTypeId && mongoose.isValidObjectId(problemTypeId)) query["machines.problemTypeIds"] = new mongoose.Types.ObjectId(problemTypeId);
-    if (machineName)  query["machines.machineName"] = { $regex: escapeRegex(machineName), $options: "i" };
+    if (machineName)  query["machines.machineName"]   = { $regex: escapeRegex(machineName), $options: "i" };
     if (req.query.serialNumber) query["machines.serialNumber"] = { $regex: escapeRegex(req.query.serialNumber.trim()), $options: "i" };
-    if (customerName) query["customerInfo.name"]    = { $regex: escapeRegex(customerName), $options: "i" };
-    if (engineerName) query["engineerInfo.name"]    = { $regex: escapeRegex(engineerName), $options: "i" };
+    if (customerName) query["customerInfo.name"]       = { $regex: escapeRegex(customerName), $options: "i" };
+    if (engineerName) query["engineerInfo.name"]       = { $regex: escapeRegex(engineerName), $options: "i" };
     if (category && mongoose.isValidObjectId(category)) query["machines.categoryId"] = new mongoose.Types.ObjectId(category);
     if (division && mongoose.isValidObjectId(division)) query["machines.divisionId"] = new mongoose.Types.ObjectId(division);
 
@@ -42,15 +42,9 @@ const getCalls = async (req, res) => {
       query["machines.contractType.contractTypeId"] = new mongoose.Types.ObjectId(contractTypeId);
 
     if (contractTypeStatus === "Active") {
-      // All machines must have non-expired contractType
-      query["machines"] = {
-        $not: { $elemMatch: { "contractType.validTo": { $lt: new Date() } } },
-      };
+      query["machines"] = { $not: { $elemMatch: { "contractType.validTo": { $lt: new Date() } } } };
     } else if (contractTypeStatus === "Expired") {
-      // At least one machine has an expired contractType
-      query["machines"] = {
-        $elemMatch: { "contractType.validTo": { $lt: new Date() } },
-      };
+      query["machines"] = { $elemMatch: { "contractType.validTo": { $lt: new Date() } } };
     }
 
     if (fromDate || toDate) {
@@ -92,19 +86,17 @@ const getCalls = async (req, res) => {
     };
 
     if (!status && !search && !problemTypeId && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate && !contractTypeId && !contractTypeStatus) {
-      const statusCounts = await ServiceCall.aggregate([
-        { $group: { _id: "$status", count: { $sum: 1 } } }
-      ]);
+      const statusCounts = await ServiceCall.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]);
       const stats = { total: 0, open: 0, assigned: 0, inProgress: 0, onHold: 0, completed: 0, cancelled: 0 };
       let grandTotal = 0;
       for (const { _id, count } of statusCounts) {
         grandTotal += count;
-        if (_id === "Open")           stats.open        = count;
-        else if (_id === "Assigned")    stats.assigned    = count;
-        else if (_id === "In Progress") stats.inProgress  = count;
-        else if (_id === "On Hold")     stats.onHold      = count;
-        else if (_id === "Completed")   stats.completed   = count;
-        else if (_id === "Cancelled")   stats.cancelled   = count;
+        if (_id === "Open")           stats.open       = count;
+        else if (_id === "Assigned")    stats.assigned   = count;
+        else if (_id === "In Progress") stats.inProgress = count;
+        else if (_id === "On Hold")     stats.onHold     = count;
+        else if (_id === "Completed")   stats.completed  = count;
+        else if (_id === "Cancelled")   stats.cancelled  = count;
       }
       stats.total = grandTotal;
       response.stats = stats;
@@ -121,9 +113,8 @@ const getCallDetail = async (req, res) => {
   try {
     const { id } = req.params;
     const serviceCall = await ServiceCall.findById(id);
-    if (!serviceCall) {
+    if (!serviceCall)
       return res.status(404).json({ success: false, message: "Service call not found" });
-    }
     return res.status(200).json({ success: true, data: serviceCall });
   } catch (error) {
     console.error("Error fetching call detail:", error);
@@ -167,7 +158,6 @@ const assignEngineer = async (req, res) => {
   }
 };
 
-const VALID_STATUSES = ["Open", "Assigned", "Travel Started", "Reached Location", "In Progress", "On Hold", "Completed", "Cancelled"];
 const VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"];
 
 const STATUS_TRANSITIONS = {
@@ -243,60 +233,40 @@ const getCustomerMachines = async (req, res) => {
     if (soldRecords.length === 0)
       return res.status(200).json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 } });
 
-    const machineIds = [...new Set(
-      soldRecords.flatMap(r => r.machines.map(m => m.machineId).filter(Boolean))
-    )];
-
+    const machineIds = [...new Set(soldRecords.flatMap(r => r.machines.map(m => m.machineId).filter(Boolean)))];
     const machineList = await Machine.find({ _id: { $in: machineIds } }).select("_id images");
     const machineImagesMap = new Map(machineList.map(m => [m._id.toString(), m.images]));
 
     let allData = soldRecords.flatMap(record =>
       record.machines.flatMap(machine =>
-        machine.variants.flatMap(variant => {
-          const variantObj = variant.toObject();
-          return (variantObj.serialNumbers || []).map(entry => ({
-            customerInfo: record.customerInfo,
-            machineId:   machine.machineId,
-            machineName: machine.machineName,
-            modelNumber: machine.modelNumber,
-            categoryId:  machine.categoryId,
-            category:    machine.category,
-            divisionId:  machine.divisionId,
-            division:    machine.division,
-            images:      machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
-            variant: {
-              _id:             variantObj._id,
-              attribute:       variantObj.attribute,
-              name:            variantObj.name,
-              value:           variantObj.value,
-              quantity:        variantObj.quantity,
-              price:           variantObj.price,
-              discountedPrice: variantObj.discountedPrice,
-              total:           variantObj.total,
-              deductedFromInventory: variantObj.deductedFromInventory,
-              serialNumber:    entry.serialNumber,
-              contractType:    entry.contractType,
-            },
-            createdAt:   record.createdAt,
-            updatedAt:   record.updatedAt,
-          }));
-        })
+        (machine.serialNumbers || []).map(entry => ({
+          customerInfo: record.customerInfo,
+          machineId:    machine.machineId,
+          machineName:  machine.machineName,
+          modelNumber:  machine.modelNumber,
+          categoryId:   machine.categoryId,
+          category:     machine.category,
+          divisionId:   machine.divisionId,
+          division:     machine.division,
+          images:       machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+          serialNumber: entry.serialNumber,
+          contractType: entry.contractType,
+          createdAt:    record.createdAt,
+          updatedAt:    record.updatedAt,
+        }))
       )
     );
 
-    // Apply filters
     if (serialNumber) {
       const sn = serialNumber.toString().toLowerCase();
-      allData = allData.filter(m => m.variant?.serialNumber?.toLowerCase().includes(sn));
+      allData = allData.filter(m => m.serialNumber?.toLowerCase().includes(sn));
     }
-    if (category && mongoose.isValidObjectId(category)) {
+    if (category && mongoose.isValidObjectId(category))
       allData = allData.filter(m => m.categoryId?.toString() === category);
-    }
-    if (division && mongoose.isValidObjectId(division)) {
+    if (division && mongoose.isValidObjectId(division))
       allData = allData.filter(m => m.divisionId?.toString() === division);
-    }
 
-    const total = allData.length;
+    const total    = allData.length;
     const pageNum  = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip     = (pageNum - 1) * limitNum;
@@ -312,55 +282,36 @@ const getCustomerMachineDetail = async (req, res) => {
   try {
     const { serialNumber } = req.query;
 
-    if (!serialNumber || !serialNumber.trim())
+    if (!serialNumber?.trim())
       return res.status(400).json({ success: false, message: "serialNumber is required" });
 
-    const soldRecord = await SoldMachine.findOne({ "machines.variants.serialNumbers.serialNumber": serialNumber.trim() });
+    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": serialNumber.trim() });
     if (!soldRecord)
       return res.status(404).json({ success: false, message: "Machine not found for this serial number" });
 
     let resultMachine = null;
-    let resultVariant = null;
-
     for (const machine of soldRecord.machines) {
-      for (const variant of machine.variants) {
-        const entry = (variant.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
-        if (entry) {
-          const variantObj = variant.toObject();
-          resultVariant = {
-            _id:             variantObj._id,
-            attribute:       variantObj.attribute,
-            name:            variantObj.name,
-            value:           variantObj.value,
-            quantity:        variantObj.quantity,
-            price:           variantObj.price,
-            discountedPrice: variantObj.discountedPrice,
-            total:           variantObj.total,
-            deductedFromInventory: variantObj.deductedFromInventory,
-            serialNumber:    entry.serialNumber,
-            contractType:    entry.contractType,
-          };
-
-          let images = [];
-          if (machine.machineId) {
-            const machineDoc = await Machine.findById(machine.machineId).select("images");
-            images = machineDoc?.images || [];
-          }
-
-          resultMachine = {
-            machineId:   machine.machineId,
-            machineName: machine.machineName,
-            modelNumber: machine.modelNumber,
-            categoryId:  machine.categoryId,
-            category:    machine.category,
-            divisionId:  machine.divisionId,
-            division:    machine.division,
-            images,
-          };
-          break;
+      const entry = (machine.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
+      if (entry) {
+        let images = [];
+        if (machine.machineId) {
+          const machineDoc = await Machine.findById(machine.machineId).select("images");
+          images = machineDoc?.images || [];
         }
+        resultMachine = {
+          machineId:    machine.machineId,
+          machineName:  machine.machineName,
+          modelNumber:  machine.modelNumber,
+          categoryId:   machine.categoryId,
+          category:     machine.category,
+          divisionId:   machine.divisionId,
+          division:     machine.division,
+          serialNumber: entry.serialNumber,
+          contractType: entry.contractType,
+          images,
+        };
+        break;
       }
-      if (resultMachine) break;
     }
 
     return res.status(200).json({
@@ -368,7 +319,6 @@ const getCustomerMachineDetail = async (req, res) => {
       data: {
         customerInfo: soldRecord.customerInfo,
         machine:      resultMachine,
-        variant:      resultVariant,
         createdAt:    soldRecord.createdAt,
         updatedAt:    soldRecord.updatedAt,
       },
@@ -433,8 +383,6 @@ const raiseServiceCall = async (req, res) => {
 
     for (let i = 0; i < parsedMachines.length; i++) {
       const m = parsedMachines[i];
-      if (!mongoose.isValidObjectId(m.variantId))
-        return res.status(400).json({ success: false, message: `Invalid variantId at index ${i}` });
       if (!m.serialNumber?.trim())
         return res.status(400).json({ success: false, message: `serialNumber is required at index ${i}` });
       if (!m.issueDescription?.trim())
@@ -445,10 +393,10 @@ const raiseServiceCall = async (req, res) => {
     if (!customer)
       return res.status(404).json({ success: false, message: "Customer not found or inactive" });
 
-    const variantIds = parsedMachines.map(m => m.variantId);
+    const serialNumbers = parsedMachines.map(m => m.serialNumber.trim());
     const soldRecords = await SoldMachine.find({
       "customerInfo.customerId": customerId,
-      "machines.variants._id": { $in: variantIds },
+      "machines.serialNumbers.serialNumber": { $in: serialNumbers },
     });
     if (soldRecords.length === 0)
       return res.status(404).json({ success: false, message: "No machines found for this customer" });
@@ -457,7 +405,6 @@ const raiseServiceCall = async (req, res) => {
     const ptDocs   = allPtIds.length > 0 ? await ProblemType.find({ _id: { $in: allPtIds } }) : [];
     const ptMap    = new Map(ptDocs.map(p => [p._id.toString(), p.name]));
 
-    // Group uploaded images by index (field names: images_0, images_1, ...)
     const filesByIndex = {};
     for (const file of (req.files || [])) {
       const match = file.fieldname.match(/^images_(\d+)$/);
@@ -469,32 +416,31 @@ const raiseServiceCall = async (req, res) => {
 
     const machineEntries = [];
     for (let i = 0; i < parsedMachines.length; i++) {
-      const { variantId, serialNumber, issueDescription, problemTypeIds = [], serviceCharge } = parsedMachines[i];
+      const { serialNumber, issueDescription, problemTypeIds = [], serviceCharge } = parsedMachines[i];
       const sn = serialNumber.trim();
 
-      let foundMachine = null, foundVariant = null, serialEntry = null;
+      let foundMachine = null;
+      let foundEntry = null;
       outer: for (const record of soldRecords) {
         for (const machine of record.machines) {
-          const variant = machine.variants.find(v => v._id.toString() === variantId);
-          if (variant) {
-            const entry = (variant.serialNumbers || []).find(e => e.serialNumber === sn);
-            if (!entry)
-              return res.status(400).json({ success: false, message: `Serial number "${sn}" not found for variantId ${variantId}` });
-
-            foundMachine = machine; foundVariant = variant; serialEntry = entry;
+          const entry = (machine.serialNumbers || []).find(e => e.serialNumber === sn);
+          if (entry) {
+            foundMachine = machine;
+            foundEntry = entry;
             break outer;
           }
         }
       }
 
-      if (!foundVariant)
-        return res.status(404).json({ success: false, message: `Variant ${variantId} not found` });
+      if (!foundMachine)
+        return res.status(404).json({ success: false, message: `Serial number "${sn}" not found for this customer` });
 
-      const isExpired = serialEntry?.contractType?.validTo && new Date(serialEntry.contractType.validTo) < new Date();
-      const notFreeService = !serialEntry?.contractType?.freeService;
+      const isExpired     = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
+      const notFreeService = !foundEntry.contractType?.freeService;
       const requiresCharge = isExpired || notFreeService;
+
       if (requiresCharge && (serviceCharge === undefined || serviceCharge === null))
-        return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${serialNumber.trim()}" (${isExpired ? "expired contract" : "non-free service"})` });
+        return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${sn}" (${isExpired ? "expired contract" : "non-free service"})` });
       if (serviceCharge !== undefined && serviceCharge !== null && (typeof serviceCharge !== "number" || serviceCharge < 0))
         return res.status(400).json({ success: false, message: `serviceCharge must be a non-negative number at index ${i}` });
 
@@ -504,7 +450,6 @@ const raiseServiceCall = async (req, res) => {
           return res.status(404).json({ success: false, message: `Problem type not found: ${ptId}` });
       }
 
-      // Upload images for this index
       const images = [];
       for (const file of (filesByIndex[i] || [])) {
         const filename = `servicecall_${Date.now()}_${Math.random().toString(36).slice(2)}.webp`;
@@ -512,7 +457,6 @@ const raiseServiceCall = async (req, res) => {
       }
 
       machineEntries.push({
-        variantId:        foundVariant._id,
         machineId:        foundMachine.machineId,
         machineName:      foundMachine.machineName,
         modelNumber:      foundMachine.modelNumber,
@@ -521,19 +465,17 @@ const raiseServiceCall = async (req, res) => {
         division:         foundMachine.division,
         categoryId:       foundMachine.categoryId,
         category:         foundMachine.category,
-        attributeName:    foundVariant.name,
-        attributeValue:   foundVariant.value,
-        contractType:     serialEntry.contractType,
+        contractType:     foundEntry.contractType,
         issueDescription: issueDescription.trim(),
         problemTypeIds:   ptIds,
         problemTypes:     ptIds.map(id => ptMap.get(id)),
         images,
-        serviceCharge: requiresCharge ? serviceCharge : 0,
+        serviceCharge:    requiresCharge ? serviceCharge : 0,
       });
     }
 
     if (machineEntries.length === 0)
-      return res.status(404).json({ success: false, message: "No valid machine variants found" });
+      return res.status(404).json({ success: false, message: "No valid machines found" });
 
     const lastCall = await ServiceCall.findOne().sort({ createdAt: -1 }).select("callId");
     let callNumber = 1;

@@ -31,17 +31,10 @@ const validateRaiseServiceCall = (req, res, next) => {
   for (let i = 0; i < parsedServiceCalls.length; i++) {
     const serviceCall = parsedServiceCalls[i];
     
-    if (!serviceCall.variantId) {
+    if (!serviceCall.serialNumber || typeof serviceCall.serialNumber !== "string" || !serviceCall.serialNumber.trim()) {
       return res.status(400).json({
         success: false,
-        message: `Variant ID is required for service call at index ${i}`
-      });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(serviceCall.variantId)) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid variant ID format at index ${i}: ${serviceCall.variantId}`
+        message: `Serial number is required for service call at index ${i}`
       });
     }
 
