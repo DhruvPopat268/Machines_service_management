@@ -21,6 +21,14 @@ const formatDate = (dateString: string) => {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
+const formatDateTime = (dateString: string) => {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  const datePart = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return `${datePart}, ${timePart}`;
+};
+
 const CallDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -55,11 +63,13 @@ const CallDetailsPage = () => {
   if (!call) return <div className="text-center py-12 text-muted-foreground">Call not found</div>;
 
   const timelineSteps = [
-    { label: "Call Created", date: formatDate(call.dates.created), description: "Service call registered", completed: true },
-    { label: "Engineer Assigned", date: formatDate(call.dates.assigned || ""), description: call.engineerInfo ? `Assigned to ${call.engineerInfo.name}` : undefined, completed: !!call.dates.assigned, active: call.status === "Assigned" },
-    { label: "Work In Progress", date: formatDate(call.dates.inProgress || ""), description: "Engineer working on site", completed: !!call.dates.inProgress, active: call.status === "In Progress" },
-    { label: "On Hold", date: formatDate(call.dates.onHold || ""), description: "Work paused", completed: !!call.dates.onHold, active: call.status === "On Hold" },
-    { label: "Completed", date: formatDate(call.dates.completed || ""), description: "Issue resolved", completed: !!call.dates.completed },
+    { label: "Call Created",      date: formatDate(call.dates.created),                description: "Service call registered",              completed: true },
+    { label: "Engineer Assigned", date: formatDate(call.dates.assigned || ""),         description: call.engineerInfo ? `Assigned to ${call.engineerInfo.name}` : undefined, completed: !!call.dates.assigned,        active: call.status === "Assigned" },
+    { label: "Travel Started",    date: formatDate(call.dates.travelStarted || ""),    description: "Engineer on the way",                  completed: !!call.dates.travelStarted,   active: call.status === "Travel Started" },
+    { label: "Reached Location",  date: formatDate(call.dates.reachedLocation || ""), description: "Engineer arrived at customer site",     completed: !!call.dates.reachedLocation, active: call.status === "Reached Location" },
+    { label: "Work In Progress",  date: formatDate(call.dates.inProgress || ""),      description: "Engineer working on site",             completed: !!call.dates.inProgress,      active: call.status === "In Progress" },
+    { label: "On Hold",           date: formatDate(call.dates.onHold || ""),           description: (call as any).onHoldReason || "Work paused", completed: !!call.dates.onHold,      active: call.status === "On Hold" },
+    { label: "Completed",         date: formatDate(call.dates.completed || ""),        description: "Issue resolved",                       completed: !!call.dates.completed },
   ];
 
   const statusOptions: Record<string, string[]> = {
@@ -153,14 +163,19 @@ const CallDetailsPage = () => {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Call ID</span><span className="font-medium">{call.callId}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Call Type</span><span className="font-medium">{(call as any).callType || "—"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Created</span><span className="font-medium">{formatDate(call.dates.created)}</span></div>
-              {call.dates.assigned && <div className="flex justify-between"><span className="text-muted-foreground">Assigned</span><span className="font-medium">{formatDate(call.dates.assigned)}</span></div>}
-              {call.dates.inProgress && <div className="flex justify-between"><span className="text-muted-foreground">Started</span><span className="font-medium">{formatDate(call.dates.inProgress)}</span></div>}
-              {call.dates.onHold && <div className="flex justify-between"><span className="text-muted-foreground">On Hold</span><span className="font-medium">{formatDate(call.dates.onHold)}</span></div>}
-              {call.dates.completed && <div className="flex justify-between"><span className="text-muted-foreground">Completed</span><span className="font-medium">{formatDate(call.dates.completed)}</span></div>}
-              {call.dates.cancelled && <div className="flex justify-between"><span className="text-muted-foreground">Cancelled</span><span className="font-medium">{formatDate(call.dates.cancelled)}</span></div>}
+              <div className="flex justify-between"><span className="text-muted-foreground">Created By</span><span className="font-medium">{(call as any).createdBy || "—"}</span></div>
+              <div className="flex justify-between gap-4"><span className="text-muted-foreground">Created</span><span className="font-medium text-right">{formatDateTime(call.dates.created)}</span></div>
+              {call.dates.assigned && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Assigned</span><span className="font-medium text-right">{formatDateTime(call.dates.assigned)}</span></div>}
+              {call.dates.travelStarted && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Travel Started</span><span className="font-medium text-right">{formatDateTime((call.dates as any).travelStarted)}</span></div>}
+              {call.dates.reachedLocation && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Reached</span><span className="font-medium text-right">{formatDateTime((call.dates as any).reachedLocation)}</span></div>}
+              {call.dates.inProgress && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Started</span><span className="font-medium text-right">{formatDateTime(call.dates.inProgress)}</span></div>}
+              {call.dates.onHold && <div className="flex justify-between gap-4"><span className="text-muted-foreground">On Hold</span><span className="font-medium text-right">{formatDateTime(call.dates.onHold)}</span></div>}
+              {call.dates.completed && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Completed</span><span className="font-medium text-right">{formatDateTime(call.dates.completed)}</span></div>}
+              {call.dates.cancelled && <div className="flex justify-between gap-4"><span className="text-muted-foreground">Cancelled</span><span className="font-medium text-right">{formatDateTime(call.dates.cancelled)}</span></div>}
               {call.priority && <div className="flex justify-between"><span className="text-muted-foreground">Priority</span><span className="font-medium">{call.priority}</span></div>}
               <div className="flex justify-between"><span className="text-muted-foreground">Engineer</span><span className="font-medium">{call.engineerInfo?.name || "Unassigned"}</span></div>
+              {(call as any).sendToEmail !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Send Email</span><span className="font-medium">{(call as any).sendToEmail ? "Yes" : "No"}</span></div>}
+              {(call as any).sendToWhatsapp !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Send WhatsApp</span><span className="font-medium">{(call as any).sendToWhatsapp ? "Yes" : "No"}</span></div>}
             </CardContent>
           </Card>
 
@@ -261,11 +276,25 @@ const CallDetailsPage = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      {call.status !== "Open" ? (
-                        <span className="text-muted-foreground text-sm italic">No attachments</span>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
+                      {(() => {
+                        const engineerImgs = [
+                          ...((call as any).beforeWorkImages || []),
+                          ...((call as any).afterWorkImages  || []),
+                        ];
+                        return engineerImgs.length > 0 ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-1 text-xs"
+                            onClick={() => setAttachmentsDialog({ machineName: `${machine.machineName} (Engineer)`, images: engineerImgs })}
+                          >
+                            <Paperclip className="h-3 w-3" />
+                            {engineerImgs.length} attachment{engineerImgs.length > 1 ? "s" : ""}
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">None</span>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -274,6 +303,16 @@ const CallDetailsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* On Hold Reason */}
+      {(call as any).onHoldReason && (
+        <Card className="border-0 shadow-sm border-l-4 border-l-yellow-400">
+          <CardHeader><CardTitle className="text-lg">On Hold Reason</CardTitle></CardHeader>
+          <CardContent>
+            <p className="text-sm">{(call as any).onHoldReason}</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Parts Replaced Section */}
       {call.machines.some((m: any) => m.usedParts?.length > 0) && (
@@ -310,7 +349,7 @@ const CallDetailsPage = () => {
                         <TableCell>
                           <p className="font-medium">{part.machineName}</p>
                         </TableCell>
-                        <TableCell className="text-right">{part.quantity}</TableCell>
+                        <TableCell className="text-right">1</TableCell>
                         <TableCell className="text-right">₹{part.sellingPrice ?? part.discountedSellingPrice ?? 0}</TableCell>
                         <TableCell className="text-right font-semibold text-blue-600">₹{part.total}</TableCell>
                       </TableRow>
@@ -391,6 +430,49 @@ const CallDetailsPage = () => {
                 <div className="text-right">
                   <p className="text-muted-foreground">Grand Total</p>
                   <p className="font-bold text-base">₹{(call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0)}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Work Images + Customer Signature */}
+      {((call as any).beforeWorkImages?.length > 0 || (call as any).afterWorkImages?.length > 0 || (call as any).customerSignature) && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Paperclip className="h-5 w-5" /> Work Images & Signature</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {(call as any).beforeWorkImages?.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Before Work</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(call as any).beforeWorkImages.map((img: string, i: number) => (
+                      <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                        <img src={img} alt={`Before ${i + 1}`} className="h-28 w-28 object-cover rounded border hover:opacity-90 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(call as any).afterWorkImages?.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">After Work</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(call as any).afterWorkImages.map((img: string, i: number) => (
+                      <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                        <img src={img} alt={`After ${i + 1}`} className="h-28 w-28 object-cover rounded border hover:opacity-90 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(call as any).customerSignature && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-2">Customer Signature</p>
+                  <a href={(call as any).customerSignature} target="_blank" rel="noopener noreferrer">
+                    <img src={(call as any).customerSignature} alt="Customer Signature" className="h-28 object-contain rounded border hover:opacity-90 transition-opacity bg-white p-1" />
+                  </a>
                 </div>
               )}
             </div>

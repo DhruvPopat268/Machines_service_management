@@ -22,7 +22,6 @@ const usedPartSchema = new mongoose.Schema(
     category:               { type: String, trim: true, default: "" },
     sellingPrice:           { type: Number, default: 0 },
     discountedSellingPrice: { type: Number, default: 0 },
-    quantity:               { type: Number, required: true },
     total:                  { type: Number, default: 0 },
   },
   { _id: false }

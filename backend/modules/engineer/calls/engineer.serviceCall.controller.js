@@ -73,61 +73,114 @@ const getActiveCalls = async (req, res) => {
 const getReimbursementPreview = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
-    const { callId, currentLocation } = req.body;
-    const { latitude: currentLatitude, longitude: currentLongitude } = currentLocation || {};
+    const { callId, purpose = "Service Call", currentLocation } = req.body;
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
-    if (!currentLatitude || !currentLongitude)
-      return res.status(400).json({ success: false, message: "currentLocation.latitude and currentLocation.longitude are required" });
+    if (!["Service Call", "Go To Office", "Go To Home"].includes(purpose))
+      return res.status(400).json({ success: false, message: "Invalid purpose. Must be Service Call, Go To Office or Go To Home" });
 
     const call = await ServiceCall.findById(callId);
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
-
-    if (call.status !== "Assigned" && call.status !== "On Hold")
-      return res.status(400).json({ success: false, message: "Call is not in Assigned or On Hold status" });
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
 
     const customerLat = call.customerInfo?.location?.latitude;
     const customerLng = call.customerInfo?.location?.longitude;
-
     if (!customerLat || !customerLng)
       return res.status(400).json({ success: false, message: "Customer location not available" });
 
-    const lat = parseFloat(currentLatitude);
-    const lng = parseFloat(currentLongitude);
+    const customerAddress = call.customerInfo?.location?.address || call.customerInfo?.address;
+    const customerPoint   = { latitude: customerLat, longitude: customerLng, address: customerAddress };
 
-    const [engineerAddress, distanceMatrix] = await Promise.all([
-      reverseGeocode(lat, lng),
-      axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
-        params: {
-          origins:      `${lat},${lng}`,
-          destinations: `${customerLat},${customerLng}`,
-          key: MAPS_KEY,
+    // ── Service Call: uses currentLocation (pre-travel preview) ──
+    if (purpose === "Service Call") {
+      if (call.status !== "Assigned" && call.status !== "On Hold")
+        return res.status(400).json({ success: false, message: "Call is not in Assigned or On Hold status" });
+
+      const { latitude: currentLatitude, longitude: currentLongitude } = currentLocation || {};
+      if (!currentLatitude || !currentLongitude)
+        return res.status(400).json({ success: false, message: "currentLocation.latitude and currentLocation.longitude are required" });
+
+      const lat = parseFloat(currentLatitude);
+      const lng = parseFloat(currentLongitude);
+
+      const [engineerAddress, distanceMatrix] = await Promise.all([
+        reverseGeocode(lat, lng),
+        axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
+          params: { origins: `${lat},${lng}`, destinations: `${customerLat},${customerLng}`, key: MAPS_KEY },
+        }),
+      ]);
+
+      const element = distanceMatrix.data.rows?.[0]?.elements?.[0];
+      if (!element || element.status !== "OK")
+        return res.status(400).json({ success: false, message: "Could not calculate distance" });
+
+      const distanceKm  = Math.round((element.distance.value / 1000) * 100) / 100;
+      const durationMin = Math.round(element.duration.value / 60);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          purpose,
+          legs: [{
+            purpose:         "Service Call",
+            travelFrom:      { latitude: lat, longitude: lng, address: engineerAddress },
+            travelTo:        customerPoint,
+            distanceKm,
+            estimatedTimeMin: durationMin,
+          }],
         },
-      }),
-    ]);
+      });
+    }
 
-    const element = distanceMatrix.data.rows?.[0]?.elements?.[0];
-    if (!element || element.status !== "OK")
-      return res.status(400).json({ success: false, message: "Could not calculate distance" });
+    // ── Go To Office / Go To Home: uses last saved location (post-call preview) ──
+    if (call.status !== "Completed" && call.status !== "On Hold")
+      return res.status(400).json({ success: false, message: "Call must be Completed or On Hold to preview this purpose" });
 
-    const distanceKm  = Math.round((element.distance.value / 1000) * 100) / 100;
-    const durationMin = Math.round(element.duration.value / 60);
+    const engineer = await AdminUser.findById(engineerId).select("engineerLocation");
+    if (!engineer)
+      return res.status(404).json({ success: false, message: "Engineer not found" });
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        currentLocation:  { latitude: lat, longitude: lng, address: engineerAddress },
-        customerLocation: { latitude: customerLat, longitude: customerLng, address: call.customerInfo?.location?.address || call.customerInfo?.address },
-        distanceKm,
-        estimatedTimeMin: durationMin,
-      },
-    });
+    if (purpose === "Go To Office") {
+      const adminUser = await AdminUser.findOne({ role: "Admin" }).select("officeLocation");
+      if (!adminUser?.officeLocation?.latitude || !adminUser?.officeLocation?.longitude)
+        return res.status(400).json({ success: false, message: "Office location not set" });
+
+      const officePoint = { latitude: adminUser.officeLocation.latitude, longitude: adminUser.officeLocation.longitude, address: adminUser.officeLocation.address || "" };
+      const distanceKm  = await getRoadDistanceKm(customerLat, customerLng, adminUser.officeLocation.latitude, adminUser.officeLocation.longitude);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          purpose,
+          travelFrom:  customerPoint,
+          travelTo:    officePoint,
+          distanceKm,
+        },
+      });
+    }
+
+    if (purpose === "Go To Home") {
+      if (!engineer.engineerLocation?.latitude || !engineer.engineerLocation?.longitude)
+        return res.status(400).json({ success: false, message: "Home location not set on your profile" });
+
+      const homePoint  = { latitude: engineer.engineerLocation.latitude, longitude: engineer.engineerLocation.longitude, address: engineer.engineerLocation.address || "" };
+      const distanceKm = await getRoadDistanceKm(customerLat, customerLng, engineer.engineerLocation.latitude, engineer.engineerLocation.longitude);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          purpose,
+          travelFrom:  customerPoint,
+          travelTo:    homePoint,
+          distanceKm,
+        },
+      });
+    }
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -296,12 +349,14 @@ const getChargesSummary = async (req, res) => {
 
     if (hasUsedParts) {
       for (const p of usedParts) {
-        if (!p || typeof p !== "string")
-          return res.status(400).json({ success: false, message: "Each usedPart must be a non-empty string partCode" });
+        if (!p || typeof p.partCode !== "string")
+          return res.status(400).json({ success: false, message: "Each usedPart must have a partCode string" });
+        if (!p.serialNumber || typeof p.serialNumber !== "string")
+          return res.status(400).json({ success: false, message: "Each usedPart must have a serialNumber" });
       }
     }
 
-    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id");
+    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines");
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
@@ -313,22 +368,30 @@ const getChargesSummary = async (req, res) => {
     if (!hasUsedParts)
       return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges } });
 
-    const partCodesList = usedParts.map(p => p.trim());
+    // Build contractType map: serialNumber -> contractType
+    const contractMap = new Map();
+    for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
+
+    // Validate serialNumbers
+    for (const p of usedParts) {
+      if (!contractMap.has(p.serialNumber))
+        return res.status(400).json({ success: false, message: `serialNumber ${p.serialNumber} does not belong to this call` });
+    }
+
+    const partCodesList = usedParts.map(p => p.partCode.trim());
 
     const purchaseRecords = await PurchasedMachine.find(
       { "machines.partCodes.partCode": { $in: partCodesList } },
       { "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
     );
 
-    // Build map: partCode -> unit price
     const priceMap = new Map();
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
         const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
         for (const entry of (machine.partCodes || [])) {
-          if (partCodesList.includes(entry.partCode.trim())) {
+          if (partCodesList.includes(entry.partCode.trim()))
             priceMap.set(entry.partCode.trim(), unitPrice);
-          }
         }
       }
     }
@@ -337,7 +400,6 @@ const getChargesSummary = async (req, res) => {
     if (notFound.length > 0)
       return res.status(404).json({ success: false, message: `Part code(s) not found: ${notFound.join(", ")}` });
 
-    // Check none are already sold
     const alreadySold = [];
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
@@ -350,7 +412,16 @@ const getChargesSummary = async (req, res) => {
     if (alreadySold.length > 0)
       return res.status(400).json({ success: false, message: `Part code(s) already sold: ${alreadySold.join(", ")}` });
 
-    const partsCharges = Math.round(partCodesList.reduce((sum, pc) => sum + (priceMap.get(pc) ?? 0), 0) * 100) / 100;
+    const now = new Date();
+    let partsCharges = 0;
+    for (const p of usedParts) {
+      const contract  = contractMap.get(p.serialNumber);
+      const isExpired = !contract?.validTo || now > new Date(contract.validTo);
+      const unitPrice = priceMap.get(p.partCode.trim()) ?? 0;
+      const charge    = (!isExpired && contract?.freeParts) ? 0 : unitPrice;
+      partsCharges    = Math.round((partsCharges + charge) * 100) / 100;
+    }
+
     const totalCharges = Math.round((serviceCharges + partsCharges) * 100) / 100;
 
     return res.status(200).json({ success: true, data: { serviceCharges, partsCharges, totalCharges } });
@@ -580,8 +651,6 @@ const completeCall = async (req, res) => {
       for (const p of parsedUsedParts) {
         if (!p.partCode || typeof p.partCode !== "string")
           return abort(400, "Each usedPart must have a partCode");
-        if (!p.quantity || typeof p.quantity !== "number" || p.quantity <= 0)
-          return abort(400, `Invalid quantity for partCode: ${p.partCode}`);
         if (!p.serialNumber || typeof p.serialNumber !== "string")
           return abort(400, `Each usedPart must have a serialNumber (the call machine it was used on)`);
       }
@@ -634,18 +703,19 @@ const completeCall = async (req, res) => {
 
       const purchaseRecords = await PurchasedMachine.find(
         { "machines.partCodes.partCode": { $in: partCodesList } },
-        { "machines.machineId": 1, "machines.machineName": 1, "machines.modelNumber": 1,
+        { "machines.machineId": 1, "machines.machineName": 1,
           "machines.categoryId": 1, "machines.category": 1, "machines.divisionId": 1, "machines.division": 1,
           "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
       ).session(session);
 
-      // Build partCode -> { unitPrice, machineId, machineName, ... }
       const partInfoMap = new Map();
       for (const record of purchaseRecords) {
         for (const machine of record.machines) {
           const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
           for (const entry of (machine.partCodes || [])) {
             if (partCodesList.includes(entry.partCode.trim())) {
+              if (entry.status === "sold")
+                return abort(400, `Part code "${entry.partCode}" is already sold`);
               partInfoMap.set(entry.partCode.trim(), {
                 unitPrice,
                 machineId:              machine.machineId,
@@ -666,21 +736,21 @@ const completeCall = async (req, res) => {
       if (notFound.length > 0)
         return abort(404, `Part code(s) not found: ${notFound.join(", ")}`);
 
-      // Group quantities by machineId for stock deduction
-      const deductionMap = new Map();
+      // Build contractType map: serialNumber -> contractType
+      const contractMap = new Map();
+      for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
+
+      const now = new Date();
+
+      // Each part code = 1 unit, deduct stock and build log
       for (const p of parsedUsedParts) {
         const info      = partInfoMap.get(p.partCode.trim());
-        const deductKey = info.machineId.toString();
-        if (deductionMap.has(deductKey)) {
-          deductionMap.get(deductKey).quantity += p.quantity;
-        } else {
-          deductionMap.set(deductKey, { ...info, partCode: p.partCode.trim(), quantity: p.quantity });
-        }
-        const lineTotal = Math.round(info.unitPrice * p.quantity * 100) / 100;
+        const contract  = contractMap.get(p.serialNumber);
+        const isExpired = !contract?.validTo || now > new Date(contract.validTo);
+        const lineTotal = (!isExpired && contract?.freeParts) ? 0 : info.unitPrice;
         partsCharges    = Math.round((partsCharges + lineTotal) * 100) / 100;
 
-        // Group into variantPartsMap keyed by call machine serialNumber
-        const callMachineKey = p.serialNumber || "unknown";
+        const callMachineKey = p.serialNumber;
         if (!variantPartsMap.has(callMachineKey)) variantPartsMap.set(callMachineKey, []);
         variantPartsMap.get(callMachineKey).push({
           partCode:               p.partCode.trim(),
@@ -690,44 +760,43 @@ const completeCall = async (req, res) => {
           category:               info.category,
           sellingPrice:           info.sellingPrice,
           discountedSellingPrice: info.discountedSellingPrice,
-          quantity:               p.quantity,
           total:                  lineTotal,
         });
-      }
 
-      // Deduct stock
-      for (const [, item] of deductionMap) {
+        // Deduct 1 unit of stock
         const updated = await Machine.findOneAndUpdate(
-          { _id: item.machineId, currentStock: { $gte: item.quantity } },
-          { $inc: { currentStock: -item.quantity } },
+          { _id: info.machineId, currentStock: { $gte: 1 } },
+          { $inc: { currentStock: -1 } },
           { new: true, session }
         );
-
         if (!updated)
-          return abort(400, `Insufficient stock for part: ${item.machineName}`);
+          return abort(400, `Insufficient stock for part: ${info.machineName}`);
 
         const newStatus = resolveStockStatus(updated.currentStock, updated.lowStockThreshold);
-        await Machine.updateOne(
-          { _id: item.machineId },
-          { $set: { stockStatus: newStatus } },
-          { session }
+        await Machine.updateOne({ _id: info.machineId }, { $set: { stockStatus: newStatus } }, { session });
+
+        // Mark part code as sold in purchase model
+        await PurchasedMachine.updateOne(
+          { "machines.partCodes.partCode": p.partCode.trim() },
+          { $set: { "machines.$[outer].partCodes.$[inner].status": "sold" } },
+          { arrayFilters: [{ "outer.partCodes.partCode": p.partCode.trim() }, { "inner.partCode": p.partCode.trim() }], session }
         );
 
-        const machineKey = item.machineId.toString();
+        const machineKey = info.machineId.toString();
         if (!logMachineMap.has(machineKey)) {
           logMachineMap.set(machineKey, {
-            machineId:   item.machineId,
-            machineName: item.machineName,
-            categoryId:  item.categoryId,
-            category:    item.category,
-            divisionId:  item.divisionId,
-            division:    item.division,
-            quantity:    item.quantity,
-            partCodes:   [item.partCode],
+            machineId:   info.machineId,
+            machineName: info.machineName,
+            categoryId:  info.categoryId,
+            category:    info.category,
+            divisionId:  info.divisionId,
+            division:    info.division,
+            quantity:    1,
+            partCodes:   [p.partCode.trim()],
           });
         } else {
-          logMachineMap.get(machineKey).partCodes.push(item.partCode);
-          logMachineMap.get(machineKey).quantity += item.quantity;
+          logMachineMap.get(machineKey).partCodes.push(p.partCode.trim());
+          logMachineMap.get(machineKey).quantity += 1;
         }
       }
 
