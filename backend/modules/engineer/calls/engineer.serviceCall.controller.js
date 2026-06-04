@@ -275,6 +275,8 @@ const startWork = async (req, res) => {
 
     if (files.length === 0)
       return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
+    if (files.length > 5)
+      return res.status(400).json({ success: false, message: "beforeWorkImages must not exceed 5 images" });
 
     const call = await ServiceCall.findById(callId);
     if (!call)
@@ -662,8 +664,12 @@ const completeCall = async (req, res) => {
 
     if (afterFiles.length === 0)
       return abort(400, "afterWorkImages are required");
+    if (afterFiles.length > 5)
+      return abort(400, "afterWorkImages must not exceed 5 images");
     if (sigFiles.length === 0)
       return abort(400, "customerSignature is required");
+    if (sigFiles.length > 1)
+      return abort(400, "customerSignature must be a single image");
 
     const call = await ServiceCall.findById(callId).session(session);
     if (!call)
