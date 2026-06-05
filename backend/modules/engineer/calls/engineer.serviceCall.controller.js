@@ -857,6 +857,7 @@ const completeCall = async (req, res) => {
           customerSignature,
           totalPartsCharges,
           totalServiceCharges,
+          totalCharges,
           sendToEmail:    sendToEmail    === true || sendToEmail    === "true",
           sendToWhatsapp: sendToWhatsapp === true || sendToWhatsapp === "true",
           ...machineSetFields,

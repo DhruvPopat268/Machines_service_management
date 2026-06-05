@@ -113,6 +113,7 @@ const serviceCallSchema = new mongoose.Schema(
     createdBy:           { type: String, enum: ["Admin", "Customer"], default: "Customer" },
     totalServiceCharges: { type: Number },
     totalPartsCharges:   { type: Number },
+    totalCharges:        { type: Number },
     beforeWorkImages:    { type: [String] },
     afterWorkImages:     { type: [String] },
     customerSignature:   { type: String },
