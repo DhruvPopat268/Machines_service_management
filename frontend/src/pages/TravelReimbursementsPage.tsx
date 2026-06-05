@@ -7,7 +7,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
@@ -46,6 +48,9 @@ const TravelReimbursementsPage = () => {
   const [fromDate, setFromDate]       = useState("");
   const [toDate, setToDate]           = useState("");
   const [engineers, setEngineers]     = useState<{ _id: string; name: string }[]>([]);
+  const [selected, setSelected]       = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [marking, setMarking]         = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -69,19 +74,63 @@ const TravelReimbursementsPage = () => {
       const res = await api.get("/admin/reimbursements", { params, signal: controller.signal });
       setData(res.data.data);
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
+      setSelected(new Set());
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
         toast.error("Failed to fetch reimbursements");
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [engineerId, status, fromDate, toDate]);
+  }, [engineerId, status, purpose, fromDate, toDate]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
   const hasFilters = engineerId || status || purpose || fromDate || toDate;
 
+  const pendingData  = data.filter(r => r.status === "Pending");
+  const allPendingSelected = pendingData.length > 0 && pendingData.every(r => selected.has(r._id));
+
+  const toggleSelectAll = () => {
+    if (allPendingSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(pendingData.map(r => r._id)));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleMarkAsPaid = async () => {
+    setMarking(true);
+    try {
+      await api.patch("/admin/reimbursements/mark-paid", { ids: [...selected] });
+      toast.success(`${selected.size} reimbursement${selected.size > 1 ? "s" : ""} marked as paid`);
+      fetchData(pagination.page);
+    } catch {
+      toast.error("Failed to mark as paid");
+    } finally {
+      setMarking(false);
+      setConfirmOpen(false);
+    }
+  };
+
   const columns: Column<Reimbursement>[] = [
+    {
+      key: "select",
+      label: "",
+      className: "w-10 text-center",
+      render: (r) => r.status === "Pending" ? (
+        <div className="flex items-center justify-center">
+          <Checkbox checked={selected.has(r._id)} onCheckedChange={() => toggleOne(r._id)} onClick={(e) => e.stopPropagation()} />
+        </div>
+      ) : null,
+    },
     { key: "no",          label: "No.",      render: (_, i) => <span className="font-medium">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     { key: "callId",      label: "Call ID",   render: (r) => <span className="font-medium text-foreground">{r.callId?.callId}</span> },
     { key: "purpose",     label: "Purpose",   render: (r) => <Badge variant="outline" className="text-xs">{r.purpose}</Badge> },
@@ -178,7 +227,42 @@ const TravelReimbursementsPage = () => {
             )}
           </div>
 
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {pendingData.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Checkbox checked={allPendingSelected} onCheckedChange={toggleSelectAll} />
+                  <span className="text-sm text-muted-foreground">
+                    {allPendingSelected ? "Deselect all" : "Select all pending"}
+                  </span>
+                </div>
+              )}
+            </div>
+            {selected.size > 0 && (
+              <Button size="sm" onClick={() => setConfirmOpen(true)}>
+                Mark As Paid ({selected.size})
+              </Button>
+            )}
+          </div>
+
           <DataTable columns={columns} data={data} />
+
+          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Mark as Paid</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to mark {selected.size} reimbursement{selected.size > 1 ? "s" : ""} as paid? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={marking}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleMarkAsPaid} disabled={marking}>
+                  {marking ? "Marking..." : "Yes, Mark as Paid"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <Pagination
             page={pagination.page}

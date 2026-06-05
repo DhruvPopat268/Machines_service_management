@@ -1,6 +1,29 @@
 const TravelReimbursement = require("../../engineer/reimbursement/engineer.reimbursement.model");
 const mongoose = require("mongoose");
 
+const markAsPaid = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ success: false, message: "ids must be a non-empty array" });
+
+    for (const id of ids) {
+      if (!mongoose.isValidObjectId(id))
+        return res.status(400).json({ success: false, message: `Invalid id: ${id}` });
+    }
+
+    const result = await TravelReimbursement.updateMany(
+      { _id: { $in: ids }, status: "Pending" },
+      { $set: { status: "Paid" } }
+    );
+
+    return res.status(200).json({ success: true, updatedCount: result.modifiedCount });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getReimbursements = async (req, res) => {
   try {
     const { engineerId, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -49,4 +72,4 @@ const getReimbursements = async (req, res) => {
   }
 };
 
-module.exports = { getReimbursements };
+module.exports = { getReimbursements, markAsPaid };
