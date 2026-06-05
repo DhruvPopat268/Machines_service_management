@@ -18,6 +18,48 @@ const buildMachineFilter = (category, division, machineId) => {
   return Object.keys(f).length > 0 ? { $elemMatch: f } : null;
 };
 
+const getAvailableCodes = async (req, res) => {
+  try {
+    const { machineId } = req.query;
+
+    if (!mongoose.isValidObjectId(machineId))
+      return res.status(400).json({ success: false, message: "Invalid machineId" });
+
+    const machine = await Machine.findById(machineId).populate("category", "_id").lean();
+    if (!machine)
+      return res.status(404).json({ success: false, message: "Machine not found" });
+
+    const isParts = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
+
+    const allRecords = await PurchasedMachine.find(
+      { "machines.machineId": new mongoose.Types.ObjectId(machineId) },
+      { "machines": 1 }
+    ).lean();
+
+    const matchingMachines = allRecords.flatMap(r =>
+      r.machines.filter(m => m.machineId?.toString() === machineId)
+    );
+
+    if (isParts) {
+      const partCodes = matchingMachines
+        .flatMap(m => m.partCodes || [])
+        .filter(p => p.status === "available")
+        .map(p => p.partCode);
+
+      return res.status(200).json({ success: true, type: "partCodes", data: partCodes });
+    } else {
+      const serialNumbers = matchingMachines
+        .flatMap(m => m.serialNumbers || [])
+        .filter(s => s.status === "available")
+        .map(s => s.serialNumber);
+
+      return res.status(200).json({ success: true, type: "serialNumbers", data: serialNumbers });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getAll = async (req, res) => {
   try {
     const { search, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
@@ -475,4 +517,4 @@ const verifyPartCodes = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes };
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes };

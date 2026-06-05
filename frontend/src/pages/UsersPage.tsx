@@ -132,6 +132,7 @@ interface SystemUser {
   profilePhoto?: string;
   engineerLocation?: { address: string; latitude?: number; longitude?: number };
   engineerId?: string;
+  isOnline?: boolean;
   lastLoginAt: string | null;
   lastActivityAt: string | null;
   createdAt: string;
@@ -425,6 +426,14 @@ const UsersPage = () => {
           <span className={u.status === "Active" ? "text-green-600 text-sm font-medium" : "text-muted-foreground text-sm"}>{u.status}</span>
         </div>
       ),
+    },
+    {
+      key: "isOnline", label: "Online", render: (u) => u.role === "Engineer"
+        ? <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${(u as any).isOnline ? "text-green-600" : "text-muted-foreground"}`}>
+            <span className={`h-2 w-2 rounded-full ${(u as any).isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+            {(u as any).isOnline ? "Online" : "Offline"}
+          </span>
+        : <span className="text-muted-foreground text-sm">—</span>,
     },
     {
       key: "lastLoginAt", label: "Last Login", render: (u) => u.lastLoginAt

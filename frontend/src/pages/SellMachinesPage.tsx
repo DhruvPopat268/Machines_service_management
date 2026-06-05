@@ -38,8 +38,10 @@ interface MachineEntry {
 interface CodesDialogState {
   mi: number; machineName: string; isParts: boolean;
   quantity: number;
+  availableCodes: string[];
   codes: { value: string; contractTypeId: string; validFrom: string; validTo: string }[];
   saving: boolean;
+  loading: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -116,25 +118,44 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const updateEntry   = (mi: number, field: keyof MachineEntry, value: any) =>
     setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, [field]: value }));
 
-  const openCodesDialog = (mi: number) => {
-    const e      = entries[mi];
+  const openCodesDialog = async (mi: number) => {
+    const e       = entries[mi];
     const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
-    const qty    = Number(e.quantity) || 0;
-    if (isParts) {
-      const existing = e.partCodes.length > 0 ? e.partCodes : Array.from({ length: qty }, () => "");
-      setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, codes: existing.slice(0, qty).map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "" })), saving: false });
-    } else {
-      const existing = e.serialNumbers.length > 0 ? e.serialNumbers : Array.from({ length: qty }, () => ({ serialNumber: "", contractTypeId: "", validFrom: "", validTo: "" }));
-      setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, codes: existing.slice(0, qty).map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo })), saving: false });
+    const qty     = Number(e.quantity) || 0;
+
+    // First fetch available codes to check max allowed
+    let available: string[] = [];
+    try {
+      const res = await api.get("/admin/sales/available-codes", { params: { machineId: e.machine._id } });
+      available = res.data.data;
+    } catch {
+      toast.error("Failed to load available codes");
+      return;
     }
+
+    if (available.length === 0) {
+      toast.error(`No available ${isParts ? "part codes" : "serial numbers"} in stock for this machine`);
+      return;
+    }
+
+    if (qty > available.length) {
+      toast.error(`Max available quantity is ${available.length}. Please reduce the quantity.`);
+      return;
+    }
+
+    const existingCodes = isParts
+      ? (e.partCodes.length > 0 ? e.partCodes.map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "" })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "" })))
+      : (e.serialNumbers.length > 0 ? e.serialNumbers.map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "" })));
+
+    setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, availableCodes: available, codes: existingCodes.slice(0, qty), saving: false, loading: false });
   };
 
   const saveCodes = async () => {
     if (!codesDialog) return;
-    const { mi, codes, quantity, isParts } = codesDialog;
+    const { mi, codes, quantity, isParts, availableCodes } = codesDialog;
 
     for (let i = 0; i < quantity; i++) {
-      if (!codes[i]?.value?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is empty`); return; }
+      if (!codes[i]?.value?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is not selected`); return; }
       if (!isParts) {
         if (!codes[i].contractTypeId) { toast.error(`Select contract type for serial number ${i + 1}`); return; }
         if (!codes[i].validFrom)      { toast.error(`Enter valid from date for serial number ${i + 1}`); return; }
@@ -145,23 +166,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
     const trimmedValues = codes.map(c => c.value.trim());
     const unique = new Set(trimmedValues.map(v => v.toUpperCase()));
-    if (unique.size !== trimmedValues.length) { toast.error("Duplicate codes"); return; }
+    if (unique.size !== trimmedValues.length) { toast.error("Duplicate codes selected"); return; }
 
-    setCodesDialog((p) => p ? { ...p, saving: true } : p);
-    try {
-      const endpoint = isParts ? "/admin/sales/verify-part-codes" : "/admin/sales/verify-serial-numbers";
-      const key      = isParts ? "partCodes" : "serialNumbers";
-      const res      = await api.post(endpoint, { [key]: trimmedValues });
-      if (!res.data.available) {
-        toast.error(res.data.message || "Verification failed");
-        setCodesDialog((p) => p ? { ...p, saving: false } : p);
-        return;
-      }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Verification failed");
-      setCodesDialog((p) => p ? { ...p, saving: false } : p);
-      return;
-    }
+    const notAvailable = trimmedValues.filter(v => !availableCodes.includes(v));
+    if (notAvailable.length > 0) { toast.error(`Some codes are no longer available: ${notAvailable.join(", ")}`); return; }
 
     if (isParts) {
       updateEntry(mi, "partCodes", trimmedValues);
@@ -418,52 +426,72 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         <Dialog open onOpenChange={(o) => { if (!o) setCodesDialog(null); }}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Enter {codesDialog.isParts ? "Part Codes" : "Serial Numbers"} — {codesDialog.machineName}</DialogTitle>
+              <DialogTitle>Select {codesDialog.isParts ? "Part Codes" : "Serial Numbers"} — {codesDialog.machineName}</DialogTitle>
             </DialogHeader>
-            <p className="text-xs text-muted-foreground">{codesDialog.quantity} unit{codesDialog.quantity > 1 ? "s" : ""}</p>
-            <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-              {Array.from({ length: codesDialog.quantity }).map((_, i) => (
-                <div key={i} className="space-y-2 rounded-lg border p-3">
-                  <Label className="text-xs font-semibold">Unit {i + 1}</Label>
-                  <Input className="h-8 text-xs" placeholder={codesDialog.isParts ? `e.g. PT-00${i+1}` : `e.g. SN-00${i+1}`}
-                    value={codesDialog.codes[i]?.value ?? ""}
-                    onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], value: e.target.value }; return { ...p, codes: c }; })} />
-                  {!codesDialog.isParts && (
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Contract Type <span className="text-destructive">*</span></Label>
-                        <SearchableSelect
-                          options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
-                          value={codesDialog.codes[i]?.contractTypeId ?? ""}
-                          onChange={(v) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], contractTypeId: v }; return { ...p, codes: c }; })}
-                          onSearchChange={fetchContractTypes}
-                          placeholder="Select" searchPlaceholder="Search..."
-                          className="h-8 text-xs"
-                        />
-                        {(() => { const ct = contractTypes.find(ct => ct._id === codesDialog.codes[i]?.contractTypeId); return ct ? <p className="text-[10px] text-muted-foreground">Free Svc: {ct.freeService ? "Yes" : "No"} · Free Parts: {ct.freeParts ? "Yes" : "No"}</p> : null; })()}
+            {codesDialog.availableCodes.length === 0 ? (
+              <div className="py-8 flex items-center justify-center text-sm text-muted-foreground">No available {codesDialog.isParts ? "part codes" : "serial numbers"} found in stock</div>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  {codesDialog.quantity} unit{codesDialog.quantity > 1 ? "s" : ""} · {codesDialog.availableCodes.length} available in stock
+                </p>
+                <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+                  {Array.from({ length: codesDialog.quantity }).map((_, i) => {
+                    const selectedValues = codesDialog.codes.map(c => c.value).filter(Boolean);
+                    const options = codesDialog.availableCodes.filter(c => c === codesDialog.codes[i]?.value || !selectedValues.includes(c));
+                    return (
+                      <div key={i} className="space-y-2 rounded-lg border p-3">
+                        <Label className="text-xs font-semibold">Unit {i + 1}</Label>
+                        <Select
+                          value={codesDialog.codes[i]?.value ?? ""}
+                          onValueChange={(v) => setCodesDialog(p => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], value: v }; return { ...p, codes: c }; })}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={`Select ${codesDialog.isParts ? "part code" : "serial number"}`} /></SelectTrigger>
+                          <SelectContent>
+                            {options.map(code => <SelectItem key={code} value={code}>{code}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        {!codesDialog.isParts && (
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="space-y-1">
+                              <Label className="text-[10px] text-muted-foreground">Contract Type <span className="text-destructive">*</span></Label>
+                              <SearchableSelect
+                                options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
+                                value={codesDialog.codes[i]?.contractTypeId ?? ""}
+                                onChange={(v) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], contractTypeId: v }; return { ...p, codes: c }; })}
+                                onSearchChange={fetchContractTypes}
+                                placeholder="Select" searchPlaceholder="Search..."
+                                className="h-8 text-xs"
+                              />
+                              {(() => { const ct = contractTypes.find(ct => ct._id === codesDialog.codes[i]?.contractTypeId); return ct ? <p className="text-[10px] text-muted-foreground">Free Svc: {ct.freeService ? "Yes" : "No"} · Free Parts: {ct.freeParts ? "Yes" : "No"}</p> : null; })()}
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] text-muted-foreground">Valid From <span className="text-destructive">*</span></Label>
+                              <Input type="date" className="h-8 text-xs"
+                                value={codesDialog.codes[i]?.validFrom ?? ""}
+                                disabled={!codesDialog.codes[i]?.contractTypeId}
+                                onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validFrom: e.target.value }; return { ...p, codes: c }; })} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px] text-muted-foreground">Valid To <span className="text-destructive">*</span></Label>
+                              <Input type="date" className="h-8 text-xs"
+                                value={codesDialog.codes[i]?.validTo ?? ""}
+                                disabled={!codesDialog.codes[i]?.contractTypeId}
+                                onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validTo: e.target.value }; return { ...p, codes: c }; })} />
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Valid From <span className="text-destructive">*</span></Label>
-                        <Input type="date" className="h-8 text-xs"
-                          value={codesDialog.codes[i]?.validFrom ?? ""}
-                          disabled={!codesDialog.codes[i]?.contractTypeId}
-                          onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validFrom: e.target.value }; return { ...p, codes: c }; })} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-[10px] text-muted-foreground">Valid To <span className="text-destructive">*</span></Label>
-                        <Input type="date" className="h-8 text-xs"
-                          value={codesDialog.codes[i]?.validTo ?? ""}
-                          disabled={!codesDialog.codes[i]?.contractTypeId}
-                          onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validTo: e.target.value }; return { ...p, codes: c }; })} />
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setCodesDialog(null)}>Cancel</Button>
-              <Button onClick={saveCodes} disabled={codesDialog.saving}>{codesDialog.saving ? "Saving..." : "Save"}</Button>
+              <Button onClick={saveCodes} disabled={codesDialog.saving || codesDialog.availableCodes.length === 0}>
+                {codesDialog.saving ? "Saving..." : "Save"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

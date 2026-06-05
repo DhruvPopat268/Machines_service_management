@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const multer = require("multer");
-const { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall } = require("./engineer.serviceCall.controller");
+const { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall } = require("./engineer.serviceCall.controller");
 const engineerAuthMiddleware = require("../../../middleware/engineer.auth.middleware");
 
 const upload = multer({
@@ -16,7 +16,9 @@ const upload = multer({
 
 router.use(engineerAuthMiddleware);
 
-router.get("/active", getActiveCalls);
+router.get("/assigned", getAssignedCalls);
+router.get("/on-hold", getOnHoldCalls);
+router.get("/history", getHistoryCalls);
 router.get("/parts-machines", getPartsMachines);
 router.post("/reimbursement-preview", getReimbursementPreview);
 router.patch("/travel-started", startTravel);

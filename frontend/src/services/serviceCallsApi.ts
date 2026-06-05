@@ -94,7 +94,7 @@ export interface CallsParams {
 }
 
 export const engineersApi = {
-  getActive: async (search?: string): Promise<{ _id: string; name: string }[]> => {
+  getActive: async (search?: string): Promise<{ _id: string; name: string; isOnline?: boolean }[]> => {
     const res = await api.get("/admin/engineers/active", { params: { limit: 100, ...(search && { search }) } });
     return res.data.data;
   },

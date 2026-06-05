@@ -22,6 +22,7 @@ const adminUserSchema = new mongoose.Schema(
     engineerId:    { type: String, trim: true, unique: true, sparse: true },
     lastLoginAt:    { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },
+    isOnline:       { type: Boolean, default: false },
     status:    { type: String, enum: ["Active", "Inactive"], default: "Active" },
     changePasswordOtp:        { type: String },
     changePasswordOtpExpires: { type: Date },

@@ -53,13 +53,52 @@ const reverseGeocode = async (lat, lng) => {
   return data.results?.[0]?.formatted_address || "";
 };
 
-const getActiveCalls = async (req, res) => {
+const checkOnline = async (engineerId) => {
+  const engineer = await AdminUser.findById(engineerId).select("isOnline");
+  return engineer?.isOnline === true;
+};
+
+const getOnHoldCalls = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
 
     const calls = await ServiceCall.find({
       "engineerInfo._id": engineerId,
-      status: { $nin: ["Open", "Completed", "Cancelled"] },
+      status: "On Hold",
+    })
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({ success: true, data: calls });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getHistoryCalls = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+
+    const calls = await ServiceCall.find({
+      "engineerInfo._id": engineerId,
+      status: { $in: ["Completed", "Cancelled"] },
+    })
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({ success: true, data: calls });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getAssignedCalls = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+
+    const calls = await ServiceCall.find({
+      "engineerInfo._id": engineerId,
+      status: "Assigned",
     })
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType")
       .sort({ updatedAt: -1 });
@@ -195,6 +234,9 @@ const startTravel = async (req, res) => {
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
+    if (!await checkOnline(engineerId))
+      return res.status(403).json({ success: false, message: "You must be online to perform this action" });
+
     if (!latitude || !longitude)
       return res.status(400).json({ success: false, message: "currentLocation.latitude and currentLocation.longitude are required" });
 
@@ -246,6 +288,9 @@ const reachedLocation = async (req, res) => {
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
+    if (!await checkOnline(engineerId))
+      return res.status(403).json({ success: false, message: "You must be online to perform this action" });
+
     const call = await ServiceCall.findById(callId);
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
@@ -272,6 +317,9 @@ const startWork = async (req, res) => {
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    if (!await checkOnline(engineerId))
+      return res.status(403).json({ success: false, message: "You must be online to perform this action" });
 
     if (files.length === 0)
       return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
@@ -314,6 +362,9 @@ const putOnHold = async (req, res) => {
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    if (!await checkOnline(engineerId))
+      return res.status(403).json({ success: false, message: "You must be online to perform this action" });
 
     if (!onHoldReason || !onHoldReason.trim())
       return res.status(400).json({ success: false, message: "onHoldReason is required" });
@@ -640,6 +691,9 @@ const completeCall = async (req, res) => {
     if (!mongoose.isValidObjectId(callId))
       return abort(400, "Invalid callId");
 
+    if (!await checkOnline(engineerId))
+      return abort(403, "You must be online to perform this action");
+
     let parsedUsedParts;
     try {
       parsedUsedParts = typeof usedParts === "string" ? JSON.parse(usedParts) : usedParts;
@@ -883,4 +937,4 @@ const completeCall = async (req, res) => {
 
 
 
-module.exports = { getActiveCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall };
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall };

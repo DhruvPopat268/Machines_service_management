@@ -23,7 +23,7 @@ interface CallsPageProps {
   description?: string;
 }
 
-interface DropdownOption { _id: string; name: string; }
+interface DropdownOption { _id: string; name: string; isOnline?: boolean; }
 
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
@@ -393,7 +393,12 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                     <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
                     <SelectContent>
                       {engineers.map((e) => (
-                        <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>
+                        <SelectItem key={e._id} value={e._id}>
+                          <span className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                            {e.name}
+                          </span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

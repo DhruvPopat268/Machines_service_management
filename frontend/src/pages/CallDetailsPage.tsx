@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, RefreshCw } from "lucide-react";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import Spinner from "@/components/Spinner";
@@ -39,14 +39,12 @@ const CallDetailsPage = () => {
   const [assignDialog, setAssignDialog] = useState(false);
   const [noteDialog, setNoteDialog] = useState(false);
   const [priorityDialog, setPriorityDialog] = useState(false);
-  const [statusDialog, setStatusDialog] = useState(false);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState("");
 
-  const [engineers, setEngineers] = useState<{ _id: string; name: string }[]>([]);
+  const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean }[]>([]);
 
   const { data: call, isLoading, isFetching } = useQuery({
     queryKey: ["serviceCall", id],
@@ -63,25 +61,14 @@ const CallDetailsPage = () => {
   if (!call) return <div className="text-center py-12 text-muted-foreground">Call not found</div>;
 
   const timelineSteps = [
-    { label: "Call Created",      date: formatDate(call.dates.created),                description: "Service call registered",              completed: true },
-    { label: "Engineer Assigned", date: formatDate(call.dates.assigned || ""),         description: call.engineerInfo ? `Assigned to ${call.engineerInfo.name}` : undefined, completed: !!call.dates.assigned,        active: call.status === "Assigned" },
-    { label: "Travel Started",    date: formatDate(call.dates.travelStarted || ""),    description: "Engineer on the way",                  completed: !!call.dates.travelStarted,   active: call.status === "Travel Started" },
-    { label: "Reached Location",  date: formatDate(call.dates.reachedLocation || ""), description: "Engineer arrived at customer site",     completed: !!call.dates.reachedLocation, active: call.status === "Reached Location" },
-    { label: "Work In Progress",  date: formatDate(call.dates.inProgress || ""),      description: "Engineer working on site",             completed: !!call.dates.inProgress,      active: call.status === "In Progress" },
-    { label: "On Hold",           date: formatDate(call.dates.onHold || ""),           description: (call as any).onHoldReason || "Work paused", completed: !!call.dates.onHold,      active: call.status === "On Hold" },
-    { label: "Completed",         date: formatDate(call.dates.completed || ""),        description: "Issue resolved",                       completed: !!call.dates.completed },
+    { label: "Call Created",      date: formatDateTime(call.dates.created),                description: "Service call registered",              completed: true },
+    { label: "Engineer Assigned", date: formatDateTime(call.dates.assigned || ""),         description: call.engineerInfo ? `Assigned to ${call.engineerInfo.name}` : undefined, completed: !!call.dates.assigned,        active: call.status === "Assigned" },
+    { label: "Travel Started",    date: formatDateTime(call.dates.travelStarted || ""),    description: "Engineer on the way",                  completed: !!call.dates.travelStarted,   active: call.status === "Travel Started" },
+    { label: "Reached Location",  date: formatDateTime(call.dates.reachedLocation || ""), description: "Engineer arrived at customer site",     completed: !!call.dates.reachedLocation, active: call.status === "Reached Location" },
+    { label: "Work In Progress",  date: formatDateTime(call.dates.inProgress || ""),      description: "Engineer working on site",             completed: !!call.dates.inProgress,      active: call.status === "In Progress" },
+    { label: "On Hold",           date: formatDateTime(call.dates.onHold || ""),           description: (call as any).onHoldReason || "Work paused", completed: !!call.dates.onHold,      active: call.status === "On Hold" },
+    { label: "Completed",         date: formatDateTime(call.dates.completed || ""),        description: "Issue resolved",                       completed: !!call.dates.completed },
   ];
-
-  const statusOptions: Record<string, string[]> = {
-    "Open":             ["Assigned", "Cancelled"],
-    "Assigned":         ["Travel Started", "Cancelled"],
-    "Travel Started":   ["Reached Location", "Cancelled"],
-    "Reached Location": ["In Progress", "Cancelled"],
-    "In Progress":      ["On Hold", "Completed", "Cancelled"],
-    "On Hold":          ["In Progress", "Cancelled"],
-  };
-
-  const nextStatuses = statusOptions[call.status] ?? [];
 
   return (
     <div className="space-y-6">
@@ -110,11 +97,6 @@ const CallDetailsPage = () => {
           <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedPriority(call.priority || ""); setPriorityDialog(true); }}>
             <Flag className="h-4 w-4" /> Set Priority
           </Button>
-          {nextStatuses.length > 0 && (
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedStatus(call.status); setStatusDialog(true); }}>
-            <RefreshCw className="h-4 w-4" /> Update Status
-          </Button>
-          )}
         </div>
       </div>
 
@@ -510,7 +492,14 @@ const CallDetailsPage = () => {
             <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
               <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
               <SelectContent>
-                {engineers.map((e) => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
+                {engineers.map((e) => (
+                  <SelectItem key={e._id} value={e._id}>
+                    <span className="flex items-center gap-2">
+                      <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                      {e.name}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -618,46 +607,6 @@ const CallDetailsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Update Status Dialog */}
-      <Dialog open={statusDialog} onOpenChange={setStatusDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Update Status — {call.callId}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-4">
-            <Label>Status</Label>
-            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={call.status} disabled>{call.status}</SelectItem>
-                {nextStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setStatusDialog(false)}>Cancel</Button>
-            <Button
-              disabled={selectedStatus === call.status || saving}
-              onClick={async () => {
-                if (!id) return;
-                setSaving(true);
-                try {
-                  await serviceCallsApi.updateCall(id, { status: selectedStatus });
-                  toast({ title: "Status Updated", description: `Status updated to ${selectedStatus}` });
-                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
-                  setStatusDialog(false);
-                } catch {
-                  toast({ title: "Error", description: "Failed to update status", variant: "destructive" });
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              {saving ? "Saving..." : "Update"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
