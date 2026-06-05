@@ -61,7 +61,7 @@ const getActiveCalls = async (req, res) => {
       "engineerInfo._id": engineerId,
       status: { $nin: ["Open", "Completed", "Cancelled"] },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType")
       .sort({ updatedAt: -1 });
 
     return res.status(200).json({ success: true, data: calls });
