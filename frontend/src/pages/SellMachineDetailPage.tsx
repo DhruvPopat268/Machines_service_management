@@ -23,6 +23,7 @@ interface ContractTypeSnapshot {
 interface SerialNumberEntry {
   serialNumber: string;
   contractType: ContractTypeSnapshot | null;
+  pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[];
 }
 
 interface PartCodeEntry {
@@ -83,7 +84,7 @@ const SellMachineDetailPage = () => {
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [codesDialog, setCodesDialog] = useState<{ title: string; items: Array<{ code: string; contractType: ContractTypeSnapshot | null }> } | null>(null);
+  const [codesDialog, setCodesDialog] = useState<{ title: string; isParts: boolean; items: Array<{ code: string; contractType: ContractTypeSnapshot | null; pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[] }> } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -160,8 +161,8 @@ const SellMachineDetailPage = () => {
         {sale.machines.map((m, mi) => {
           const isParts = m.categoryId === PARTS_CATEGORY_ID;
           const items   = isParts
-            ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType }))
-            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, contractType: e.contractType }));
+            ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType, pagesCategories: undefined }))
+            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, contractType: e.contractType, pagesCategories: e.pagesCategories }));
           return (
             <Card key={mi} className="border-0 shadow-sm">
               <CardHeader>
@@ -180,7 +181,7 @@ const SellMachineDetailPage = () => {
                     <p className="text-muted-foreground text-xs">{isParts ? "Part Codes" : "Serial Numbers"}</p>
                     {items.length > 0
                       ? <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 mt-1"
-                          onClick={() => setCodesDialog({ title: `${isParts ? "Part Codes" : "Serial Numbers"} — ${m.machineName}`, items })}>
+                          onClick={() => setCodesDialog({ title: `${isParts ? "Part Codes" : "Serial Numbers"} — ${m.machineName}`, isParts, items })}>
                           <Hash className="h-3.5 w-3.5" />{items.length} {isParts ? "Part Code" : "Serial Number"}{items.length !== 1 ? "s" : ""}
                         </Button>
                       : <p className="font-medium">—</p>}
@@ -201,25 +202,68 @@ const SellMachineDetailPage = () => {
 
       {/* Codes Dialog */}
       <Dialog open={!!codesDialog} onOpenChange={() => setCodesDialog(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl">
           <DialogHeader><DialogTitle>{codesDialog?.title}</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
-            {codesDialog?.items.map((item, idx) => (
-              <div key={idx} className="rounded-lg border p-3 space-y-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground font-medium">#{idx + 1}</span>
-                  <span className="text-sm font-medium font-mono">{item.code}</span>
-                </div>
-                {item.contractType && (
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t">
-                    <div><p className="text-muted-foreground">Contract</p><p className="font-medium">{item.contractType.name} ({item.contractType.code})</p></div>
-                    <div><p className="text-muted-foreground">Free Svc</p><span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeService ? "Yes" : "No"}</span></div>
-                    <div><p className="text-muted-foreground">Free Parts</p><span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeParts ? "Yes" : "No"}</span></div>
-                    <div><p className="text-muted-foreground">Valid</p><p className="font-medium">{formatDate(item.contractType.validFrom)} → {formatDate(item.contractType.validTo)}</p></div>
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="max-h-[65vh] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs w-10">#</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">{codesDialog?.isParts ? "Part Code" : "Serial Number"}</th>
+                  {!codesDialog?.isParts && (
+                    <>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Contract Type</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Free Svc</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Free Parts</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Valid From</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Valid To</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Pages Categories</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {codesDialog?.items.map((item, idx) => (
+                  <tr key={idx} className="hover:bg-muted/20">
+                    <td className="px-3 py-2.5 text-muted-foreground text-xs">{idx + 1}</td>
+                    <td className="px-3 py-2.5 font-mono font-medium">{item.code}</td>
+                    {!codesDialog.isParts && (
+                      <>
+                        <td className="px-3 py-2.5">
+                          {item.contractType
+                            ? <span className="font-medium">{item.contractType.name} <span className="text-muted-foreground text-xs">({item.contractType.code})</span></span>
+                            : <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {item.contractType != null
+                            ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeService ? "Yes" : "No"}</span>
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {item.contractType != null
+                            ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeParts ? "Yes" : "No"}</span>
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validFrom) : "—"}</td>
+                        <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validTo) : "—"}</td>
+                        <td className="px-3 py-2.5">
+                          {item.pagesCategories && item.pagesCategories.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              {item.pagesCategories.map((pc, pi) => (
+                                <span key={pi} className="inline-flex items-center gap-1 text-xs">
+                                  <span className="font-medium">{pc.pagesCategory}</span>
+                                  <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </DialogContent>
       </Dialog>

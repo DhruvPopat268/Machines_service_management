@@ -1160,7 +1160,7 @@ const getCounterReadingAssignedCalls = async (req, res) => {
 
     const calls = await ServiceCall.find({
       "engineerInfo._id": engineerId,
-      status: { $in: ["Assigned", "Travel Started", "Reached Location", "In Progress", "On Hold"] },
+      status: { $in: ["Assigned"] },
       callType: "Counter-Reading",
     })
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
