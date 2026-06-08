@@ -28,6 +28,7 @@ interface MachineDetail {
     machineId: string; machineName: string; modelNumber: string;
     categoryId: string; category: string; divisionId: string; division: string;
     serialNumber: string; contractType: ContractTypeInfo; images: string[];
+    pagesCategories: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[];
   };
   lastReadings: LastReading[];
   createdAt: string;
@@ -206,6 +207,37 @@ const CustomerOwnedMachinePage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Pages Categories */}
+      {machine.pagesCategories?.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-4 w-4" /> Pages Categories
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/40 border-b">
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">#</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Category</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Cost / Page</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {machine.pagesCategories.map((pc, i) => (
+                  <tr key={pc.pagesCategoryId} className="hover:bg-muted/20">
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{i + 1}</td>
+                    <td className="px-4 py-2.5 font-medium">{pc.pagesCategory}</td>
+                    <td className="px-4 py-2.5">₹{pc.costPerPage}/pg</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Last Counter Readings */}
       {detail.lastReadings?.length > 0 && (

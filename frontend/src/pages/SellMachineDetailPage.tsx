@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Package, Hash } from "lucide-react";
+import { ArrowLeft, User, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
@@ -84,7 +83,6 @@ const SellMachineDetailPage = () => {
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [codesDialog, setCodesDialog] = useState<{ title: string; isParts: boolean; items: Array<{ code: string; contractType: ContractTypeSnapshot | null; pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[] }> } | null>(null);
 
   useEffect(() => {
     const fetch = async () => {
@@ -174,22 +172,74 @@ const SellMachineDetailPage = () => {
                   <span className="ml-auto text-sm font-semibold">₹{m.sellingTotal.toLocaleString()}</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
+              <CardContent className="space-y-4">
+                {/* Price summary */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                   <div><p className="text-muted-foreground text-xs">Quantity</p><p className="font-medium">{m.quantity}</p></div>
-                  <div>
-                    <p className="text-muted-foreground text-xs">{isParts ? "Part Codes" : "Serial Numbers"}</p>
-                    {items.length > 0
-                      ? <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5 mt-1"
-                          onClick={() => setCodesDialog({ title: `${isParts ? "Part Codes" : "Serial Numbers"} — ${m.machineName}`, isParts, items })}>
-                          <Hash className="h-3.5 w-3.5" />{items.length} {isParts ? "Part Code" : "Serial Number"}{items.length !== 1 ? "s" : ""}
-                        </Button>
-                      : <p className="font-medium">—</p>}
-                  </div>
                   <div><p className="text-muted-foreground text-xs">Selling Price</p><p className="font-medium">₹{m.sellingPrice.toLocaleString()}</p></div>
                   {m.discountedSellingPrice != null && <div><p className="text-muted-foreground text-xs">Disc. Selling Price</p><p className="font-medium">₹{m.discountedSellingPrice.toLocaleString()}</p></div>}
                   {m.division && <div><p className="text-muted-foreground text-xs">Division</p><p className="font-medium">{m.division}</p></div>}
                 </div>
+
+                {/* Inline codes table */}
+                {items.length > 0 && (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted/40 border-b">
+                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-10">#</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">{isParts ? "Part Code" : "Serial Number"}</th>
+                          {!isParts && (
+                            <>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Contract Type</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Free Svc</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Free Parts</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Valid From</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Valid To</th>
+                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Pages Categories</th>
+                            </>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {items.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-muted/20">
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">{idx + 1}</td>
+                            <td className="px-3 py-2.5 font-mono font-medium text-sm">{item.code}</td>
+                            {!isParts && (
+                              <>
+                                <td className="px-3 py-2.5 text-xs">
+                                  {item.contractType
+                                    ? <span className="font-medium">{item.contractType.name} <span className="text-muted-foreground">({item.contractType.code})</span></span>
+                                    : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {item.contractType != null
+                                    ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeService ? "Yes" : "No"}</span>
+                                    : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {item.contractType != null
+                                    ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeParts ? "Yes" : "No"}</span>
+                                    : <span className="text-muted-foreground">—</span>}
+                                </td>
+                                <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validFrom) : "—"}</td>
+                                <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validTo) : "—"}</td>
+                                <td className="px-3 py-2.5">
+                                  {item.pagesCategories && item.pagesCategories.length > 0
+                                    ? <div className="flex flex-col gap-0.5">{item.pagesCategories.map((pc, pi) => (
+                                        <span key={pi} className="text-xs"><span className="font-medium">{pc.pagesCategory}</span> <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span></span>
+                                      ))}</div>
+                                    : <span className="text-muted-foreground text-xs">—</span>}
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -200,73 +250,7 @@ const SellMachineDetailPage = () => {
         <p className="text-sm font-medium">Grand Total: <span className="text-lg font-bold text-green-600">₹{sale.grandTotal.toLocaleString()}</span></p>
       </div>
 
-      {/* Codes Dialog */}
-      <Dialog open={!!codesDialog} onOpenChange={() => setCodesDialog(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader><DialogTitle>{codesDialog?.title}</DialogTitle></DialogHeader>
-          <div className="max-h-[65vh] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/40">
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs w-10">#</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">{codesDialog?.isParts ? "Part Code" : "Serial Number"}</th>
-                  {!codesDialog?.isParts && (
-                    <>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Contract Type</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Free Svc</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Free Parts</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Valid From</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Valid To</th>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Pages Categories</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {codesDialog?.items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-muted/20">
-                    <td className="px-3 py-2.5 text-muted-foreground text-xs">{idx + 1}</td>
-                    <td className="px-3 py-2.5 font-mono font-medium">{item.code}</td>
-                    {!codesDialog.isParts && (
-                      <>
-                        <td className="px-3 py-2.5">
-                          {item.contractType
-                            ? <span className="font-medium">{item.contractType.name} <span className="text-muted-foreground text-xs">({item.contractType.code})</span></span>
-                            : <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {item.contractType != null
-                            ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeService ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeService ? "Yes" : "No"}</span>
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {item.contractType != null
-                            ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.contractType.freeParts ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{item.contractType.freeParts ? "Yes" : "No"}</span>
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validFrom) : "—"}</td>
-                        <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validTo) : "—"}</td>
-                        <td className="px-3 py-2.5">
-                          {item.pagesCategories && item.pagesCategories.length > 0 ? (
-                            <div className="flex flex-col gap-1">
-                              {item.pagesCategories.map((pc, pi) => (
-                                <span key={pi} className="inline-flex items-center gap-1 text-xs">
-                                  <span className="font-medium">{pc.pagesCategory}</span>
-                                  <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span>
-                                </span>
-                              ))}
-                            </div>
-                          ) : <span className="text-muted-foreground text-xs">—</span>}
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </div>
   );
 };

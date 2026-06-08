@@ -299,15 +299,16 @@ const getCustomerMachineDetail = async (req, res) => {
           images = machineDoc?.images || [];
         }
         resultMachine = {
-          machineId:    machine.machineId,
-          machineName:  machine.machineName,
-          modelNumber:  machine.modelNumber,
-          categoryId:   machine.categoryId,
-          category:     machine.category,
-          divisionId:   machine.divisionId,
-          division:     machine.division,
-          serialNumber: entry.serialNumber,
-          contractType: entry.contractType,
+          machineId:       machine.machineId,
+          machineName:     machine.machineName,
+          modelNumber:     machine.modelNumber,
+          categoryId:      machine.categoryId,
+          category:        machine.category,
+          divisionId:      machine.divisionId,
+          division:        machine.division,
+          serialNumber:    entry.serialNumber,
+          contractType:    entry.contractType,
+          pagesCategories: entry.pagesCategories ?? [],
           images,
         };
         break;
