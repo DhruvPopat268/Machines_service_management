@@ -301,6 +301,14 @@ const createSale = async (req, res) => {
 
     const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotal }], { session });
 
+    // ── Deduct currentStock from Machine ──
+    for (const e of machineEntries) {
+      const machine = await Machine.findById(e.machineId).session(session);
+      const newStock = Math.max(0, machine.currentStock - e.quantity);
+      const stockStatus = newStock === 0 ? "Out of Stock" : machine.lowStockThreshold === -1 ? "In Stock" : newStock <= machine.lowStockThreshold ? "Low Stock" : "In Stock";
+      await Machine.updateOne({ _id: e.machineId }, { $set: { currentStock: newStock, stockStatus } }, { session });
+    }
+
     // ── Mark serial numbers and part codes as sold in PurchasedMachine ──
     for (const sn of allSerialNumbers) {
       await PurchasedMachine.updateOne(
