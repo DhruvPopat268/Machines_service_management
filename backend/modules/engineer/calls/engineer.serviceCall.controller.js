@@ -324,11 +324,6 @@ const startWork = async (req, res) => {
     if (!await checkOnline(engineerId))
       return res.status(403).json({ success: false, message: "You must be online to perform this action" });
 
-    if (files.length === 0)
-      return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
-    if (files.length > 5)
-      return res.status(400).json({ success: false, message: "beforeWorkImages must not exceed 5 images" });
-
     const call = await ServiceCall.findById(callId);
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
@@ -339,17 +334,28 @@ const startWork = async (req, res) => {
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
 
+    const isCounterReading = call.callType === "Counter-Reading";
+
+    if (!isCounterReading) {
+      if (files.length === 0)
+        return res.status(400).json({ success: false, message: "beforeWorkImages are required" });
+      if (files.length > 5)
+        return res.status(400).json({ success: false, message: "beforeWorkImages must not exceed 5 images" });
+    }
+
     let beforeWorkImages;
-    try {
-      beforeWorkImages = await processImages(files);
-    } catch (imgErr) {
-      return res.status(400).json({ success: false, message: imgErr.message });
+    if (!isCounterReading && files.length > 0) {
+      try {
+        beforeWorkImages = await processImages(files);
+      } catch (imgErr) {
+        return res.status(400).json({ success: false, message: imgErr.message });
+      }
     }
 
     await call.updateOne({
       status: "In Progress",
       "dates.inProgress": new Date(),
-      beforeWorkImages,
+      ...(beforeWorkImages && { beforeWorkImages }),
     });
 
     return res.status(200).json({ success: true, message: "Work started" });
@@ -715,15 +721,6 @@ const completeCall = async (req, res) => {
     const afterFiles  = files.afterWorkImages || [];
     const sigFiles    = files.customerSignature || [];
 
-    if (afterFiles.length === 0)
-      return abort(400, "afterWorkImages are required");
-    if (afterFiles.length > 5)
-      return abort(400, "afterWorkImages must not exceed 5 images");
-    if (sigFiles.length === 0)
-      return abort(400, "customerSignature is required");
-    if (sigFiles.length > 1)
-      return abort(400, "customerSignature must be a single image");
-
     const call = await ServiceCall.findById(callId).session(session);
     if (!call)
       return abort(404, "Call not found");
@@ -733,6 +730,19 @@ const completeCall = async (req, res) => {
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return abort(403, "You are not assigned to this call");
+
+    const isCounterReading = call.callType === "Counter-Reading";
+
+    if (!isCounterReading) {
+      if (afterFiles.length === 0)
+        return abort(400, "afterWorkImages are required");
+      if (afterFiles.length > 5)
+        return abort(400, "afterWorkImages must not exceed 5 images");
+      if (sigFiles.length === 0)
+        return abort(400, "customerSignature is required");
+      if (sigFiles.length > 1)
+        return abort(400, "customerSignature must be a single image");
+    }
 
     // usedParts only apply to Service-Call type; ignore for other call types
     const hasUsedParts = Array.isArray(parsedUsedParts) && parsedUsedParts.length > 0 && call.callType === "Service-Call";
@@ -748,11 +758,13 @@ const completeCall = async (req, res) => {
 
     // ── Upload images ──
     let afterWorkImages, customerSignature;
-    try {
-      afterWorkImages   = await processImages(afterFiles);
-      customerSignature = (await processImages(sigFiles))[0];
-    } catch (imgErr) {
-      return abort(400, imgErr.message);
+    if (!isCounterReading) {
+      try {
+        afterWorkImages   = await processImages(afterFiles);
+        customerSignature = (await processImages(sigFiles))[0];
+      } catch (imgErr) {
+        return abort(400, imgErr.message);
+      }
     }
 
     // ── Resolve parts pricing and build inventory structures ──
@@ -1017,8 +1029,8 @@ const completeCall = async (req, res) => {
         $set: {
           status:              "Completed",
           "dates.completed":   new Date(),
-          afterWorkImages,
-          customerSignature,
+          ...(afterWorkImages   && { afterWorkImages }),
+          ...(customerSignature && { customerSignature }),
           totalPartsCharges,
           totalServiceCharges,
           totalCharges,
