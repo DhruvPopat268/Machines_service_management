@@ -314,11 +314,33 @@ const getCustomerMachineDetail = async (req, res) => {
       }
     }
 
+    // Fetch last counter readings for this serial number from the most recent completed service call
+    const lastCall = await ServiceCall.findOne({
+      "machines.serialNumber": serialNumber.trim(),
+      "machines.counterReadings.serialNumber": serialNumber.trim(),
+    })
+      .sort({ "dates.completed": -1, createdAt: -1 })
+      .select("machines.serialNumber machines.counterReadings");
+
+    let lastReadings = [];
+    if (lastCall) {
+      const machine = lastCall.machines.find(m => m.serialNumber === serialNumber.trim());
+      const counterReading = machine?.counterReadings?.find(cr => cr.serialNumber === serialNumber.trim());
+      if (counterReading?.categories?.length) {
+        lastReadings = counterReading.categories.map(c => ({
+          pagesCategoryId: c.pagesCategoryId,
+          pagesCategory:   c.pagesCategory,
+          lastReading:     c.currentReading,
+        }));
+      }
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         customerInfo: soldRecord.customerInfo,
         machine:      resultMachine,
+        lastReadings,
         createdAt:    soldRecord.createdAt,
         updatedAt:    soldRecord.updatedAt,
       },
@@ -434,6 +456,12 @@ const raiseServiceCall = async (req, res) => {
 
       if (!foundMachine)
         return res.status(404).json({ success: false, message: `Serial number "${sn}" not found for this customer` });
+
+      if (callType !== "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() === process.env.TSS_CONTRACT_TYPE_ID)
+        return res.status(400).json({ success: false, message: `Serial number "${sn}" has a TSS contract and can only be used for Counter-Reading calls` });
+
+      if (callType === "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() !== process.env.TSS_CONTRACT_TYPE_ID)
+        return res.status(400).json({ success: false, message: `Serial number "${sn}" is not eligible for Counter-Reading calls` });
 
       const isExpired     = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
       const notFreeService = !foundEntry.contractType?.freeService;

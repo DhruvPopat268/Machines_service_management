@@ -16,5 +16,6 @@ router.use("/service-calls", require("./calls/admin.serviceCall.routes"));
 router.use("/system-users",  require("./usersManagement/admin.systemUser.routes"));
 router.use("/engineers",     require("./engineerManagement/admin.engineer.routes"));
 router.use("/reimbursements", require("./reimbursement/admin.reimbursement.routes"));
+router.use("/pages-categories", require("./pagesCategoryManagement/admin.pagesCategory.routes"));
 
 module.exports = router;

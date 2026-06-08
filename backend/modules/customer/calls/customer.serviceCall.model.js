@@ -13,6 +13,27 @@ const contractTypeSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const counterReadingCategorySchema = new mongoose.Schema(
+  {
+    pagesCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: "PagesCategory", required: true },
+    pagesCategory:   { type: String, trim: true, required: true },
+    lastReading:     { type: Number, required: true },
+    currentReading:  { type: Number, required: true },
+    costPerPage:     { type: Number, required: true },
+    diff:            { type: Number, required: true },
+    chargesInRupees: { type: Number, required: true },
+  },
+  { _id: false }
+);
+
+const counterReadingSchema = new mongoose.Schema(
+  {
+    serialNumber: { type: String, trim: true, required: true },
+    categories:   { type: [counterReadingCategorySchema], default: [] },
+  },
+  { _id: false }
+);
+
 const usedPartSchema = new mongoose.Schema(
   {
     partCode:               { type: String, trim: true, required: true },
@@ -45,6 +66,7 @@ const machineEntrySchema = new mongoose.Schema(
     serviceCharge:    { type: Number },
     partsCharge:      { type: Number },
     usedParts:        { type: [usedPartSchema], default: [] },
+    counterReadings:  { type: [counterReadingSchema], default: [] },
   },
   { _id: false }
 );
@@ -113,6 +135,7 @@ const serviceCallSchema = new mongoose.Schema(
     createdBy:           { type: String, enum: ["Admin", "Customer"], default: "Customer" },
     totalServiceCharges: { type: Number },
     totalPartsCharges:   { type: Number },
+    totalCounterReadingCharges: { type: Number },
     totalCharges:        { type: Number },
     beforeWorkImages:    { type: [String] },
     afterWorkImages:     { type: [String] },
@@ -127,6 +150,7 @@ const serviceCallSchema = new mongoose.Schema(
 serviceCallSchema.index({ "customerInfo.customerId": 1 });
 serviceCallSchema.index({ "machines.machineId": 1 });
 serviceCallSchema.index({ "machines.serialNumber": 1 });
+serviceCallSchema.index({ "machines.counterReadings.serialNumber": 1 });
 serviceCallSchema.index({ "machines.contractType.contractTypeId": 1 });
 serviceCallSchema.index({ "engineerInfo._id": 1 });
 serviceCallSchema.index({ status: 1 });

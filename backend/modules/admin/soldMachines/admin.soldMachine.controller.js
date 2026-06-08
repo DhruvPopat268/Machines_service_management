@@ -5,10 +5,12 @@ const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.mo
 const Machine          = require("../inventoryManagement/admin.machine.model");
 const Customer         = require("../customerManagement/admin.customer.model");
 const ContractType     = require("../contractTypesManagement/admin.contractType.model");
+const PagesCategory    = require("../pagesCategoryManagement/admin.pagesCategory.model");
 const InventoryLog     = require("../inventoryLogs/admin.inventoryLog.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
 
-const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
+const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
+const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const buildMachineFilter = (category, division, machineId) => {
   const f = {};
@@ -263,6 +265,21 @@ const createSale = async (req, res) => {
           if (isNaN(validFrom.getTime())) throw new Error(`Invalid validFrom for serial ${sEntry.serialNumber}`);
           if (isNaN(validTo.getTime()))   throw new Error(`Invalid validTo for serial ${sEntry.serialNumber}`);
           if (validTo <= validFrom)       throw new Error(`validTo must be after validFrom for serial ${sEntry.serialNumber}`);
+
+          let pagesCategories = [];
+          if (TSS_CONTRACT_TYPE_ID && ct._id.toString() === TSS_CONTRACT_TYPE_ID) {
+            pagesCategories = await Promise.all((sEntry.pagesCategories || []).map(async (pc) => {
+              const cat = await PagesCategory.findById(pc.pagesCategoryId).session(session);
+              if (!cat) throw new Error(`Pages category "${pc.pagesCategoryId}" not found`);
+              if (cat.status === "Inactive") throw new Error(`Pages category "${cat.name}" is inactive`);
+              return {
+                pagesCategoryId: cat._id,
+                pagesCategory:   cat.name,
+                costPerPage:     Number(pc.costPerPage),
+              };
+            }));
+          }
+
           return {
             serialNumber: sEntry.serialNumber.trim(),
             contractType: {
@@ -274,6 +291,7 @@ const createSale = async (req, res) => {
               validFrom,
               validTo,
             },
+            pagesCategories,
           };
         }));
       }

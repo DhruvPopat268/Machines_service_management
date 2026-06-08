@@ -119,6 +119,12 @@ const raiseServiceCall = async (req, res) => {
       if (foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date())
         return res.status(400).json({ success: false, message: `Serial number "${sn}" has an expired contract` });
 
+      if ((callType || "Service-Call") !== "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() === process.env.TSS_CONTRACT_TYPE_ID)
+        return res.status(400).json({ success: false, message: `Serial number "${sn}" has a TSS contract and can only be used for Counter-Reading calls` });
+
+      if ((callType || "Service-Call") === "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() !== process.env.TSS_CONTRACT_TYPE_ID)
+        return res.status(400).json({ success: false, message: `Serial number "${sn}" is not eligible for Counter-Reading calls` });
+
       if (!foundEntry.contractType?.freeService)
         return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a free service contract. Please contact support.` });
 

@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
-const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
+const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
+const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const validateCreateSale = (body) => {
   const { customerId, machines } = body;
@@ -65,6 +66,18 @@ const validateCreateSale = (body) => {
         if (isNaN(from.getTime())) return `${slabel}: invalid validFrom date`;
         if (isNaN(to.getTime()))   return `${slabel}: invalid validTo date`;
         if (to <= from)            return `${slabel}: validTo must be after validFrom`;
+
+        if (TSS_CONTRACT_TYPE_ID && entry.contractTypeId.toString() === TSS_CONTRACT_TYPE_ID) {
+          if (!Array.isArray(entry.pagesCategories) || entry.pagesCategories.length === 0)
+            return `${slabel}: pagesCategories is required (at least 1) for TSS contract type`;
+          for (let pi = 0; pi < entry.pagesCategories.length; pi++) {
+            const pc = entry.pagesCategories[pi];
+            if (!pc.pagesCategoryId || !mongoose.isValidObjectId(pc.pagesCategoryId))
+              return `${slabel} pagesCategories[${pi}]: invalid or missing pagesCategoryId`;
+            if (pc.costPerPage == null || isNaN(Number(pc.costPerPage)) || Number(pc.costPerPage) < 0)
+              return `${slabel} pagesCategories[${pi}]: costPerPage must be a non-negative number`;
+          }
+        }
       }
     }
   }

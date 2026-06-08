@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -34,6 +34,8 @@ const singleItems: NavItem[] = [
 const zonesItem: NavItem = { title: "Zones", url: "/zones", icon: MapPin };
 
 const contractTypesItem: NavItem = { title: "Contract Types", url: "/contract-types", icon: FileSignature };
+
+const pagesCategoryItem: NavItem = { title: "Pages Categories", url: "/pages-categories", icon: LayoutList };
 
 const usersItem: NavItem = { title: "System Users", url: "/users", icon: UserCog };
 const userRolesItem: NavItem = { title: "User Roles", url: "/user-roles", icon: Users };
@@ -276,6 +278,30 @@ export function AppSidebar() {
                       <span className="flex items-center gap-2">
                         <contractTypesItem.icon className="h-3.5 w-3.5 shrink-0" />
                         {contractTypesItem.title}
+                      </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Pages Category Management</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to={pagesCategoryItem.url} end className={linkClass} activeClassName={activeClass}>
+                      <pagesCategoryItem.icon className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to={pagesCategoryItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
+                      <span className="flex items-center gap-2">
+                        <pagesCategoryItem.icon className="h-3.5 w-3.5 shrink-0" />
+                        {pagesCategoryItem.title}
                       </span>
                     </NavLink>
                   )}

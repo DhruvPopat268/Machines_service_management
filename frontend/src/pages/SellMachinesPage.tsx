@@ -9,13 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash } from "lucide-react";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
-const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const PARTS_CATEGORY_ID    = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,12 +27,15 @@ interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
 interface ContractType { _id: string; name: string; code: string; freeService: boolean; freeParts: boolean; }
 
+interface PagesCategory { _id: string; name: string; }
+interface PagesCategoryEntry { pagesCategoryId: string; pagesCategory: string; costPerPage: string; }
+
 interface MachineEntry {
   machine: Machine;
   quantity: string;
   sellingPrice: string;
   discountedSellingPrice: string;
-  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string }[];
+  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string; pagesCategories: PagesCategoryEntry[] }[];
   partCodes: string[];
 }
 
@@ -42,6 +46,14 @@ interface CodesDialogState {
   codes: { value: string; contractTypeId: string; validFrom: string; validTo: string }[];
   saving: boolean;
   loading: boolean;
+}
+
+interface PagesCategoryConfigState {
+  serialNumbers: string[];
+  currentIndex: number;
+  mi: number;
+  pendingCodes: CodesDialogState["codes"];
+  configs: Record<string, PagesCategoryEntry[]>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -69,7 +81,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [submitting, setSubmitting]       = useState(false);
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
   const [customerForm, setCustomerForm]   = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
-  const [codesDialog, setCodesDialog]     = useState<CodesDialogState | null>(null);
+  const [codesDialog, setCodesDialog]         = useState<CodesDialogState | null>(null);
+  const [pagesCatConfig, setPagesCatConfig]   = useState<PagesCategoryConfigState | null>(null);
+  const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
   const ctAbortRef    = useRef<AbortController | null>(null);
   const searchRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef    = useRef<HTMLDivElement>(null);
@@ -101,7 +115,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   }, []);
 
   useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
-  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); }, [open]);
+  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); }, [open]);
+
+  const fetchActivePagesCats = async () => {
+    try {
+      const r = await api.get("/admin/pages-categories/active");
+      setActivePagesCats(r.data.data);
+    } catch { toast.error("Failed to load pages categories"); }
+  };
   useEffect(() => { if (searchRef.current) clearTimeout(searchRef.current); searchRef.current = setTimeout(() => fetchMachines(machineSearch), 400); }, [machineSearch]);
   useEffect(() => {
     const h = (e: MouseEvent) => { if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setDropdownOpen(false); };
@@ -173,10 +194,30 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
     if (isParts) {
       updateEntry(mi, "partCodes", trimmedValues);
-    } else {
-      updateEntry(mi, "serialNumbers", codes.map(c => ({ serialNumber: c.value.trim(), contractTypeId: c.contractTypeId, validFrom: c.validFrom, validTo: c.validTo })));
+      setCodesDialog(null);
+      return;
     }
-    setCodesDialog(null);
+
+    // Check if any serial has TSS contract type — needs pages category config
+    const tssSerials = TSS_CONTRACT_TYPE_ID
+      ? codes.slice(0, quantity).filter(c => c.contractTypeId === TSS_CONTRACT_TYPE_ID).map(c => c.value.trim())
+      : [];
+
+    if (tssSerials.length > 0) {
+      const existing = entries[mi].serialNumbers;
+      const existingConfigs: Record<string, PagesCategoryEntry[]> = {};
+      for (const sn of tssSerials) {
+        const prev = existing.find(s => s.serialNumber === sn);
+        existingConfigs[sn] = (prev?.pagesCategories ?? []).map(e => ({ ...e, costPerPage: String(e.costPerPage) }));
+      }
+      setPagesCatConfig({ serialNumbers: tssSerials, currentIndex: 0, mi, pendingCodes: codes, configs: existingConfigs });
+    } else {
+      updateEntry(mi, "serialNumbers", codes.slice(0, quantity).map(c => ({
+        serialNumber: c.value.trim(), contractTypeId: c.contractTypeId,
+        validFrom: c.validFrom, validTo: c.validTo, pagesCategories: [],
+      })));
+      setCodesDialog(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -206,7 +247,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
           ...(isParts
             ? { partCodes: e.partCodes }
-            : { serialNumbers: e.serialNumbers }),
+            : { serialNumbers: e.serialNumbers.map(s => ({ ...s, pagesCategories: (s.pagesCategories ?? []).map(p => ({ ...p, costPerPage: Number(p.costPerPage) })) })) }),
         };
       }),
     };
@@ -398,6 +439,43 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                               onChange={(e) => updateEntry(mi, "discountedSellingPrice", e.target.value)} />
                           </div>
                         </div>
+                        {/* TSS serial numbers — pages category edit */}
+                        {!isParts && entry.serialNumbers.some(s => s.contractTypeId === TSS_CONTRACT_TYPE_ID) && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs text-muted-foreground">Pages Category Config</Label>
+                            <div className="flex flex-col gap-1">
+                              {entry.serialNumbers.filter(s => s.contractTypeId === TSS_CONTRACT_TYPE_ID).map((s) => (
+                                <div key={s.serialNumber} className="flex items-center justify-between rounded-md border px-2.5 py-1.5 bg-muted/30">
+                                  <div>
+                                    <p className="text-xs font-medium">{s.serialNumber}</p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {s.pagesCategories.length > 0
+                                        ? s.pagesCategories.map(p => `${p.pagesCategory} — ₹${p.costPerPage}/pg`).join(", ")
+                                        : <span className="text-amber-600">No pages categories configured</span>}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                                    onClick={() => {
+                                      const existingConfigs: Record<string, PagesCategoryEntry[]> = {
+                                        [s.serialNumber]: (s.pagesCategories ?? []).map(e => ({ ...e, costPerPage: String(e.costPerPage) })),
+                                      };
+                                      setPagesCatConfig({
+                                        serialNumbers: [s.serialNumber],
+                                        currentIndex: 0,
+                                        mi,
+                                        pendingCodes: entry.serialNumbers.map(sn => ({ value: sn.serialNumber, contractTypeId: sn.contractTypeId, validFrom: sn.validFrom, validTo: sn.validTo })),
+                                        configs: existingConfigs,
+                                      });
+                                    }}
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -420,6 +498,142 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </div>
         </div>
       </DialogContent>
+
+      {/* Pages Category Config Dialog */}
+      {pagesCatConfig && (() => {
+        const { serialNumbers, currentIndex, mi, pendingCodes, configs } = pagesCatConfig;
+        const sn       = serialNumbers[currentIndex];
+        const entries_ = configs[sn] ?? [];
+
+        const setEntries_ = (updated: PagesCategoryEntry[]) =>
+          setPagesCatConfig(p => p ? { ...p, configs: { ...p.configs, [sn]: updated } } : p);
+
+        const allConfigured = serialNumbers.every(s => (configs[s] ?? []).length > 0);
+
+        const commit = () => {
+          // validate all serials
+          for (const snKey of serialNumbers) {
+            const snEntries = configs[snKey] ?? [];
+            if (snEntries.length === 0) { toast.error(`Add at least one pages category for serial ${snKey}`); return; }
+            for (let pi = 0; pi < snEntries.length; pi++) {
+              const e = snEntries[pi];
+              if (!e.pagesCategoryId) { toast.error(`Select a pages category for ${snKey} entry ${pi + 1}`); return; }
+              if (e.costPerPage === "" || isNaN(Number(e.costPerPage)) || Number(e.costPerPage) < 0) {
+                toast.error(`Enter a valid cost per page for ${snKey} entry ${pi + 1}`); return;
+              }
+            }
+          }
+          updateEntry(mi, "serialNumbers", pendingCodes.map(c => ({
+            serialNumber:    c.value.trim(),
+            contractTypeId:  c.contractTypeId,
+            validFrom:       c.validFrom,
+            validTo:         c.validTo,
+            pagesCategories: (configs[c.value.trim()] ?? entries[mi].serialNumbers.find(s => s.serialNumber === c.value.trim())?.pagesCategories?.map(e => ({ ...e, costPerPage: String(e.costPerPage) })) ?? []).map(e => ({
+              pagesCategoryId: e.pagesCategoryId,
+              pagesCategory:   e.pagesCategory,
+              costPerPage:     String(e.costPerPage),
+            })),
+          })));
+          setPagesCatConfig(null);
+          setCodesDialog(null);
+        };
+
+        const usedCategoryIds = entries_.map(e => e.pagesCategoryId).filter(Boolean);
+
+        return (
+          <Dialog open onOpenChange={(o) => { if (!o) setPagesCatConfig(null); }}>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>Pages Category Config</DialogTitle>
+              </DialogHeader>
+
+              {/* Serial number tabs */}
+              {serialNumbers.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  {serialNumbers.map((s, idx) => {
+                    const configured = (configs[s] ?? []).length > 0;
+                    const isActive   = idx === currentIndex;
+                    return (
+                      <button
+                        key={s} type="button"
+                        onClick={() => setPagesCatConfig(p => p ? { ...p, currentIndex: idx } : p)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                          isActive
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : configured
+                              ? "bg-green-50 text-green-700 border-green-300"
+                              : "bg-muted text-muted-foreground border-border hover:border-primary/50"
+                        }`}
+                      >
+                        {s} {configured && !isActive ? "✓" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Current serial label */}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Configuring: <span className="text-foreground">{sn}</span>
+              </p>
+
+              {/* Pages category entries for selected serial */}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {entries_.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-3">No entries yet. Add a pages category below.</p>
+                )}
+                {entries_.map((entry, pi) => {
+                  const availableOpts = activePagesCats.filter(
+                    c => c._id === entry.pagesCategoryId || !usedCategoryIds.includes(c._id)
+                  );
+                  return (
+                    <div key={pi} className="flex items-end gap-2 rounded-lg border p-3">
+                      <div className="flex-1 space-y-1">
+                        <Label className="text-xs text-muted-foreground">Pages Category <span className="text-destructive">*</span></Label>
+                        <Select
+                          value={entry.pagesCategoryId}
+                          onValueChange={(v) => {
+                            const cat = activePagesCats.find(c => c._id === v);
+                            setEntries_(entries_.map((e, i) => i !== pi ? e : { ...e, pagesCategoryId: v, pagesCategory: cat?.name ?? "" }));
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
+                          <SelectContent>
+                            {availableOpts.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="w-32 space-y-1">
+                        <Label className="text-xs text-muted-foreground">Cost / Page <span className="text-destructive">*</span></Label>
+                        <Input
+                          type="number" min={0} className="h-8 text-xs" placeholder="0.00"
+                          value={entry.costPerPage}
+                          onChange={(e) => setEntries_(entries_.map((en, i) => i !== pi ? en : { ...en, costPerPage: e.target.value }))}
+                        />
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => setEntries_(entries_.filter((_, i) => i !== pi))}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  );
+                })}
+                {entries_.length < activePagesCats.length && (
+                  <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs h-8"
+                    onClick={() => setEntries_([...entries_, { pagesCategoryId: "", pagesCategory: "", costPerPage: "" }])}>
+                    <Plus className="h-3.5 w-3.5" /> Add Pages Category
+                  </Button>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPagesCatConfig(null)}>Cancel</Button>
+                <Button onClick={commit} disabled={!allConfigured}>Done</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Codes Dialog */}
       {codesDialog && (

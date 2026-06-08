@@ -27,6 +27,7 @@ import PurchaseMachineDetailPage from "./pages/PurchaseMachineDetailPage";
 import SellMachinesPage from "./pages/SellMachinesPage";
 import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
+import PagesCategoriesPage from "./pages/PagesCategoriesPage";
 import ZonesPage from "./pages/ZonesPage";
 import VendorsPage from "./pages/VendorsPage";
 import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
@@ -75,6 +76,7 @@ const App = () => (
             <Route path="/customers" element={<CustomersPage />} />
             <Route path="/problem-types" element={<ProblemTypesPage />} />
             <Route path="/contract-types" element={<ContractTypesPage />} />
+            <Route path="/pages-categories" element={<PagesCategoriesPage />} />
             <Route path="/zones" element={<ZonesPage />} />
             <Route path="/vendors" element={<VendorsPage />} />
             <Route path="/reimbursements" element={<TravelReimbursementsPage />} />

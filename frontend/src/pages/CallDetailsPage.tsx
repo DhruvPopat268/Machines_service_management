@@ -66,7 +66,7 @@ const CallDetailsPage = () => {
     { label: "Travel Started",    date: formatDateTime(call.dates.travelStarted || ""),    description: "Engineer on the way",                  completed: !!call.dates.travelStarted,   active: call.status === "Travel Started" },
     { label: "Reached Location",  date: formatDateTime(call.dates.reachedLocation || ""), description: "Engineer arrived at customer site",     completed: !!call.dates.reachedLocation, active: call.status === "Reached Location" },
     { label: "Work In Progress",  date: formatDateTime(call.dates.inProgress || ""),      description: "Engineer working on site",             completed: !!call.dates.inProgress,      active: call.status === "In Progress" },
-    { label: "On Hold",           date: formatDateTime(call.dates.onHold || ""),           description: (call as any).onHoldReason || "Work paused", completed: !!call.dates.onHold,      active: call.status === "On Hold" },
+    ...((call.dates as any).onHold ? [{ label: "On Hold", date: formatDateTime((call.dates as any).onHold), description: (call as any).onHoldReason || "Work paused", completed: !!(call.dates as any).onHold, active: call.status === "On Hold" }] : []),
     { label: "Completed",         date: formatDateTime(call.dates.completed || ""),        description: "Issue resolved",                       completed: !!call.dates.completed },
   ];
 
@@ -296,6 +296,71 @@ const CallDetailsPage = () => {
         </Card>
       )}
 
+      {/* Counter Reading Section */}
+      {(call as any).callType === "Counter-Reading" && call.machines.some((m: any) => m.counterReadings?.length > 0) && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Counter Readings & Charges
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Serial No.</TableHead>
+                    <TableHead>Pages Category</TableHead>
+                    <TableHead className="text-right">Last Reading</TableHead>
+                    <TableHead className="text-right">Current Reading</TableHead>
+                    <TableHead className="text-right">Diff</TableHead>
+                    <TableHead className="text-right">Cost / Page</TableHead>
+                    <TableHead className="text-right">Charges (₹)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {call.machines.flatMap((machine: any, mi: number) =>
+                    (machine.counterReadings || []).flatMap((cr: any) =>
+                      (cr.categories || []).map((cat: any, ci: number) => (
+                        <TableRow key={`${mi}-${ci}`}>
+                          <TableCell>{ci + 1}</TableCell>
+                          <TableCell>
+                            <p className="font-medium">{machine.machineName}</p>
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{cr.serialNumber}</TableCell>
+                          <TableCell>{cat.pagesCategory}</TableCell>
+                          <TableCell className="text-right">{cat.lastReading}</TableCell>
+                          <TableCell className="text-right">{cat.currentReading}</TableCell>
+                          <TableCell className="text-right">{cat.diff}</TableCell>
+                          <TableCell className="text-right">₹{cat.costPerPage}</TableCell>
+                          <TableCell className="text-right font-semibold text-blue-600">₹{cat.chargesInRupees}</TableCell>
+                        </TableRow>
+                      ))
+                    )
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-8 px-6 py-4 border-t text-sm">
+              {(call as any).totalCounterReadingCharges !== undefined && (
+                <div className="text-right">
+                  <p className="text-muted-foreground">Total Counter Reading Charges</p>
+                  <p className="text-blue-600 font-semibold text-base">₹{(call as any).totalCounterReadingCharges}</p>
+                </div>
+              )}
+              {(call as any).totalCharges !== undefined && (
+                <div className="text-right">
+                  <p className="text-muted-foreground">Grand Total</p>
+                  <p className="font-bold text-base">₹{(call as any).totalCharges}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Parts Replaced Section */}
       {call.machines.some((m: any) => m.usedParts?.length > 0) && (
         <Card className="border-0 shadow-sm">
@@ -345,7 +410,7 @@ const CallDetailsPage = () => {
       )}
 
       {/* Charges Section */}
-      {call.machines.some(m => m.serviceCharge !== undefined || m.partsCharge !== undefined) && (
+      {(call as any).callType !== "Counter-Reading" && call.machines.some(m => m.serviceCharge !== undefined || m.partsCharge !== undefined) && (
         <Card className="border-0 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -411,7 +476,7 @@ const CallDetailsPage = () => {
               {(call.totalServiceCharges !== undefined || call.totalPartsCharges !== undefined) && (
                 <div className="text-right">
                   <p className="text-muted-foreground">Grand Total</p>
-                  <p className="font-bold text-base">₹{(call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0)}</p>
+                  <p className="font-bold text-base">₹{(call as any).totalCharges ?? ((call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0))}</p>
                 </div>
               )}
             </div>

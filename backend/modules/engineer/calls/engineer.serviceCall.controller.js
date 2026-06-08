@@ -7,8 +7,11 @@ const AdminUser = require("../../admin/auth/admin.user.model");
 const PurchasedMachine = require("../../admin/purchasedMachines/admin.purchasedMachine.model");
 const Machine = require("../../admin/inventoryManagement/admin.machine.model");
 const InventoryLog = require("../../admin/inventoryLogs/admin.inventoryLog.model");
+const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
 const mongoose = require("mongoose");
 const axios = require("axios");
+
+const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const IMAGES_DIR = process.env.NODE_ENV === "production"
   ? "/app/cloud/images"
@@ -65,6 +68,7 @@ const getOnHoldCalls = async (req, res) => {
     const calls = await ServiceCall.find({
       "engineerInfo._id": engineerId,
       status: "On Hold",
+      callType: { $ne: "Counter-Reading" },
     })
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
       .sort({ updatedAt: -1 });
@@ -82,6 +86,7 @@ const getHistoryCalls = async (req, res) => {
     const calls = await ServiceCall.find({
       "engineerInfo._id": engineerId,
       status: { $in: ["Completed", "Cancelled"] },
+      callType: { $ne: "Counter-Reading" },
     })
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges")
       .sort({ updatedAt: -1 });
@@ -99,6 +104,7 @@ const getAssignedCalls = async (req, res) => {
     const calls = await ServiceCall.find({
       "engineerInfo._id": engineerId,
       status: "Assigned",
+      callType: { $ne: "Counter-Reading" },
     })
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType")
       .sort({ updatedAt: -1 });
@@ -677,7 +683,7 @@ const completeCall = async (req, res) => {
 
   try {
     const engineerId = req.engineer.id;
-    const { callId, usedParts, sendToEmail, sendToWhatsapp } = req.body;
+    const { callId, usedParts, sendToEmail, sendToWhatsapp, counterReadings } = req.body;
 
     const abort = async (status, message) => {
       await session.abortTransaction();
@@ -698,15 +704,11 @@ const completeCall = async (req, res) => {
       return abort(400, "Invalid usedParts format");
     }
 
-    const hasUsedParts = Array.isArray(parsedUsedParts) && parsedUsedParts.length > 0;
-
-    if (hasUsedParts) {
-      for (const p of parsedUsedParts) {
-        if (!p.partCode || typeof p.partCode !== "string")
-          return abort(400, "Each usedPart must have a partCode");
-        if (!p.serialNumber || typeof p.serialNumber !== "string")
-          return abort(400, `Each usedPart must have a serialNumber (the call machine it was used on)`);
-      }
+    let parsedCounterReadings;
+    try {
+      parsedCounterReadings = typeof counterReadings === "string" ? JSON.parse(counterReadings) : counterReadings;
+    } catch (_) {
+      return abort(400, "Invalid counterReadings format");
     }
 
     const files       = req.files || {};
@@ -731,6 +733,18 @@ const completeCall = async (req, res) => {
 
     if (call.engineerInfo?._id?.toString() !== engineerId)
       return abort(403, "You are not assigned to this call");
+
+    // usedParts only apply to Service-Call type; ignore for other call types
+    const hasUsedParts = Array.isArray(parsedUsedParts) && parsedUsedParts.length > 0 && call.callType === "Service-Call";
+
+    if (hasUsedParts) {
+      for (const p of parsedUsedParts) {
+        if (!p.partCode || typeof p.partCode !== "string")
+          return abort(400, "Each usedPart must have a partCode");
+        if (!p.serialNumber || typeof p.serialNumber !== "string")
+          return abort(400, "Each usedPart must have a serialNumber (the call machine it was used on)");
+      }
+    }
 
     // ── Upload images ──
     let afterWorkImages, customerSignature;
@@ -886,17 +900,116 @@ const completeCall = async (req, res) => {
       );
     }
 
-    const totalServiceCharges = call.totalServiceCharges ?? 0;
-    const totalPartsCharges   = Math.round(partsCharges * 100) / 100;
-    const totalCharges        = Math.round((totalServiceCharges + totalPartsCharges) * 100) / 100;
+    // ── Build counter readings per machine ──
+    const counterReadingsMap = new Map(); // serialNumber -> counterReading entry
+    const hasCounterReadings = Array.isArray(parsedCounterReadings) && parsedCounterReadings.length > 0;
+
+    if (hasCounterReadings && call.callType !== "Counter-Reading")
+      return abort(400, "counterReadings can only be submitted for Counter-Reading call type");
+
+    if (call.callType === "Counter-Reading" && !hasCounterReadings)
+      return abort(400, "counterReadings is required for Counter-Reading call type");
+
+    if (hasCounterReadings && !TSS_CONTRACT_TYPE_ID)
+      return abort(500, "TSS_CONTRACT_TYPE_ID is not configured");
+
+    if (hasCounterReadings) {
+      const tssSerialSet = new Set(
+        call.machines
+          .filter(m => m.contractType?.contractTypeId?.toString() === TSS_CONTRACT_TYPE_ID)
+          .map(m => m.serialNumber)
+          .filter(Boolean)
+      );
+
+      for (const cr of parsedCounterReadings) {
+        if (!cr.serialNumber || !Array.isArray(cr.categories) || cr.categories.length === 0) continue;
+
+        if (!tssSerialSet.has(cr.serialNumber))
+          return abort(400, `Serial number "${cr.serialNumber}" does not belong to this call or does not have TSS contract type`);
+
+        // Get costPerPage from SoldMachine for this serial
+        const soldRecord = await SoldMachine.findOne(
+          { "machines.serialNumbers.serialNumber": cr.serialNumber },
+          { "machines.serialNumbers.$": 1 }
+        ).session(session).lean();
+
+        const soldSnEntry = soldRecord?.machines
+          ?.flatMap(m => m.serialNumbers)
+          .find(s => s.serialNumber === cr.serialNumber);
+
+        const costPerPageMap = new Map(
+          (soldSnEntry?.pagesCategories ?? []).map(pc => [
+            pc.pagesCategoryId.toString(),
+            { pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
+          ])
+        );
+
+        // Get lastReading from the most recent completed Counter-Reading call
+        const lastCall = await ServiceCall.findOne(
+          {
+            "machines.serialNumber":              cr.serialNumber,
+            "machines.counterReadings.serialNumber": cr.serialNumber,
+            callType: "Counter-Reading",
+            status:   "Completed",
+            _id:      { $ne: call._id },
+          },
+          { "machines.counterReadings": 1 }
+        ).sort({ "dates.completed": -1 }).session(session).lean();
+
+        const lastSnReading = lastCall?.machines
+          ?.flatMap(m => m.counterReadings ?? [])
+          .find(r => r.serialNumber === cr.serialNumber);
+
+        const categories = [];
+        for (const cat of cr.categories) {
+          const pcId = cat.pagesCategoryId?.toString();
+          const pc   = costPerPageMap.get(pcId);
+          if (!pc)
+            return abort(400, `Pages category "${pcId}" not found in sold record for serial ${cr.serialNumber}`);
+          const lastCat     = lastSnReading?.categories?.find(c => c.pagesCategoryId.toString() === pcId);
+          const lastReading = lastCat?.currentReading ?? 0;
+          const current     = Number(cat.currentReading);
+          if (isNaN(current))
+            return abort(400, `currentReading must be a valid number for serial ${cr.serialNumber} category ${pc.pagesCategory}`);
+          if (current < lastReading)
+            return abort(400, `currentReading (${current}) cannot be less than lastReading (${lastReading}) for serial ${cr.serialNumber} category ${pc.pagesCategory}`);
+          const diff            = current - lastReading;
+          const chargesInRupees = Math.round(diff * pc.costPerPage * 100) / 100;
+          categories.push({
+            pagesCategoryId: cat.pagesCategoryId,
+            pagesCategory:   pc.pagesCategory,
+            lastReading,
+            currentReading:  current,
+            costPerPage:     pc.costPerPage,
+            diff,
+            chargesInRupees,
+          });
+        }
+
+        if (categories.length > 0)
+          counterReadingsMap.set(cr.serialNumber, { serialNumber: cr.serialNumber, categories });
+      }
+    }
+
+    const totalServiceCharges          = call.totalServiceCharges ?? 0;
+    const totalPartsCharges             = Math.round(partsCharges * 100) / 100;
+    const totalCounterReadingCharges    = Math.round(
+      Array.from(counterReadingsMap.values())
+        .flatMap(cr => cr.categories)
+        .reduce((sum, cat) => sum + cat.chargesInRupees, 0) * 100
+    ) / 100;
+    const totalCharges = Math.round((totalServiceCharges + totalPartsCharges + totalCounterReadingCharges) * 100) / 100;
 
     // Build per-machine field updates
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
       const mParts       = variantPartsMap.get(m.serialNumber) || [];
       const mPartsCharge = Math.round(mParts.reduce((s, p) => s + p.total, 0) * 100) / 100;
-      machineSetFields[`machines.${idx}.partsCharge`] = mPartsCharge;
-      machineSetFields[`machines.${idx}.usedParts`]   = mParts;
+      machineSetFields[`machines.${idx}.partsCharge`]      = mPartsCharge;
+      machineSetFields[`machines.${idx}.usedParts`]        = mParts;
+      machineSetFields[`machines.${idx}.counterReadings`]  = counterReadingsMap.has(m.serialNumber)
+        ? [counterReadingsMap.get(m.serialNumber)]
+        : [];
     });
 
     await call.updateOne(
@@ -909,6 +1022,7 @@ const completeCall = async (req, res) => {
           totalPartsCharges,
           totalServiceCharges,
           totalCharges,
+          totalCounterReadingCharges,
           sendToEmail:    sendToEmail    === true || sendToEmail    === "true",
           sendToWhatsapp: sendToWhatsapp === true || sendToWhatsapp === "true",
           ...machineSetFields,
@@ -923,7 +1037,7 @@ const completeCall = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Call completed successfully",
-      data: { totalServiceCharges, totalPartsCharges, totalCharges },
+      data: { totalServiceCharges, totalPartsCharges, totalCounterReadingCharges, totalCharges },
     });
   } catch (err) {
     await session.abortTransaction();
@@ -932,6 +1046,124 @@ const completeCall = async (req, res) => {
   }
 };
 
+const getCounterReadingInfo = async (req, res) => {
+  try {
+    const { callId } = req.query;
 
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
 
-module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall };
+    const call = await ServiceCall.findById(callId).select("machines engineerInfo callType");
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    if (call.engineerInfo?._id?.toString() !== req.engineer.id)
+      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
+
+    if (call.callType !== "Counter-Reading")
+      return res.status(400).json({ success: false, message: "This call is not of type Counter-Reading" });
+
+    if (!TSS_CONTRACT_TYPE_ID)
+      return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
+
+    // Serial numbers in this call that have TSS contract type
+    const tssSerialNumbers = call.machines
+      .filter(m => m.contractType?.contractTypeId?.toString() === TSS_CONTRACT_TYPE_ID)
+      .map(m => m.serialNumber)
+      .filter(Boolean);
+
+    if (tssSerialNumbers.length === 0)
+      return res.status(200).json({ success: true, data: [] });
+
+    const result = await Promise.all(tssSerialNumbers.map(async (sn) => {
+      // costPerPage — from SoldMachine pagesCategories snapshot for this serial
+      const soldRecord = await SoldMachine.findOne(
+        { "machines.serialNumbers.serialNumber": sn },
+        { "machines.serialNumbers.$": 1 }
+      ).lean();
+
+      const soldSnEntry = soldRecord?.machines
+        ?.flatMap(m => m.serialNumbers)
+        .find(s => s.serialNumber === sn);
+
+      const costPerPageMap = new Map(
+        (soldSnEntry?.pagesCategories ?? []).map(pc => [
+          pc.pagesCategoryId.toString(),
+          { pagesCategoryId: pc.pagesCategoryId, pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
+        ])
+      );
+
+      // lastReading — from the most recent completed Counter-Reading call for this serial
+      const lastCall = await ServiceCall.findOne(
+        {
+          "machines.serialNumber": sn,
+          "machines.counterReadings.serialNumber": sn,
+          callType: "Counter-Reading",
+          status:   "Completed",
+          _id:      { $ne: call._id },
+        },
+        { "machines.counterReadings": 1 }
+      ).sort({ "dates.completed": -1 }).lean();
+
+      const lastSnReading = lastCall?.machines
+        ?.flatMap(m => m.counterReadings ?? [])
+        .find(cr => cr.serialNumber === sn);
+
+      const categories = Array.from(costPerPageMap.values()).map(pc => {
+        const lastCat = lastSnReading?.categories?.find(
+          c => c.pagesCategoryId.toString() === pc.pagesCategoryId.toString()
+        );
+        return {
+          pagesCategoryId: pc.pagesCategoryId,
+          pagesCategory:   pc.pagesCategory,
+          lastReading:     lastCat?.currentReading ?? 0,
+          costPerPage:     pc.costPerPage,
+        };
+      });
+
+      return { serialNumber: sn, categories };
+    }));
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCounterReadingAssignedCalls = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+
+    const calls = await ServiceCall.find({
+      "engineerInfo._id": engineerId,
+      status: { $in: ["Assigned", "Travel Started", "Reached Location", "In Progress", "On Hold"] },
+      callType: "Counter-Reading",
+    })
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({ success: true, data: calls });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCounterReadingHistoryCalls = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+
+    const calls = await ServiceCall.find({
+      "engineerInfo._id": engineerId,
+      status: { $in: ["Completed", "Cancelled"] },
+      callType: "Counter-Reading",
+    })
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges")
+      .sort({ updatedAt: -1 });
+
+    return res.status(200).json({ success: true, data: calls });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, getCounterReadingInfo };

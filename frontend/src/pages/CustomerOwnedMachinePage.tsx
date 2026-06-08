@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Package, FileText, PhoneCall, RefreshCw } from "lucide-react";
+import { ArrowLeft, User, Package, FileText, PhoneCall, RefreshCw, Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -15,6 +15,10 @@ interface ContractTypeInfo {
   freeService: boolean; freeParts: boolean; validFrom: string; validTo: string;
 }
 
+interface LastReading {
+  pagesCategoryId: string; pagesCategory: string; lastReading: number;
+}
+
 interface MachineDetail {
   customerInfo: {
     customerId: string; name: string; phone: string; email: string;
@@ -25,6 +29,7 @@ interface MachineDetail {
     categoryId: string; category: string; divisionId: string; division: string;
     serialNumber: string; contractType: ContractTypeInfo; images: string[];
   };
+  lastReadings: LastReading[];
   createdAt: string;
   updatedAt: string;
 }
@@ -201,6 +206,24 @@ const CustomerOwnedMachinePage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Last Counter Readings */}
+      {detail.lastReadings?.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4" /> Last Counter Readings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {detail.lastReadings.map(r => (
+                <InfoRow key={r.pagesCategoryId} label={r.pagesCategory} value={r.lastReading.toString()} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Renew Contract Dialog */}
       <Dialog open={renewOpen} onOpenChange={setRenewOpen}>

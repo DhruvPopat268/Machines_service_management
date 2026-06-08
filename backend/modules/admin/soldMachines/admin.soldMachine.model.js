@@ -13,10 +13,20 @@ const contractTypeSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const pagesCategoryEntrySchema = new mongoose.Schema(
+  {
+    pagesCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: "PagesCategory", required: true },
+    pagesCategory:   { type: String, trim: true, required: true },
+    costPerPage:     { type: Number, required: true },
+  },
+  { _id: false }
+);
+
 const serialNumberEntrySchema = new mongoose.Schema(
   {
-    serialNumber: { type: String, trim: true, required: true },
-    contractType: { type: contractTypeSnapshotSchema, default: null },
+    serialNumber:    { type: String, trim: true, required: true },
+    contractType:    { type: contractTypeSnapshotSchema, default: null },
+    pagesCategories: { type: [pagesCategoryEntrySchema], default: [] },
   },
   { _id: false }
 );
