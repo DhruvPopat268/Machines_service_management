@@ -1,5 +1,6 @@
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
-const AdminUser = require("../../admin/auth/admin.user.model");
+const AdminUser   = require("../../admin/auth/admin.user.model");
+const { buildCounterReadingInfo } = require("../calls/engineer.serviceCall.controller");
 
 const getHome = async (req, res) => {
   try {
@@ -10,18 +11,20 @@ const getHome = async (req, res) => {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [activeCalls, engineer, assignedToday, onHoldToday, completedToday] = await Promise.all([
+    const [rawActiveCalls, engineer, assignedToday, onHoldToday, completedToday] = await Promise.all([
       ServiceCall.find({
         "engineerInfo._id": engineerId,
         status: { $in: ["Travel Started", "Reached Location", "In Progress"] },
       })
         .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
         .sort({ updatedAt: -1 }),
-      AdminUser.findById(engineerId).select("name phone email engineerId  profilePhoto isOnline"),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.assigned": { $gte: todayStart, $lte: todayEnd } }),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.onHold":   { $gte: todayStart, $lte: todayEnd } }),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed":{ $gte: todayStart, $lte: todayEnd } }),
+      AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline"),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.assigned":  { $gte: todayStart, $lte: todayEnd } }),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.onHold":    { $gte: todayStart, $lte: todayEnd } }),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed": { $gte: todayStart, $lte: todayEnd } }),
     ]);
+
+    const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
 
     return res.status(200).json({
       success: true,

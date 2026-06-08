@@ -13,6 +13,77 @@ const axios = require("axios");
 
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
+// ── Reusable: build counterReadingInfo for a list of calls ──────────────────
+const buildCounterReadingInfo = async (calls) => {
+  if (!TSS_CONTRACT_TYPE_ID) return calls.map(c => c.toObject ? c.toObject() : c);
+
+  return Promise.all(calls.map(async (call) => {
+    const callObj = call.toObject ? call.toObject() : call;
+    if (callObj.callType !== "Counter-Reading") return callObj;
+
+    // Build a map: serialNumber -> categories
+    const snCategoriesMap = new Map();
+
+    for (const machine of callObj.machines) {
+      const sn = machine.serialNumber;
+      if (!sn || machine.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID) continue;
+
+      const soldRecord = await SoldMachine.findOne(
+        { "machines.serialNumbers.serialNumber": sn },
+        { "machines.serialNumbers.$": 1 }
+      ).lean();
+
+      const soldSnEntry = soldRecord?.machines
+        ?.flatMap(m => m.serialNumbers)
+        .find(s => s.serialNumber === sn);
+
+      const costPerPageMap = new Map(
+        (soldSnEntry?.pagesCategories ?? []).map(pc => [
+          pc.pagesCategoryId.toString(),
+          { pagesCategoryId: pc.pagesCategoryId, pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
+        ])
+      );
+
+      const lastCall = await ServiceCall.findOne(
+        {
+          "machines.serialNumber":                sn,
+          "machines.counterReadings.serialNumber": sn,
+          callType: "Counter-Reading",
+          status:   "Completed",
+          _id:      { $ne: call._id },
+        },
+        { "machines.counterReadings": 1 }
+      ).sort({ "dates.completed": -1 }).lean();
+
+      const lastSnReading = lastCall?.machines
+        ?.flatMap(m => m.counterReadings ?? [])
+        .find(cr => cr.serialNumber === sn);
+
+      const categories = Array.from(costPerPageMap.values()).map(pc => {
+        const lastCat = lastSnReading?.categories?.find(
+          c => c.pagesCategoryId.toString() === pc.pagesCategoryId.toString()
+        );
+        return {
+          pagesCategoryId: pc.pagesCategoryId,
+          pagesCategory:   pc.pagesCategory,
+          lastReading:     lastCat?.currentReading ?? 0,
+          costPerPage:     pc.costPerPage,
+        };
+      });
+
+      snCategoriesMap.set(sn, categories);
+    }
+
+    // Merge categories into each matching machine
+    const machines = callObj.machines.map(m => {
+      if (!snCategoriesMap.has(m.serialNumber)) return m;
+      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber) };
+    });
+
+    return { ...callObj, machines };
+  }));
+};
+
 const IMAGES_DIR = process.env.NODE_ENV === "production"
   ? "/app/cloud/images"
   : path.join(__dirname, "../../../cloud/images");
@@ -1058,90 +1129,6 @@ const completeCall = async (req, res) => {
   }
 };
 
-const getCounterReadingInfo = async (req, res) => {
-  try {
-    const { callId } = req.query;
-
-    if (!mongoose.isValidObjectId(callId))
-      return res.status(400).json({ success: false, message: "Invalid callId" });
-
-    const call = await ServiceCall.findById(callId).select("machines engineerInfo callType");
-    if (!call)
-      return res.status(404).json({ success: false, message: "Call not found" });
-
-    if (call.engineerInfo?._id?.toString() !== req.engineer.id)
-      return res.status(403).json({ success: false, message: "You are not assigned to this call" });
-
-    if (call.callType !== "Counter-Reading")
-      return res.status(400).json({ success: false, message: "This call is not of type Counter-Reading" });
-
-    if (!TSS_CONTRACT_TYPE_ID)
-      return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
-
-    // Serial numbers in this call that have TSS contract type
-    const tssSerialNumbers = call.machines
-      .filter(m => m.contractType?.contractTypeId?.toString() === TSS_CONTRACT_TYPE_ID)
-      .map(m => m.serialNumber)
-      .filter(Boolean);
-
-    if (tssSerialNumbers.length === 0)
-      return res.status(200).json({ success: true, data: [] });
-
-    const result = await Promise.all(tssSerialNumbers.map(async (sn) => {
-      // costPerPage — from SoldMachine pagesCategories snapshot for this serial
-      const soldRecord = await SoldMachine.findOne(
-        { "machines.serialNumbers.serialNumber": sn },
-        { "machines.serialNumbers.$": 1 }
-      ).lean();
-
-      const soldSnEntry = soldRecord?.machines
-        ?.flatMap(m => m.serialNumbers)
-        .find(s => s.serialNumber === sn);
-
-      const costPerPageMap = new Map(
-        (soldSnEntry?.pagesCategories ?? []).map(pc => [
-          pc.pagesCategoryId.toString(),
-          { pagesCategoryId: pc.pagesCategoryId, pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
-        ])
-      );
-
-      // lastReading — from the most recent completed Counter-Reading call for this serial
-      const lastCall = await ServiceCall.findOne(
-        {
-          "machines.serialNumber": sn,
-          "machines.counterReadings.serialNumber": sn,
-          callType: "Counter-Reading",
-          status:   "Completed",
-          _id:      { $ne: call._id },
-        },
-        { "machines.counterReadings": 1 }
-      ).sort({ "dates.completed": -1 }).lean();
-
-      const lastSnReading = lastCall?.machines
-        ?.flatMap(m => m.counterReadings ?? [])
-        .find(cr => cr.serialNumber === sn);
-
-      const categories = Array.from(costPerPageMap.values()).map(pc => {
-        const lastCat = lastSnReading?.categories?.find(
-          c => c.pagesCategoryId.toString() === pc.pagesCategoryId.toString()
-        );
-        return {
-          pagesCategoryId: pc.pagesCategoryId,
-          pagesCategory:   pc.pagesCategory,
-          lastReading:     lastCat?.currentReading ?? 0,
-          costPerPage:     pc.costPerPage,
-        };
-      });
-
-      return { serialNumber: sn, categories };
-    }));
-
-    return res.status(200).json({ success: true, data: result });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-};
-
 const getCounterReadingAssignedCalls = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
@@ -1154,7 +1141,9 @@ const getCounterReadingAssignedCalls = async (req, res) => {
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
       .sort({ updatedAt: -1 });
 
-    return res.status(200).json({ success: true, data: calls });
+    const data = await buildCounterReadingInfo(calls);
+
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -1178,4 +1167,4 @@ const getCounterReadingHistoryCalls = async (req, res) => {
   }
 };
 
-module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, getCounterReadingInfo };
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo };
