@@ -760,7 +760,7 @@ const completeCall = async (req, res) => {
 
   try {
     const engineerId = req.engineer.id;
-    const { callId, usedParts, sendToEmail, sendToWhatsapp, counterReadings } = req.body;
+    const { callId, usedParts, sendToEmail, sendToWhatsapp, counterReadings, serviceCallReadings } = req.body;
 
     const abort = async (status, message) => {
       await session.abortTransaction();
@@ -786,6 +786,13 @@ const completeCall = async (req, res) => {
       parsedCounterReadings = typeof counterReadings === "string" ? JSON.parse(counterReadings) : counterReadings;
     } catch (_) {
       return abort(400, "Invalid counterReadings format");
+    }
+
+    let parsedServiceCallReadings;
+    try {
+      parsedServiceCallReadings = typeof serviceCallReadings === "string" ? JSON.parse(serviceCallReadings) : serviceCallReadings;
+    } catch (_) {
+      return abort(400, "Invalid serviceCallReadings format");
     }
 
     const files       = req.files || {};
@@ -1083,6 +1090,22 @@ const completeCall = async (req, res) => {
     ) / 100;
     const totalCharges = Math.round((totalServiceCharges + totalPartsCharges + totalCounterReadingCharges) * 100) / 100;
 
+    // ── Build lastReading map for Service-Call readings ──
+    const lastReadingMap = new Map(); // serialNumber -> reading
+
+    if (call.callType === "Service-Call" && Array.isArray(parsedServiceCallReadings) && parsedServiceCallReadings.length > 0) {
+      const callSerialNumbers = new Set(call.machines.map(m => m.serialNumber).filter(Boolean));
+      for (const entry of parsedServiceCallReadings) {
+        if (!entry.serialNumber || typeof entry.serialNumber !== "string")
+          return abort(400, "Each serviceCallReading must have a serialNumber");
+        if (!callSerialNumbers.has(entry.serialNumber))
+          return abort(400, `serialNumber "${entry.serialNumber}" does not belong to this call`);
+        if (entry.reading == null || isNaN(Number(entry.reading)) || Number(entry.reading) < 0)
+          return abort(400, `reading must be a non-negative number for serial ${entry.serialNumber}`);
+        lastReadingMap.set(entry.serialNumber, Number(entry.reading));
+      }
+    }
+
     // Build per-machine field updates
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
@@ -1093,6 +1116,8 @@ const completeCall = async (req, res) => {
       machineSetFields[`machines.${idx}.counterReadings`]  = counterReadingsMap.has(m.serialNumber)
         ? [counterReadingsMap.get(m.serialNumber)]
         : [];
+      if (lastReadingMap.has(m.serialNumber))
+        machineSetFields[`machines.${idx}.lastReading`] = lastReadingMap.get(m.serialNumber);
     });
 
     await call.updateOne(

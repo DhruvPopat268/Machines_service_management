@@ -65,6 +65,7 @@ const machineEntrySchema = new mongoose.Schema(
     images:           { type: [String], default: [] },
     serviceCharge:    { type: Number },
     partsCharge:      { type: Number },
+    lastReading:      { type: Number },
     usedParts:        { type: [usedPartSchema], default: [] },
     counterReadings:  { type: [counterReadingSchema], default: [] },
   },
