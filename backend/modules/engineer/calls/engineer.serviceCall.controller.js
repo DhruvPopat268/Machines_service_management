@@ -165,13 +165,10 @@ const getReimbursementPreview = async (req, res) => {
         success: true,
         data: {
           purpose,
-          legs: [{
-            purpose:         "Service Call",
-            travelFrom:      { latitude: lat, longitude: lng, address: engineerAddress },
-            travelTo:        customerPoint,
-            distanceKm,
-            estimatedTimeMin: durationMin,
-          }],
+          travelFrom:       { latitude: lat, longitude: lng, address: engineerAddress },
+          travelTo:         customerPoint,
+          distanceKm,
+          estimatedTimeMin: durationMin,
         },
       });
     }
