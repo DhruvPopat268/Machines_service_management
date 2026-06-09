@@ -72,12 +72,25 @@ const machineEntrySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const companyInfoSchema = new mongoose.Schema(
+  {
+    companyId: { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true },
+    name:      { type: String, trim: true, required: true },
+    address:   { type: String, trim: true, default: "" },
+    phone:     { type: String, trim: true, default: "" },
+    email:     { type: String, trim: true, lowercase: true, default: "" },
+    gstNumber: { type: String, trim: true, uppercase: true, default: "" },
+  },
+  { _id: false }
+);
+
 const serviceCallSchema = new mongoose.Schema(
   {
     callId: { type: String, unique: true, required: true },
     customerInfo: {
-      customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
-      name:       { type: String, trim: true, required: true },
+      customerId:      { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
+      customerUniqueId: { type: String, trim: true, default: "" },
+      name:             { type: String, trim: true, required: true },
       phone:      { type: String, trim: true, required: true },
       email:      { type: String, trim: true, lowercase: true, required: true },
       address:    { type: String, trim: true, required: true },
@@ -144,6 +157,7 @@ const serviceCallSchema = new mongoose.Schema(
     onHoldReason:        { type: String, trim: true },
     sendToEmail:         { type: Boolean, default: false },
     sendToWhatsapp:      { type: Boolean, default: false },
+    companyInfo:         { type: companyInfoSchema, default: null },
   },
   { timestamps: true }
 );

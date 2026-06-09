@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { serviceCallsApi, engineersApi } from "@/services/serviceCallsApi";
+import { serviceCallsApi, engineersApi, companiesApi } from "@/services/serviceCallsApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2 } from "lucide-react";
+import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import Spinner from "@/components/Spinner";
 
@@ -32,19 +32,21 @@ const formatDateTime = (dateString: string) => {
 const CallDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [attachmentsDialog, setAttachmentsDialog] = useState<{ machineName: string; images: string[] } | null>(null);
   const [assignDialog, setAssignDialog] = useState(false);
   const [noteDialog, setNoteDialog] = useState(false);
   const [priorityDialog, setPriorityDialog] = useState(false);
+  const [companyDialog, setCompanyDialog] = useState(false);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
 
   const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean }[]>([]);
+  const [companies, setCompanies] = useState<{ _id: string; name: string; gstNumber?: string }[]>([]);
 
   const { data: call, isLoading, isFetching } = useQuery({
     queryKey: ["serviceCall", id],
@@ -55,6 +57,7 @@ const CallDetailsPage = () => {
 
   useEffect(() => {
     engineersApi.getActive().then(setEngineers).catch(() => {});
+    companiesApi.getAll().then(setCompanies).catch(() => {});
   }, []);
 
   if (isLoading || isFetching) return <Spinner />;
@@ -85,6 +88,9 @@ const CallDetailsPage = () => {
         </div>
         {/* Quick action buttons */}
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedCompanyId((call as any).companyInfo?.companyId || ""); setCompanyDialog(true); }}>
+            <Building2 className="h-4 w-4" /> {(call as any).companyInfo ? "Change Company" : "Assign Company"}
+          </Button>
           {(call.status === "Open" || call.status === "Assigned") && (
           <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setAssignDialog(true); }}>
             {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
@@ -135,6 +141,23 @@ const CallDetailsPage = () => {
                   </>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-sm">
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Building2 className="h-5 w-5" /> Company Info</CardTitle></CardHeader>
+            <CardContent>
+              {(call as any).companyInfo ? (
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><p className="text-muted-foreground">Name</p><p className="font-medium">{(call as any).companyInfo.name}</p></div>
+                  <div><p className="text-muted-foreground">GST Number</p><p className="font-medium font-mono">{(call as any).companyInfo.gstNumber || "N/A"}</p></div>
+                  <div><p className="text-muted-foreground">Phone</p><p className="font-medium">{(call as any).companyInfo.phone || "N/A"}</p></div>
+                  <div><p className="text-muted-foreground">Email</p><p className="font-medium">{(call as any).companyInfo.email || "N/A"}</p></div>
+                  <div className="col-span-2"><p className="text-muted-foreground">Address</p><p className="font-medium">{(call as any).companyInfo.address || "N/A"}</p></div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">No company assigned.</p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -426,6 +449,7 @@ const CallDetailsPage = () => {
                     <TableHead>Machine</TableHead>
                     <TableHead>Serial No.</TableHead>
                     <TableHead>Contract</TableHead>
+                    <TableHead className="text-right">Last Reading</TableHead>
                     <TableHead className="text-right">Service Charge</TableHead>
                     <TableHead className="text-right">Parts Charge</TableHead>
                     <TableHead className="text-right">Total</TableHead>
@@ -443,6 +467,11 @@ const CallDetailsPage = () => {
                         <TableCell className="font-medium">{machine.machineName}</TableCell>
                         <TableCell className="font-mono text-sm">{machine.serialNumber}</TableCell>
                         <TableCell className="text-sm">{machine.contractType.name}</TableCell>
+                        <TableCell className="text-right">
+                          {machine.lastReading !== undefined && machine.lastReading !== null
+                            ? machine.lastReading
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </TableCell>
                         <TableCell className="text-right">
                           {machine.serviceCharge !== undefined
                             ? <span className="text-green-600 font-medium">₹{machine.serviceCharge}</span>
@@ -577,11 +606,11 @@ const CallDetailsPage = () => {
                 setSaving(true);
                 try {
                   await serviceCallsApi.assignEngineer(id, selectedEngineerId);
-                  toast({ title: "Engineer Assigned", description: `Engineer assigned to ${call.callId}` });
+                  toast.success(`Engineer assigned to ${call.callId}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setAssignDialog(false);
-                } catch {
-                  toast({ title: "Error", description: "Failed to assign engineer", variant: "destructive" });
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.message || "Failed to assign engineer");
                 } finally {
                   setSaving(false);
                 }
@@ -612,12 +641,12 @@ const CallDetailsPage = () => {
                 setSaving(true);
                 try {
                   await serviceCallsApi.updateCall(id, { note });
-                  toast({ title: "Note Saved", description: "Note saved successfully" });
+                  toast.success("Note saved successfully");
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setNoteDialog(false);
                   setNote("");
                 } catch {
-                  toast({ title: "Error", description: "Failed to save note", variant: "destructive" });
+                  toast.error("Failed to save note");
                 } finally {
                   setSaving(false);
                 }
@@ -656,17 +685,61 @@ const CallDetailsPage = () => {
                 setSaving(true);
                 try {
                   await serviceCallsApi.updateCall(id, { priority: selectedPriority });
-                  toast({ title: "Priority Set", description: `Priority set to ${selectedPriority}` });
+                  toast.success(`Priority set to ${selectedPriority}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setPriorityDialog(false);
                 } catch {
-                  toast({ title: "Error", description: "Failed to set priority", variant: "destructive" });
+                  toast.error("Failed to set priority");
                 } finally {
                   setSaving(false);
                 }
               }}
             >
               {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Company Dialog */}
+      <Dialog open={companyDialog} onOpenChange={setCompanyDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{(call as any).companyInfo ? "Change Company" : "Assign Company"} — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label>Select Company</Label>
+            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+              <SelectTrigger><SelectValue placeholder="Choose company" /></SelectTrigger>
+              <SelectContent>
+                {companies.map((c) => (
+                  <SelectItem key={c._id} value={c._id}>
+                    <span>{c.name}{c.gstNumber ? ` — ${c.gstNumber}` : ""}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompanyDialog(false)}>Cancel</Button>
+            <Button
+              disabled={!selectedCompanyId || saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.updateCall(id, { companyId: selectedCompanyId });
+                  toast.success("Company assigned successfully");
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setCompanyDialog(false);
+                } catch {
+                  toast.error("Failed to assign company");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Saving..." : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>

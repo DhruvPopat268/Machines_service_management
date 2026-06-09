@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const xlsx = require("xlsx");
 const Customer = require("./admin.customer.model");
 const Zone = require("../zoneManagement/admin.zone.model");
+const Counter = require("../auth/counter.model");
 const { validateCreateCustomer, validateUpdateCustomer, validateImportCustomerRow, validateGST } = require("./admin.customer.validator");
 const { validateAndParseDate, parseIST } = require("../../../utils/dateValidation");
 const { sendWelcomeCredentials } = require("../../../utils/emailService");
@@ -54,6 +55,15 @@ const generatePassword = () => {
   // shuffle the non-@ part for unpredictability
   const prefix = chars.slice(0, 6).sort(() => Math.random() - 0.5);
   return [...prefix, "@", ...chars.slice(7)].join("");
+};
+
+const generateCustomerId = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "customerId" },
+    { $inc: { seq: 1 } },
+    { upsert: true, new: true }
+  );
+  return `CUS-${counter.seq}`;
 };
 
 const getAll = async (req, res) => {
@@ -180,12 +190,14 @@ const create = async (req, res) => {
 
     const defaultPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+    const customerId = await generateCustomerId();
 
     let customer;
     try {
       customer = await Customer.create({
         name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
         zone: zoneId, gstNumber, status, source: "manual",
+        customerId,
         password: hashedPassword,
         ...(profilePhoto  && { profilePhoto }),
         ...(userLocation  && { userLocation }),

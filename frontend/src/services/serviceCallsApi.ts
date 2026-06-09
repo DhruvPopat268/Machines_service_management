@@ -100,6 +100,13 @@ export const engineersApi = {
   },
 };
 
+export const companiesApi = {
+  getAll: async (): Promise<{ _id: string; name: string; gstNumber?: string }[]> => {
+    const res = await api.get("/admin/companies", { params: { limit: 100, status: "Active" } });
+    return res.data.data;
+  },
+};
+
 export const serviceCallsApi = {
   getCalls: async (params: CallsParams = {}): Promise<{ data: ServiceCall[]; stats?: CallStats; pagination: { total: number; page: number; limit: number; totalPages: number } }> => {
     const response = await api.get("/admin/service-calls", { params });
@@ -111,7 +118,7 @@ export const serviceCallsApi = {
     return res.data.data;
   },
 
-  updateCall: async (id: string, payload: { note?: string; priority?: string; status?: string }): Promise<ServiceCall> => {
+  updateCall: async (id: string, payload: { note?: string; priority?: string; status?: string; companyId?: string | null }): Promise<ServiceCall> => {
     const res = await api.patch(`/admin/service-calls/${id}`, payload);
     return res.data.data;
   },

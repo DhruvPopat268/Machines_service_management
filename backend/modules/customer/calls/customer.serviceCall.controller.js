@@ -175,13 +175,14 @@ const raiseServiceCall = async (req, res) => {
     const serviceCallDoc = new ServiceCall({
       callId: `SC-${callNumber}`,
       customerInfo: {
-        customerId: customer._id,
-        name:       customer.name,
-        phone:      customer.phone,
-        email:      customer.email,
-        address:    customerAddress,
-        zone:       customer.zone?.name || "",
-        gstNumber:  customer.gstNumber || "",
+        customerId:       customer._id,
+        customerUniqueId: customer.customerId || "",
+        name:             customer.name,
+        phone:            customer.phone,
+        email:            customer.email,
+        address:          customerAddress,
+        zone:             customer.zone?.name || "",
+        gstNumber:        customer.gstNumber || "",
         ...(parsedCustomerLocation && {
           location: {
             address:   parsedCustomerLocation.address,

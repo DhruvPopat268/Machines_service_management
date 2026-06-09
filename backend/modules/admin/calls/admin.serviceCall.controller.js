@@ -139,6 +139,9 @@ const assignEngineer = async (req, res) => {
     if (!call)
       return res.status(400).json({ success: false, message: "Call not found or cannot be assigned in current status" });
 
+    if (!call.companyInfo)
+      return res.status(400).json({ success: false, message: "Assign a company to this call before assigning an engineer" });
+
     await call.updateOne({
       engineerInfo: {
         _id:        engineer._id,
@@ -182,7 +185,7 @@ const STATUS_DATE_MAP = {
 const updateCall = async (req, res) => {
   try {
     const { id } = req.params;
-    const { note, priority, status } = req.body;
+    const { note, priority, status, companyId } = req.body;
 
     const call = await ServiceCall.findById(id);
     if (!call)
@@ -209,6 +212,27 @@ const updateCall = async (req, res) => {
       update.status = status;
       const dateField = STATUS_DATE_MAP[status];
       if (dateField) update[dateField] = new Date();
+    }
+
+    if (companyId !== undefined) {
+      if (companyId === null) {
+        update.companyInfo = null;
+      } else {
+        if (!mongoose.isValidObjectId(companyId))
+          return res.status(400).json({ success: false, message: "Invalid companyId" });
+        const Company = require("../companyManagement/admin.company.model");
+        const company = await Company.findById(companyId);
+        if (!company)
+          return res.status(404).json({ success: false, message: "Company not found" });
+        update.companyInfo = {
+          companyId: company._id,
+          name:      company.name,
+          address:   company.address,
+          phone:     company.phone,
+          email:     company.email,
+          gstNumber: company.gstNumber || "",
+        };
+      }
     }
 
     if (!Object.keys(update).length)
@@ -523,7 +547,8 @@ const raiseServiceCall = async (req, res) => {
       callId: `SC-${callNumber}`,
       callType,
       customerInfo: {
-        customerId: customer._id,
+        customerId:      customer._id,
+        customerUniqueId: customer.customerId || "",
         name:       customer.name,
         phone:      customer.phone,
         email:      customer.email,

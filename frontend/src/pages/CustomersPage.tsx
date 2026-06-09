@@ -25,6 +25,7 @@ interface Zone {
 
 interface Customer {
   _id: string;
+  customerId?: string;
   name: string;
   phone: string;
   email: string;
@@ -452,12 +453,13 @@ const CustomersPage = () => {
   };
 
   const columns: Column<Customer>[] = [
-    { key: "_id", label: "No.", render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "_id",        label: "No.",         render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
     {
       key: "profilePhoto", label: "Photo", render: (c) => c.profilePhoto
         ? <img src={c.profilePhoto} alt={c.name} className="h-8 w-8 rounded-full object-cover" />
         : <UserCircle className="h-8 w-8 text-muted-foreground" />,
     },
+    { key: "customerId", label: "Customer ID",  render: (c) => <span className="text-sm font-mono">{c.customerId || "—"}</span> },
     { key: "name", label: "Name", render: (c) => <span className="font-medium">{c.name}</span> },
     { key: "phone", label: "Phone", render: (c) => <span className="text-sm">{c.phone}</span> },
     { key: "email", label: "Email", render: (c) => <span className="text-sm">{c.email}</span> },

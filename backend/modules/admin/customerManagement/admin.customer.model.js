@@ -3,8 +3,9 @@ const bcrypt = require("bcrypt");
 
 const customerSchema = new mongoose.Schema(
   {
-    name:      { type: String, required: true, trim: true },
-    phone:     { type: String, required: true, trim: true, unique: true },
+    name:           { type: String, required: true, trim: true },
+    customerId:     { type: String, trim: true, unique: true, sparse: true },
+    phone:          { type: String, required: true, trim: true, unique: true },
     email:     { type: String, required: true, trim: true, lowercase: true, unique: true },
     password:  { type: String },
     zone:      { type: mongoose.Schema.Types.ObjectId, ref: "Zone", default: null },

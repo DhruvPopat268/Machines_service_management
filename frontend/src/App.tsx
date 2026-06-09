@@ -29,6 +29,7 @@ import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
 import PagesCategoriesPage from "./pages/PagesCategoriesPage";
 import ZonesPage from "./pages/ZonesPage";
+import CompaniesPage from "./pages/CompaniesPage";
 import VendorsPage from "./pages/VendorsPage";
 import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -41,7 +42,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <Sonner position="top-right" richColors />
+      <Sonner position="top-right" />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -77,6 +78,7 @@ const App = () => (
             <Route path="/problem-types" element={<ProblemTypesPage />} />
             <Route path="/contract-types" element={<ContractTypesPage />} />
             <Route path="/pages-categories" element={<PagesCategoriesPage />} />
+            <Route path="/companies" element={<CompaniesPage />} />
             <Route path="/zones" element={<ZonesPage />} />
             <Route path="/vendors" element={<VendorsPage />} />
             <Route path="/reimbursements" element={<TravelReimbursementsPage />} />

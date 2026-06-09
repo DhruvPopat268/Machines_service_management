@@ -6,11 +6,21 @@ const fs   = require("fs/promises");
 const sharp = require("sharp");
 const Customer = require("../../admin/customerManagement/admin.customer.model");
 const Zone = require("../../admin/zoneManagement/admin.zone.model");
+const Counter = require("../../admin/auth/counter.model");
 const CustomerSession = require("./customer.session.model");
 const { validateSignup, validateLogin, validatePassword } = require("./customer.validator");
 const { validateGST } = require("../../admin/customerManagement/admin.customer.validator");
 const { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification } = require("../../../utils/emailService");
 const generateAvatar = require("../../../utils/generateAvatar");
+
+const generateCustomerId = async () => {
+  const counter = await Counter.findOneAndUpdate(
+    { _id: "customerId" },
+    { $inc: { seq: 1 } },
+    { upsert: true, new: true }
+  );
+  return `CUS-${counter.seq}`;
+};
 
 const IMAGES_DIR = process.env.NODE_ENV === "production"
   ? "/app/cloud/images"
@@ -95,6 +105,8 @@ const signup = async (req, res) => {
       try { profilePhoto = await generateAvatar(name.trim()); } catch (_) {}
     }
 
+    const customerId = await generateCustomerId();
+
     const customer = await Customer.create({
       name: name.trim(),
       phone: phone.trim(),
@@ -102,6 +114,7 @@ const signup = async (req, res) => {
       password: await bcrypt.hash(password.trim(), 10),
       zone,
       gstNumber,
+      customerId,
       status: "Active",
       source: "manual",
       ...(profilePhoto   && { profilePhoto }),
