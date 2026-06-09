@@ -730,11 +730,9 @@ const createReimbursement = async (req, res) => {
         getRoadDistanceKm(lastLocation.latitude, lastLocation.longitude, customerLat, customerLng),
         getRoadDistanceKm(customerLat, customerLng, adminUser.officeLocation.latitude, adminUser.officeLocation.longitude),
       ]);
-      const records = await TravelReimbursement.insertMany([
-        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" },
-        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Office",  travelFrom: customerPoint, travelTo: officePoint,   travelledKm: leg2Km, status: "Pending" },
-      ]);
-      return res.status(201).json({ success: true, data: records });
+      const leg1 = await TravelReimbursement.create({ callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" });
+      const leg2 = await TravelReimbursement.create({ callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Office",  travelFrom: customerPoint, travelTo: officePoint,   travelledKm: leg2Km, status: "Pending" });
+      return res.status(201).json({ success: true, data: [leg1, leg2] });
     }
 
     if (purpose === "Go To Home") {
@@ -743,11 +741,9 @@ const createReimbursement = async (req, res) => {
         getRoadDistanceKm(lastLocation.latitude, lastLocation.longitude, customerLat, customerLng),
         getRoadDistanceKm(customerLat, customerLng, engineer.engineerLocation.latitude, engineer.engineerLocation.longitude),
       ]);
-      const records = await TravelReimbursement.insertMany([
-        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" },
-        { callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Home",   travelFrom: customerPoint, travelTo: homePoint,      travelledKm: leg2Km, status: "Pending" },
-      ]);
-      return res.status(201).json({ success: true, data: records });
+      const leg1 = await TravelReimbursement.create({ callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Service Call", travelFrom: fromPoint,      travelTo: customerPoint, travelledKm: leg1Km, status: "Pending" });
+      const leg2 = await TravelReimbursement.create({ callId: call._id, engineerInfo, customerInfo, travelDate: new Date(), purpose: "Go To Home",   travelFrom: customerPoint, travelTo: homePoint,      travelledKm: leg2Km, status: "Pending" });
+      return res.status(201).json({ success: true, data: [leg1, leg2] });
     }
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
