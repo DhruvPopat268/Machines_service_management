@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { Pagination } from "@/components/Pagination";
+import { StatsCard } from "@/components/StatsCard";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { X } from "lucide-react";
+import { X, Clock, CheckCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
@@ -41,6 +42,7 @@ const formatDate = (iso: string) => {
 const TravelReimbursementsPage = () => {
   const [data, setData]               = useState<Reimbursement[]>([]);
   const [pagination, setPagination]   = useState({ page: 1, totalPages: 1, total: 0 });
+  const [stats, setStats]             = useState({ pendingReimbursementKm: 0, paidReimbursementKm: 0 });
   const [loading, setLoading]         = useState(true);
   const [engineerId, setEngineerId]   = useState("");
   const [status, setStatus]           = useState("");
@@ -73,6 +75,7 @@ const TravelReimbursementsPage = () => {
 
       const res = await api.get("/admin/reimbursements", { params, signal: controller.signal });
       setData(res.data.data);
+      setStats(res.data.stats);
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
       setSelected(new Set());
     } catch (err: any) {
@@ -172,6 +175,11 @@ const TravelReimbursementsPage = () => {
       {loading ? <Spinner /> : (
         <>
           <PageHeader title="Travel Reimbursements" description="Track engineer travel reimbursement records" />
+
+          <div className="grid grid-cols-2 gap-4">
+            <StatsCard label="Pending Reimbursement (km)" value={`${stats.pendingReimbursementKm} km`} icon={Clock}        colorClass="text-yellow-600 bg-yellow-50" />
+            <StatsCard label="Paid Reimbursement (km)"    value={`${stats.paidReimbursementKm} km`}    icon={CheckCircle} colorClass="text-green-600 bg-green-50" />
+          </div>
 
           <div className="flex flex-wrap items-end justify-end gap-3">
             <div className="space-y-1">

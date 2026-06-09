@@ -53,18 +53,32 @@ const getReimbursements = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip     = (pageNum - 1) * limitNum;
 
-    const [records, total] = await Promise.all([
+    const statsQuery = { ...query };
+    delete statsQuery.status;
+
+    const [records, total, statsData] = await Promise.all([
       TravelReimbursement.find(query)
         .populate("callId", "callId")
         .sort({ createdAt: -1, _id: 1 })
         .skip(skip)
         .limit(limitNum),
       TravelReimbursement.countDocuments(query),
+      TravelReimbursement.aggregate([
+        { $match: statsQuery },
+        { $group: { _id: "$status", totalKm: { $sum: "$travelledKm" } } },
+      ]),
     ]);
+
+    const pendingKm = statsData.find(s => s._id === "Pending")?.totalKm || 0;
+    const paidKm    = statsData.find(s => s._id === "Paid")?.totalKm    || 0;
 
     return res.status(200).json({
       success: true,
       data: records,
+      stats: {
+        pendingReimbursementKm: Math.round(pendingKm * 100) / 100,
+        paidReimbursementKm:    Math.round(paidKm    * 100) / 100,
+      },
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     });
   } catch (err) {
