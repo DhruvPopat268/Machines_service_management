@@ -695,13 +695,18 @@ const generateInvoice = async (req, res) => {
     }
 
     const puppeteer = require("puppeteer");
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
+    const chromium = require("@sparticuz/chromium");
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
     await fs.mkdir(DOCS_DIR, { recursive: true });
     const filename = `sales_invoice_${invoiceNumber}_${Date.now()}.pdf`;
     const filepath = path.join(DOCS_DIR, filename);
 
-    const browser = await puppeteer.launch({ executablePath, headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"] });
-    const page    = await browser.newPage();
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
     await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
     await browser.close();
