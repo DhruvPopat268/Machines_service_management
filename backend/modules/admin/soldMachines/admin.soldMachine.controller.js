@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
+const path = require("path");
+const fs   = require("fs/promises");
 const SoldMachine      = require("./admin.soldMachine.model");
 const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.model");
 const Machine          = require("../inventoryManagement/admin.machine.model");
@@ -7,6 +9,8 @@ const Customer         = require("../customerManagement/admin.customer.model");
 const ContractType     = require("../contractTypesManagement/admin.contractType.model");
 const PagesCategory    = require("../pagesCategoryManagement/admin.pagesCategory.model");
 const InventoryLog     = require("../inventoryLogs/admin.inventoryLog.model");
+const Company          = require("../companyManagement/admin.company.model");
+const Counter          = require("../auth/counter.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
 
 const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
@@ -166,11 +170,12 @@ const createSale = async (req, res) => {
     if (customer.status === "Inactive") return abort(400, "Customer is inactive");
 
     const customerInfo = {
-      customerId: customer._id,
-      name:       customer.name,
+      customerId:       customer._id,
+      customerUniqueId: customer.customerId || "",
+      name:             customer.name,
       phone:      customer.phone,
       email:      customer.email,
-      address:    customer.address || "",
+      address:    customer.userLocation?.address || "",
       zone:       customer.zone?.name || "",
       gstNumber:  customer.gstNumber || "",
     };
@@ -243,6 +248,7 @@ const createSale = async (req, res) => {
         machineId:              machine._id,
         machineName:            machine.name,
         modelNumber:            machine.modelNumber || "",
+        hsnCode:                machine.hsnCode || "",
         categoryId:             machine.category?._id || null,
         category:               machine.category?.name || "",
         divisionId:             machine.division?._id || null,
@@ -543,4 +549,177 @@ const verifyPartCodes = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes };
+const DOCS_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/Documents"
+  : path.join(__dirname, "../../../cloud/Documents");
+
+const generateInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid sale ID" });
+
+    const { companyId, cgst, sgst, igst } = req.body;
+
+    if (!mongoose.isValidObjectId(companyId))
+      return res.status(400).json({ success: false, message: "Invalid companyId" });
+    if (cgst === undefined || isNaN(Number(cgst)) || Number(cgst) < 0)
+      return res.status(400).json({ success: false, message: "cgst must be a non-negative number" });
+    if (sgst === undefined || isNaN(Number(sgst)) || Number(sgst) < 0)
+      return res.status(400).json({ success: false, message: "sgst must be a non-negative number" });
+    if (igst === undefined || isNaN(Number(igst)) || Number(igst) < 0)
+      return res.status(400).json({ success: false, message: "igst must be a non-negative number" });
+
+    const sale = await SoldMachine.findById(id);
+    if (!sale) return res.status(404).json({ success: false, message: "Sale not found" });
+
+    const company = await Company.findById(companyId);
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+
+    const counter = await Counter.findByIdAndUpdate(
+      "salesInvoice",
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    const invoiceNumber = `INV-${counter.seq}`;
+
+    const companyInfo = {
+      companyId:         company._id,
+      name:              company.name,
+      tagline:           company.tagline || "",
+      address:           company.address,
+      phone:             company.phone,
+      email:             company.email,
+      gstNumber:         company.gstNumber,
+      bankAccountNumber: company.bankAccountNumber || "",
+      bankName:          company.bankName || "",
+      ifscCode:          company.ifscCode || "",
+      bankBranch:        company.bankBranch || "",
+      qrCode:            company.qrCode || "",
+    };
+
+    const cgstNum = Number(cgst);
+    const sgstNum = Number(sgst);
+    const igstNum = Number(igst);
+
+    const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+    const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+    const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
+    let html = await fs.readFile(templatePath, "utf-8");
+
+    const formatNum = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const basicTotal       = sale.grandTotal;
+    const cgstAmount       = parseFloat(((basicTotal * cgstNum) / 100).toFixed(2));
+    const sgstAmount       = parseFloat(((basicTotal * sgstNum) / 100).toFixed(2));
+    const igstAmount       = parseFloat(((basicTotal * igstNum) / 100).toFixed(2));
+    const invoiceGrandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+    const d = new Date(sale.createdAt);
+    const invoiceDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+
+    html = html
+      .replace(/{{invoiceNumber}}/g, invoiceNumber)
+      .replace(/{{invoiceDate}}/g, invoiceDate)
+      .replace(/{{companyName}}/g, company.name)
+      .replace(/{{companyTagline}}/g, company.tagline || "")
+      .replace(/{{companyAddress}}/g, company.address)
+      .replace(/{{companyPhone}}/g, company.phone)
+      .replace(/{{companyEmail}}/g, company.email)
+      .replace(/{{companyGst}}/g, company.gstNumber)
+      .replace(/{{bankAccountNumber}}/g, company.bankAccountNumber || "")
+      .replace(/{{bankName}}/g, company.bankName || "")
+      .replace(/{{ifscCode}}/g, company.ifscCode || "")
+      .replace(/{{bankBranch}}/g, company.bankBranch || "")
+      .replace(/{{qrCode}}/g, company.qrCode || "")
+      .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
+      .replace(/{{invoiceLogoText}}/g, invoiceLogoText)
+      .replace(/{{customerName}}/g, sale.customerInfo.name)
+      .replace(/{{customerAddress}}/g, sale.customerInfo.address || "")
+      .replace(/{{customerUniqueId}}/g, sale.customerInfo.customerUniqueId || "")
+      .replace(/{{customerZone}}/g, sale.customerInfo.zone || "")
+      .replace(/{{customerGst}}/g, sale.customerInfo.gstNumber || "")
+      .replace(/{{basicTotal}}/g, formatNum(basicTotal))
+      .replace(/{{cgstPercent}}/g, cgstNum)
+      .replace(/{{cgstAmount}}/g, formatNum(cgstAmount))
+      .replace(/{{sgstPercent}}/g, sgstNum)
+      .replace(/{{sgstAmount}}/g, formatNum(sgstAmount))
+      .replace(/{{igstPercent}}/g, igstNum)
+      .replace(/{{igstAmount}}/g, formatNum(igstAmount))
+      .replace(/{{grandTotal}}/g, formatNum(invoiceGrandTotal));
+
+    // Handle conditional blocks
+    html = cgstNum > 0 ? html.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = sgstNum > 0 ? html.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = igstNum > 0 ? html.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company.tagline
+      ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company.qrCode
+      ? html.replace(/{{#if qrCode}}([\.\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if qrCode}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoUrl
+      ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoText
+      ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+
+    // Build machine rows
+    const machineRowsMatch = html.match(/{{#each machines}}([\.\s\S]*?){{\/each}}/);
+    if (machineRowsMatch) {
+      const rowTemplate = machineRowsMatch[1];
+      const rows = sale.machines.map((m, idx) => {
+        const rate    = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
+        const serials = [
+          ...(m.serialNumbers || []).map(s => s.serialNumber),
+          ...(m.partCodes || []).map(p => p.partCode),
+        ].join(", ");
+        let row = rowTemplate
+          .replace(/{{srNo}}/g, idx + 1)
+          .replace(/{{machineName}}/g, m.machineName)
+          .replace(/{{hsnCode}}/g, m.hsnCode || "")
+          .replace(/{{quantity}}/g, m.quantity)
+          .replace(/{{rate}}/g, formatNum(rate))
+          .replace(/{{amount}}/g, formatNum(m.sellingTotal));
+        row = m.modelNumber
+          ? row.replace(/{{#if modelNumber}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, m.modelNumber)
+          : row.replace(/{{#if modelNumber}}[\.\s\S]*?{{\/if}}/g, "");
+        row = serials
+          ? row.replace(/{{#if serials}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{serials}}/g, serials)
+          : row.replace(/{{#if serials}}[\.\s\S]*?{{\/if}}/g, "");
+        return row;
+      }).join("");
+      html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows);
+    }
+
+    const puppeteer = require("puppeteer");
+    await fs.mkdir(DOCS_DIR, { recursive: true });
+    const filename = `sales_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+    const filepath = path.join(DOCS_DIR, filename);
+
+    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const page    = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+    await browser.close();
+
+    const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+    await SoldMachine.findByIdAndUpdate(id, {
+      invoiceNumber, companyInfo, invoiceUrl,
+      basicTotal,
+      cgst: { percent: cgstNum, amount: cgstAmount },
+      sgst: { percent: sgstNum, amount: sgstAmount },
+      igst: { percent: igstNum, amount: igstAmount },
+      invoiceGrandTotal,
+    });
+
+    return res.status(200).json({ success: true, invoiceUrl, invoiceNumber });
+  } catch (err) {
+    console.error("Error generating invoice:", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice };

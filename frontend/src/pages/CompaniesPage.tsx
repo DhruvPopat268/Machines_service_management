@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Edit, Trash2 } from "lucide-react";
+import { Plus, Edit, Trash2, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -17,10 +17,16 @@ import api from "@/lib/axiosInterceptor";
 interface Company {
   _id: string;
   name: string;
+  tagline: string;
   address: string;
   phone: string;
   email: string;
   gstNumber?: string;
+  bankAccountNumber: string;
+  bankName: string;
+  ifscCode: string;
+  bankBranch: string;
+  qrCode: string;
   status: "Active" | "Inactive";
   createdAt: string;
   updatedAt: string;
@@ -38,7 +44,11 @@ const toISTDateParam = (htmlDate: string) => {
   return `${dd}/${mm}/${String(yyyy).slice(2)}`;
 };
 
-const emptyForm = { name: "", address: "", phone: "", email: "", gstNumber: "", status: "Active" as Company["status"] };
+const emptyForm = {
+  name: "", tagline: "", address: "", phone: "", email: "", gstNumber: "",
+  bankAccountNumber: "", bankName: "", ifscCode: "", bankBranch: "",
+  status: "Active" as Company["status"],
+};
 const LIMIT = 10;
 
 const CompaniesPage = () => {
@@ -52,11 +62,13 @@ const CompaniesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
 
-  const [addDialog, setAddDialog] = useState(false);
-  const [addForm, setAddForm] = useState(emptyForm);
+  const [addDialog, setAddDialog]   = useState(false);
+  const [addForm, setAddForm]         = useState(emptyForm);
+  const [addQrFile, setAddQrFile]     = useState<File | null>(null);
 
-  const [editDialog, setEditDialog] = useState<Company | null>(null);
-  const [editForm, setEditForm] = useState(emptyForm);
+  const [editDialog, setEditDialog]   = useState<Company | null>(null);
+  const [editForm, setEditForm]       = useState(emptyForm);
+  const [editQrFile, setEditQrFile]   = useState<File | null>(null);
 
   const [deleteDialog, setDeleteDialog] = useState<Company | null>(null);
 
@@ -99,10 +111,14 @@ const CompaniesPage = () => {
       return toast.error("All fields are required");
     setSubmitting(true);
     try {
-      await api.post("/admin/companies", addForm);
+      const fd = new FormData();
+      Object.entries(addForm).forEach(([k, v]) => fd.append(k, v));
+      if (addQrFile) fd.append("qrCode", addQrFile);
+      await api.post("/admin/companies", fd, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success("Company added successfully");
       setAddDialog(false);
       setAddForm(emptyForm);
+      setAddQrFile(null);
       fetchCompanies(1);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to add company");
@@ -117,9 +133,13 @@ const CompaniesPage = () => {
       return toast.error("All fields are required");
     setSubmitting(true);
     try {
-      await api.patch(`/admin/companies/${editDialog._id}`, editForm);
+      const fd = new FormData();
+      Object.entries(editForm).forEach(([k, v]) => fd.append(k, v));
+      if (editQrFile) fd.append("qrCode", editQrFile);
+      await api.patch(`/admin/companies/${editDialog._id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success("Company updated successfully");
       setEditDialog(null);
+      setEditQrFile(null);
       fetchCompanies(pagination.page);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update company");
@@ -156,12 +176,16 @@ const CompaniesPage = () => {
   };
 
   const columns: Column<Company>[] = [
-    { key: "_id",     label: "No.",     render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
-    { key: "name",      label: "Name",       render: (c) => <span className="font-medium">{c.name}</span> },
-    { key: "email",     label: "Email",      render: (c) => <span className="text-sm">{c.email}</span> },
-    { key: "phone",     label: "Phone",      render: (c) => <span className="text-sm">{c.phone}</span> },
-    { key: "address",   label: "Address",    render: (c) => <span className="text-sm">{c.address}</span> },
-    { key: "gstNumber", label: "GST Number", render: (c) => <span className="text-sm font-mono">{c.gstNumber || "—"}</span> },
+    { key: "_id",              label: "No.",        render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "name",             label: "Name",       render: (c) => <div><p className="font-medium">{c.name}</p>{c.tagline && <p className="text-xs text-muted-foreground">{c.tagline}</p>}</div> },
+    { key: "email",            label: "Email",      render: (c) => <span className="text-sm">{c.email}</span> },
+    { key: "phone",            label: "Phone",      render: (c) => <span className="text-sm">{c.phone}</span> },
+    { key: "address",          label: "Address",    render: (c) => <span className="text-sm">{c.address || "—"}</span> },
+    { key: "gstNumber",        label: "GST Number", render: (c) => <span className="text-sm font-mono">{c.gstNumber || "—"}</span> },
+    { key: "bankName",         label: "Bank",       render: (c) => <div><p className="text-sm">{c.bankName || "—"}</p>{c.bankBranch && <p className="text-xs text-muted-foreground">{c.bankBranch}</p>}</div> },
+    { key: "bankAccountNumber",label: "A/C No.",    render: (c) => <span className="text-sm font-mono">{c.bankAccountNumber || "—"}</span> },
+    { key: "ifscCode",         label: "IFSC",       render: (c) => <span className="text-sm font-mono">{c.ifscCode || "—"}</span> },
+    { key: "qrCode",           label: "QR Code",    render: (c) => c.qrCode ? <img src={c.qrCode} alt="QR" className="h-10 w-10 object-contain rounded border bg-white p-0.5" /> : <span className="text-muted-foreground text-sm">—</span> },
     {
       key: "status", label: "Status", render: (c) => (
         <div className="flex items-center gap-2">
@@ -179,7 +203,7 @@ const CompaniesPage = () => {
     {
       key: "actions", label: "Actions", render: (c) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditDialog(c); setEditForm({ name: c.name, address: c.address, phone: c.phone, email: c.email, gstNumber: c.gstNumber || "", status: c.status }); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditDialog(c); setEditQrFile(null); setEditForm({ name: c.name, tagline: c.tagline || "", address: c.address, phone: c.phone, email: c.email, gstNumber: c.gstNumber || "", bankAccountNumber: c.bankAccountNumber || "", bankName: c.bankName || "", ifscCode: c.ifscCode || "", bankBranch: c.bankBranch || "", status: c.status }); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(c)}>
@@ -190,28 +214,85 @@ const CompaniesPage = () => {
     },
   ];
 
-  const formFields = (form: typeof emptyForm, setForm: (fn: (p: typeof emptyForm) => typeof emptyForm) => void, prefix: string) => (
-    <div className="space-y-4 py-4">
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}-name`}>Company Name</Label>
-        <Input id={`${prefix}-name`} placeholder="e.g. Acme Corp" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+  const formFields = (
+    form: typeof emptyForm,
+    setForm: (fn: (p: typeof emptyForm) => typeof emptyForm) => void,
+    prefix: string,
+    qrFile: File | null,
+    setQrFile: (f: File | null) => void,
+    existingQrUrl?: string,
+  ) => (
+    <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-1">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-name`}>Company Name <span className="text-destructive">*</span></Label>
+          <Input id={`${prefix}-name`} placeholder="e.g. Acme Corp" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-tagline`}>Tagline</Label>
+          <Input id={`${prefix}-tagline`} placeholder="e.g. Sales & Service of Office Equipment" value={form.tagline} onChange={(e) => setForm((p) => ({ ...p, tagline: e.target.value }))} />
+        </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${prefix}-address`}>Address</Label>
+        <Label htmlFor={`${prefix}-address`}>Address <span className="text-destructive">*</span></Label>
         <Input id={`${prefix}-address`} placeholder="e.g. 123 Main St, City" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}-phone`}>Phone</Label>
-        <Input id={`${prefix}-phone`} placeholder="e.g. 9876543210" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-phone`}>Phone <span className="text-destructive">*</span></Label>
+          <Input id={`${prefix}-phone`} placeholder="e.g. 9876543210" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-email`}>Email <span className="text-destructive">*</span></Label>
+          <Input id={`${prefix}-email`} type="email" placeholder="e.g. info@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
+        </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${prefix}-email`}>Email</Label>
-        <Input id={`${prefix}-email`} type="email" placeholder="e.g. info@company.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${prefix}-gstNumber`}>GST Number</Label>
+        <Label htmlFor={`${prefix}-gstNumber`}>GST Number <span className="text-destructive">*</span></Label>
         <Input id={`${prefix}-gstNumber`} placeholder="e.g. 27AABCG1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} />
       </div>
+
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">Bank Details</p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-bankAccountNumber`}>Account Number</Label>
+          <Input id={`${prefix}-bankAccountNumber`} placeholder="e.g. 50200047638336" value={form.bankAccountNumber} onChange={(e) => setForm((p) => ({ ...p, bankAccountNumber: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-bankName`}>Bank Name</Label>
+          <Input id={`${prefix}-bankName`} placeholder="e.g. HDFC Bank Ltd." value={form.bankName} onChange={(e) => setForm((p) => ({ ...p, bankName: e.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-ifscCode`}>IFSC Code</Label>
+          <Input id={`${prefix}-ifscCode`} placeholder="e.g. HDFC0000180" value={form.ifscCode} onChange={(e) => setForm((p) => ({ ...p, ifscCode: e.target.value.toUpperCase() }))} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-bankBranch`}>Branch</Label>
+          <Input id={`${prefix}-bankBranch`} placeholder="e.g. MG Road Branch" value={form.bankBranch} onChange={(e) => setForm((p) => ({ ...p, bankBranch: e.target.value }))} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>QR Code</Label>
+        <div className="flex items-center gap-4">
+          {(qrFile ? URL.createObjectURL(qrFile) : existingQrUrl) && (
+            <img
+              src={qrFile ? URL.createObjectURL(qrFile) : existingQrUrl}
+              alt="QR Code"
+              className="h-20 w-20 object-contain rounded border bg-white p-1"
+            />
+          )}
+          <label className="flex items-center gap-2 cursor-pointer border rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors">
+            <QrCode className="h-4 w-4" />
+            {qrFile ? qrFile.name : existingQrUrl ? "Change QR Code" : "Upload QR Code"}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setQrFile(e.target.files?.[0] || null)} />
+          </label>
+          {qrFile && (
+            <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setQrFile(null)}>Remove</Button>
+          )}
+        </div>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor={`${prefix}-status`}>Status</Label>
         <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Company["status"] }))}>
@@ -262,10 +343,10 @@ const CompaniesPage = () => {
       )}
 
       {/* Add Dialog */}
-      <Dialog open={addDialog} onOpenChange={setAddDialog}>
-        <DialogContent>
+      <Dialog open={addDialog} onOpenChange={(open) => { setAddDialog(open); if (!open) { setAddForm(emptyForm); setAddQrFile(null); } }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Add Company</DialogTitle></DialogHeader>
-          {formFields(addForm, setAddForm, "add")}
+          {formFields(addForm, setAddForm, "add", addQrFile, setAddQrFile)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialog(false)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={submitting}>{submitting ? "Adding..." : "Add"}</Button>
@@ -274,10 +355,10 @@ const CompaniesPage = () => {
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
-        <DialogContent>
+      <Dialog open={!!editDialog} onOpenChange={(open) => { if (!open) { setEditDialog(null); setEditQrFile(null); } }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Edit Company</DialogTitle></DialogHeader>
-          {formFields(editForm, setEditForm, "edit")}
+          {formFields(editForm, setEditForm, "edit", editQrFile, setEditQrFile, editDialog?.qrCode)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialog(null)}>Cancel</Button>
             <Button onClick={handleEdit} disabled={submitting}>{submitting ? "Saving..." : "Save"}</Button>

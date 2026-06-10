@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit } from "lucide-react";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit, FileText, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -21,11 +21,12 @@ const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CustomerInfo { customerId: string | null; name: string; phone: string; email: string; address: string; zone: string; gstNumber: string; }
-interface Sale { _id: string; customerInfo: CustomerInfo; machinesCount: number; grandTotal: number; createdAt: string; }
+interface Sale { _id: string; customerInfo: CustomerInfo; machinesCount: number; grandTotal: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; invoiceGrandTotal?: number | null; }
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
 interface ContractType { _id: string; name: string; code: string; freeService: boolean; freeParts: boolean; }
+interface ActiveCompany { _id: string; name: string; }
 
 interface PagesCategory { _id: string; name: string; }
 interface PagesCategoryEntry { pagesCategoryId: string; pagesCategory: string; costPerPage: string; }
@@ -751,6 +752,10 @@ const SellMachinesPage = () => {
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
   const [initialCustomerId, setInitialCustomerId] = useState("");
+  const [invoiceDialog, setInvoiceDialog]     = useState<Sale | null>(null);
+  const [companies, setCompanies]             = useState<ActiveCompany[]>([]);
+  const [invoiceForm, setInvoiceForm]         = useState({ companyId: "", cgst: "", sgst: "", igst: "" });
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
@@ -763,6 +768,32 @@ const SellMachinesPage = () => {
 
   useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500); return () => clearTimeout(t); }, [search]);
   useEffect(() => { const cid = searchParams.get("customerId"); if (cid) { setInitialCustomerId(cid); setDialogOpen(true); } }, [searchParams]);
+
+  useEffect(() => {
+    api.get("/admin/companies", { params: { status: "Active", limit: 100 } })
+      .then(r => setCompanies(r.data.data))
+      .catch(() => {});
+  }, []);
+
+  const handleGenerateInvoice = async () => {
+    if (!invoiceDialog) return;
+    if (!invoiceForm.companyId) { toast.error("Please select a company"); return; }
+    if (invoiceForm.cgst === "" || invoiceForm.sgst === "" || invoiceForm.igst === "") { toast.error("Enter all tax fields (use 0 if not applicable)"); return; }
+    setGeneratingInvoice(true);
+    try {
+      const res = await api.post(`/admin/sales/${invoiceDialog._id}/generate-invoice`, {
+        companyId: invoiceForm.companyId,
+        cgst: Number(invoiceForm.cgst),
+        sgst: Number(invoiceForm.sgst),
+        igst: Number(invoiceForm.igst),
+      });
+      toast.success("Invoice generated");
+      window.open(res.data.invoiceUrl, "_blank");
+      setInvoiceDialog(null);
+      fetchSales(pagination.page);
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to generate invoice"); }
+    finally { setGeneratingInvoice(false); }
+  };
 
   useEffect(() => {
     const fetch = async () => {
@@ -841,7 +872,15 @@ const SellMachinesPage = () => {
     { key: "machinesCount",label: "Machines",     render: (s) => <span className="font-medium">{s.machinesCount}</span> },
     { key: "grandTotal",   label: "Total Sold",   render: (s) => <span className="font-medium">₹{s.grandTotal.toLocaleString()}</span> },
     { key: "createdAt",    label: "Sold At",      render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
-    { key: "actions",      label: "Actions",      sticky: true, render: (s) => <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button> },
+    { key: "actions", label: "Actions", sticky: true, render: (s) => (
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button>
+        {s.invoiceUrl
+          ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
+          : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
+        }
+      </div>
+    ) },
   ];
 
   return (
@@ -900,6 +939,41 @@ const SellMachinesPage = () => {
       )}
 
       <SellMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialCustomerId(""); navigate("/sell-machines", { replace: true }); }} onSuccess={() => fetchSales(1)} initialCustomerId={initialCustomerId} />
+
+      <Dialog open={!!invoiceDialog} onOpenChange={(o) => { if (!o) setInvoiceDialog(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Generate Sales Invoice</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Company <span className="text-destructive">*</span></Label>
+              <Select value={invoiceForm.companyId} onValueChange={(v) => setInvoiceForm(p => ({ ...p, companyId: v }))}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>{companies.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">CGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.cgst} onChange={(e) => setInvoiceForm(p => ({ ...p, cgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">SGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.sgst} onChange={(e) => setInvoiceForm(p => ({ ...p, sgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">IGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.igst} onChange={(e) => setInvoiceForm(p => ({ ...p, igst: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialog(null)} disabled={generatingInvoice}>Cancel</Button>
+            <Button onClick={handleGenerateInvoice} disabled={generatingInvoice} className="gap-2">
+              <FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={exportDialog} onOpenChange={setExportDialog}>
         <DialogContent>

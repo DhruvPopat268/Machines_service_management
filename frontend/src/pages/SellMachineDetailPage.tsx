@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, User, Package } from "lucide-react";
+import { ArrowLeft, User, Package, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
@@ -63,7 +67,17 @@ interface SaleDetail {
   grandTotal: number;
   machinesCount: number;
   createdAt: string;
+  invoiceUrl?: string;
+  invoiceNumber?: string;
+  companyInfo?: { companyId: string; name?: string } | null;
+  cgst?: { percent: number; amount: number } | null;
+  sgst?: { percent: number; amount: number } | null;
+  igst?: { percent: number; amount: number } | null;
+  basicTotal?: number | null;
+  invoiceGrandTotal?: number | null;
 }
+
+interface ActiveCompany { _id: string; name: string; }
 
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
@@ -83,6 +97,10 @@ const SellMachineDetailPage = () => {
   const navigate = useNavigate();
   const [sale, setSale] = useState<SaleDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [invoiceDialog, setInvoiceDialog] = useState(false);
+  const [companies, setCompanies] = useState<ActiveCompany[]>([]);
+  const [invoiceForm, setInvoiceForm] = useState({ companyId: "", cgst: "", sgst: "", igst: "" });
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
@@ -96,7 +114,29 @@ const SellMachineDetailPage = () => {
       }
     };
     fetch();
+    api.get("/admin/companies", { params: { status: "Active", limit: 100 } })
+      .then(r => setCompanies(r.data.data))
+      .catch(() => {});
   }, [id]);
+
+  const handleGenerateInvoice = async () => {
+    if (!invoiceForm.companyId) { toast.error("Please select a company"); return; }
+    if (invoiceForm.cgst === "" || invoiceForm.sgst === "" || invoiceForm.igst === "") { toast.error("Enter all tax fields (use 0 if not applicable)"); return; }
+    setGeneratingInvoice(true);
+    try {
+      const res = await api.post(`/admin/sales/${id}/generate-invoice`, {
+        companyId: invoiceForm.companyId,
+        cgst: Number(invoiceForm.cgst),
+        sgst: Number(invoiceForm.sgst),
+        igst: Number(invoiceForm.igst),
+      });
+      toast.success("Invoice generated");
+      window.open(res.data.invoiceUrl, "_blank");
+      setInvoiceDialog(false);
+      setSale(prev => prev ? { ...prev, invoiceUrl: res.data.invoiceUrl, invoiceNumber: res.data.invoiceNumber } : prev);
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to generate invoice"); }
+    finally { setGeneratingInvoice(false); }
+  };
 
   if (loading) return <Spinner />;
   if (!sale) return <div className="text-center py-12 text-muted-foreground">Sale not found</div>;
@@ -108,9 +148,14 @@ const SellMachineDetailPage = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground">Sale Details</h1>
+          {sale.invoiceNumber && <p className="text-xs text-muted-foreground mt-0.5">Invoice: {sale.invoiceNumber}</p>}
         </div>
+        {sale.invoiceUrl
+          ? <Button variant="outline" className="gap-2" onClick={() => window.open(sale.invoiceUrl, "_blank")}><ExternalLink className="h-4 w-4" /> View Invoice</Button>
+          : <Button variant="outline" className="gap-2" onClick={() => { setInvoiceForm({ companyId: sale.companyInfo?.companyId ?? "", cgst: sale.cgst?.percent != null ? String(sale.cgst.percent) : "", sgst: sale.sgst?.percent != null ? String(sale.sgst.percent) : "", igst: sale.igst?.percent != null ? String(sale.igst.percent) : "" }); setInvoiceDialog(true); }}><FileText className="h-4 w-4" /> Generate Invoice</Button>
+        }
       </div>
 
       {/* Summary cards */}
@@ -250,6 +295,40 @@ const SellMachineDetailPage = () => {
         <p className="text-sm font-medium">Grand Total: <span className="text-lg font-bold text-green-600">₹{sale.grandTotal.toLocaleString()}</span></p>
       </div>
 
+      <Dialog open={invoiceDialog} onOpenChange={(o) => { if (!o) setInvoiceDialog(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Generate Sales Invoice</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm">Company <span className="text-destructive">*</span></Label>
+              <Select value={invoiceForm.companyId} onValueChange={(v) => setInvoiceForm(p => ({ ...p, companyId: v }))}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>{companies.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">CGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.cgst} onChange={(e) => setInvoiceForm(p => ({ ...p, cgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">SGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.sgst} onChange={(e) => setInvoiceForm(p => ({ ...p, sgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">IGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={invoiceForm.igst} onChange={(e) => setInvoiceForm(p => ({ ...p, igst: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialog(false)} disabled={generatingInvoice}>Cancel</Button>
+            <Button onClick={handleGenerateInvoice} disabled={generatingInvoice} className="gap-2">
+              <FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
