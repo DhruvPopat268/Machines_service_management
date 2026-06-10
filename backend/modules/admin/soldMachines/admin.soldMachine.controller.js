@@ -672,22 +672,25 @@ const generateInvoice = async (req, res) => {
       const rowTemplate = machineRowsMatch[1];
       const rows = sale.machines.map((m, idx) => {
         const rate    = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
-        const serials = [
-          ...(m.serialNumbers || []).map(s => s.serialNumber),
-          ...(m.partCodes || []).map(p => p.partCode),
-        ].join(", ");
+        const isParts = m.categoryId?.toString() === PARTS_CATEGORY_ID;
+        const serials = isParts
+          ? (m.partCodes || []).map(p => p.partCode)
+          : (m.serialNumbers || []).map(s => s.serialNumber);
+        const serialLabel = isParts ? "P/C" : "S/N";
         let row = rowTemplate
           .replace(/{{srNo}}/g, idx + 1)
           .replace(/{{machineName}}/g, m.machineName)
           .replace(/{{hsnCode}}/g, m.hsnCode || "")
+          .replace(/{{serialLabel}}/g, serialLabel)
           .replace(/{{quantity}}/g, m.quantity)
           .replace(/{{rate}}/g, formatNum(rate))
           .replace(/{{amount}}/g, formatNum(m.sellingTotal));
         row = m.modelNumber
           ? row.replace(/{{#if modelNumber}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, m.modelNumber)
           : row.replace(/{{#if modelNumber}}[\.\s\S]*?{{\/if}}/g, "");
-        row = serials
-          ? row.replace(/{{#if serials}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{serials}}/g, serials)
+        const serialsStr = serials.join(", ");
+        row = serialsStr
+          ? row.replace(/{{#if serials}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{serials}}/g, serialsStr)
           : row.replace(/{{#if serials}}[\.\s\S]*?{{\/if}}/g, "");
         return row;
       }).join("");
