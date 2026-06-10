@@ -694,8 +694,10 @@ const generateInvoice = async (req, res) => {
       html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows);
     }
 
-    const puppeteer = require("puppeteer");
-    const chromium = require("@sparticuz/chromium");
+    const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+      import("puppeteer"),
+      import("@sparticuz/chromium"),
+    ]);
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
     await fs.mkdir(DOCS_DIR, { recursive: true });
     const filename = `sales_invoice_${invoiceNumber}_${Date.now()}.pdf`;
