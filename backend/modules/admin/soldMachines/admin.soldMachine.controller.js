@@ -694,7 +694,7 @@ const generateInvoice = async (req, res) => {
       html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows);
     }
 
-    const puppeteer = require("puppeteer-core");
+    const { default: puppeteer } = await import("puppeteer-core");
     const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
       || "/usr/bin/chromium"
       || "/usr/bin/chromium-browser";
