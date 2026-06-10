@@ -15,9 +15,9 @@
     .company-info h1 { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
     .company-info .tagline { font-size: 11px; color: #444; margin-top: 3px; }
     .company-info .details { font-size: 11px; color: #333; margin-top: 6px; line-height: 1.7; }
-    .header-logo { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-    .header-logo img { width: 120px; height: 120px; object-fit: contain; }
-    .header-logo .logo-text { font-size: 10px; color: #444; text-align: center; max-width: 130px; line-height: 1.4; }
+    .header-logo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+    .header-logo img { width: 120px; height: auto; object-fit: contain; display: block; }
+    .header-logo .logo-text { font-size: 10px; color: #444; text-align: right; max-width: 130px; line-height: 1.5; font-style: italic; }
 
     /* Invoice meta */
     .invoice-meta { display: flex; justify-content: space-between; align-items: center; padding: 8px 20px; border-bottom: 1px solid #ccc; background: #f9f9f9; }
@@ -48,19 +48,19 @@
     .item-serials { font-size: 10px; color: #444; margin-top: 3px; }
 
     /* Footer section */
-    .footer-section { display: flex; border-top: 2px solid #111; }
+    .footer-section { display: flex; border-top: 2px solid #111; align-items: stretch; }
     .footer-left { flex: 1; padding: 12px 20px; border-right: 1px solid #ccc; font-size: 11px; line-height: 2; }
     .footer-left .section-title { font-weight: 700; font-size: 11px; text-transform: uppercase; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 6px; }
-    .footer-left-inner { display: flex; align-items: flex-start; gap: 16px; }
+    .footer-left-inner { display: flex; align-items: stretch; gap: 16px; }
     .bank-details { flex: 1; }
-    .footer-right { width: 280px; padding: 12px 20px; }
+    .footer-right { width: 280px; padding: 12px 20px; display: flex; flex-direction: column; justify-content: center; }
     .totals-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #eee; }
     .totals-row.grand { font-weight: 700; font-size: 14px; border-top: 2px solid #111; border-bottom: none; margin-top: 4px; padding-top: 6px; color: #111; }
     .totals-row span:last-child { font-weight: 600; }
 
     /* QR block inside footer */
-    .qr-block { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-    .qr-block img { width: 180px; height: 180px; object-fit: contain; border: 1px solid #ddd; padding: 4px; image-rendering: pixelated; }
+    .qr-block { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .qr-block img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ddd; padding: 3px; image-rendering: pixelated; }
     .qr-label { font-size: 10px; color: #555; text-align: center; }
 
     /* Bottom signature */
@@ -68,12 +68,15 @@
     .signature-block { text-align: right; font-size: 11px; }
     .signature-block .for-company { font-weight: 700; font-size: 12px; margin-bottom: 50px; }
     .signature-block .sig-line { border-top: 1px solid #111; padding-top: 4px; font-size: 11px; color: #333; width: 180px; }
+    .jurisdiction-text { display: none; }
     .receiver-block { font-size: 11px; }
     .receiver-block .rec-title { font-weight: 700; font-size: 12px; margin-bottom: 40px; }
     .receiver-block p { margin-top: 10px; }
-
+    .buyer-right table td { padding: 6px 4px; vertical-align: top; }
     /* Note */
     .note { padding: 8px 20px; font-size: 10px; color: #555; border-top: 1px solid #eee; font-style: italic; }
+    .authorized-text { padding: 6px 20px 8px; font-size: 11px; font-weight: 900; border-top: 2px solid #111; text-align: center; letter-spacing: 0.5px; }
+    .authorized-text .canon-auth { color: #cc0000; text-transform: uppercase; }
   </style>
 </head>
 <body>
@@ -114,7 +117,7 @@
       <div class="buyer-right">
         <table>
           <tr><td>Customer ID.</td><td>{{customerUniqueId}}</td></tr>
-          <tr><td>Zone</td><td>{{customerZone}}</td></tr>
+          <tr><td>Customer PO/Ref</td><td></td></tr>
           <tr><td>Customer GST No.</td><td>{{customerGst}}</td></tr>
         </table>
       </div>
@@ -126,7 +129,7 @@
         <tr>
           <th style="width:40px;">Sr.No.</th>
           <th>Description</th>
-          <th style="width:80px;">HSN Code</th>
+          <th style="width:100px;">HSN Code</th>
           <th style="width:50px;" class="right">Qty</th>
           <th style="width:110px;" class="right">Rate (₹)</th>
           <th style="width:110px;" class="right">Amount (₹)</th>
@@ -190,12 +193,16 @@
       <div class="signature-block">
         <div class="for-company">For {{companyName}}</div>
         <div class="sig-line">Authorized Signatory</div>
+        <div class="jurisdiction-text">Subject to Jalgaon jurisdiction</div>
       </div>
     </div>
 
     <!-- Note -->
-    <div class="note">Please ask for Stamp Receipt for any Payment Transactions.</div>
+    <div class="note">Please ask for Stamp Receipt for any Payment Transactions Subject to Jalgaon jurisdiction</div>
+    <div class="authorized-text">
+      <span class="canon-auth">Authorized Channel Partner for Canon India Pvt Ltd</span>
+    </div>
 
   </div>
 </body>
-</html>
+</html
