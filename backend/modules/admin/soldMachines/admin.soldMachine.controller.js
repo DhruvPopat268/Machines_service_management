@@ -694,12 +694,15 @@ const generateInvoice = async (req, res) => {
       html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows);
     }
 
-    const puppeteer = require("puppeteer");
+    const puppeteer = require("puppeteer-core");
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+      || "/usr/bin/chromium"
+      || "/usr/bin/chromium-browser";
     await fs.mkdir(DOCS_DIR, { recursive: true });
     const filename = `sales_invoice_${invoiceNumber}_${Date.now()}.pdf`;
     const filepath = path.join(DOCS_DIR, filename);
 
-    const browser = await puppeteer.launch({ headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    const browser = await puppeteer.launch({ executablePath, headless: true, args: ["--no-sandbox", "--disable-setuid-sandbox"] });
     const page    = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
     await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });

@@ -1,0 +1,6 @@
+[phases.setup]
+aptPkgs = ["chromium", "chromium-driver", "fonts-liberation", "libatk-bridge2.0-0", "libgtk-3-0", "libnss3", "libxss1"]
+
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
