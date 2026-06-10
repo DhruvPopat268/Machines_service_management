@@ -155,9 +155,9 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, modelNumber, hsnCode, gstPercentage, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
+    const { name, modelNumber, hsnCode, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
 
-    const error = validateCreateMachine({ name, modelNumber, category, division, gstPercentage, status });
+    const error = validateCreateMachine({ name, modelNumber, category, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const duplicate = await isMachineDuplicate(name, category, division, modelNumber);
@@ -184,7 +184,6 @@ const create = async (req, res) => {
     const machine = await Machine.create({
       name: name.trim(),
       modelNumber, hsnCode,
-      gstPercentage: gstPercentage !== "" && gstPercentage !== undefined ? Number(gstPercentage) : null,
       category,
       division:          division || null,
       lowStockThreshold: threshold,
@@ -211,9 +210,9 @@ const update = async (req, res) => {
     if (!machine)
       return res.status(404).json({ success: false, message: "Machine not found" });
 
-    const { name, modelNumber, hsnCode, gstPercentage, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
+    const { name, modelNumber, hsnCode, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
 
-    const error = validateUpdateMachine({ name, modelNumber, division, gstPercentage, status });
+    const error = validateUpdateMachine({ name, modelNumber, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const dupName     = name        !== undefined ? name        : machine.name;
@@ -248,7 +247,6 @@ const update = async (req, res) => {
     if (name !== undefined)          updateData.name          = name.trim();
     if (modelNumber !== undefined)   updateData.modelNumber   = modelNumber;
     if (hsnCode !== undefined)       updateData.hsnCode       = hsnCode;
-    if (gstPercentage !== undefined) updateData.gstPercentage = gstPercentage !== "" ? Number(gstPercentage) : null;
     if (category !== undefined)      updateData.category      = category;
     if (division !== undefined)      updateData.division      = division || null;
     if (notes !== undefined)         updateData.notes         = notes;
@@ -419,7 +417,7 @@ const importMachines = async (req, res) => {
           name:              String(row.name        || ""),
           modelNumber:       String(row.modelnumber || ""),
           hsnCode:           String(row.hsncode     || ""),
-          gstPercentage:     row.gstpercentage !== "" ? Number(row.gstpercentage) : null,
+        gstPercentage:     row.gstpercentage !== "" ? Number(row.gstpercentage) : null,
           category:          categoryId,
           division:          divisionId,
           lowStockThreshold: isNaN(threshold) ? -1 : threshold,
@@ -491,7 +489,6 @@ const exportMachines = async (req, res) => {
         name:              m.name,
         modelNumber:       m.modelNumber,
         hsnCode:           m.hsnCode,
-        gstPercentage:     m.gstPercentage ?? "",
         category:          m.category?.name ?? "",
         division:          m.division?.name ?? "",
         lowStockThreshold: m.lowStockThreshold,

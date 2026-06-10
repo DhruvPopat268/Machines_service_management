@@ -2,7 +2,7 @@ const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif"];
 const MAX_IMAGE_SIZE_MB  = 5;
 const MAX_IMAGES         = 5;
 
-const validateCreateMachine = ({ name, category, division, modelNumber, gstPercentage, status }) => {
+const validateCreateMachine = ({ name, category, division, modelNumber, status }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
   if (!category)
@@ -11,28 +11,18 @@ const validateCreateMachine = ({ name, category, division, modelNumber, gstPerce
     return "Division is required";
   if (!modelNumber || typeof modelNumber !== "string" || !modelNumber.trim())
     return "Model number is required";
-  if (gstPercentage !== undefined && gstPercentage !== null && gstPercentage !== "") {
-    const gst = Number(gstPercentage);
-    if (isNaN(gst) || gst < 0 || gst > 100)
-      return "GST percentage must be between 0 and 100";
-  }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;
 };
 
-const validateUpdateMachine = ({ name, modelNumber, division, gstPercentage, status }) => {
+const validateUpdateMachine = ({ name, modelNumber, division, status }) => {
   if (name !== undefined && (typeof name !== "string" || !name.trim()))
     return "Name must be a non-empty string";
   if (modelNumber !== undefined && (typeof modelNumber !== "string" || !modelNumber.trim()))
     return "Model number must be a non-empty string";
   if (division !== undefined && !division)
     return "Division is required";
-  if (gstPercentage !== undefined && gstPercentage !== null && gstPercentage !== "") {
-    const gst = Number(gstPercentage);
-    if (isNaN(gst) || gst < 0 || gst > 100)
-      return "GST percentage must be between 0 and 100";
-  }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;

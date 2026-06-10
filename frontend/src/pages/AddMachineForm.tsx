@@ -37,7 +37,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
 
   const [form, setForm] = useState({
     name: "", modelNumber: "", category: "",
-    division: "", hsnCode: "", gstPercentage: "", lowStockThreshold: "",
+    division: "", hsnCode: "", lowStockThreshold: "",
     status: "Active" as "Active" | "Inactive", notes: "",
   });
 
@@ -81,7 +81,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
           category:          m.category?._id     ?? "",
           division:          m.division?._id     ?? "",
           hsnCode:           m.hsnCode           ?? "",
-          gstPercentage:     m.gstPercentage != null ? String(m.gstPercentage) : "",
           lowStockThreshold: m.lowStockThreshold != null ? String(m.lowStockThreshold) : "",
           status:            m.status            ?? "Active",
           notes:             m.notes             ?? "",
@@ -173,7 +172,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       fd.append("name",              form.name.trim());
       fd.append("modelNumber",       form.modelNumber);
       fd.append("hsnCode",           form.hsnCode);
-      fd.append("gstPercentage",     form.gstPercentage);
       fd.append("lowStockThreshold", form.lowStockThreshold !== "" ? form.lowStockThreshold : "-1");
       fd.append("category",          form.category);
       fd.append("division",          form.division);
@@ -233,7 +231,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
               <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Machine name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>Model Number <span className="text-destructive">*</span></Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={form.hsnCode} onChange={(e) => setField("hsnCode", e.target.value)} disabled={isReadOnly} /></div>
-              <div className="space-y-2"><Label>GST %</Label><Input type="number" placeholder="e.g. 18" min={0} max={100} value={form.gstPercentage} onChange={(e) => setField("gstPercentage", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2">
                 <Label>Low Stock Threshold</Label>
                 <Input type="number" placeholder="e.g. 5 or -1 to disable" min={-1} value={form.lowStockThreshold} onChange={(e) => setField("lowStockThreshold", e.target.value)} disabled={isReadOnly} />

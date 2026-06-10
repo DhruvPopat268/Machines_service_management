@@ -5,7 +5,6 @@ const machineSchema = new mongoose.Schema(
     name:              { type: String, required: true, trim: true },
     modelNumber:       { type: String, trim: true, default: "" },
     hsnCode:           { type: String, trim: true, default: "" },
-    gstPercentage:     { type: Number, min: 0, max: 100, default: null },
     category:          { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory", required: true },
     division:          { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision", required: true },
     lowStockThreshold: { type: Number, default: -1 },
