@@ -288,6 +288,7 @@ const createSale = async (req, res) => {
 
           return {
             serialNumber: sEntry.serialNumber.trim(),
+            minCopies:    Number(sEntry.minCopies) || 0,
             contractType: {
               contractTypeId: ct._id,
               name:           ct.name,

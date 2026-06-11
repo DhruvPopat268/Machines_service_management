@@ -24,6 +24,7 @@ const buildCounterReadingInfo = async (calls) => {
 
     // Build a map: serialNumber -> categories
     const snCategoriesMap = new Map();
+    const snMinCopiesMap  = new Map();
 
     for (const machine of callObj.machines) {
       const sn = machine.serialNumber;
@@ -38,10 +39,12 @@ const buildCounterReadingInfo = async (calls) => {
         ?.flatMap(m => m.serialNumbers)
         .find(s => s.serialNumber === sn);
 
+      snMinCopiesMap.set(sn, soldSnEntry?.minCopies ?? 0);
+
       const costPerPageMap = new Map(
         (soldSnEntry?.pagesCategories ?? []).map(pc => [
           pc.pagesCategoryId.toString(),
-          { pagesCategoryId: pc.pagesCategoryId, pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
+          { pagesCategoryId: pc.pagesCategoryId, pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage, minCopies: pc.minCopies ?? 0 },
         ])
       );
 
@@ -78,7 +81,7 @@ const buildCounterReadingInfo = async (calls) => {
     // Merge categories into each matching machine
     const machines = callObj.machines.map(m => {
       if (!snCategoriesMap.has(m.serialNumber)) return m;
-      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber) };
+      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber), counterReadingMinCopies: snMinCopiesMap.get(m.serialNumber) ?? 0 };
     });
 
     return { ...callObj, machines };
@@ -1021,8 +1024,16 @@ const completeCall = async (req, res) => {
           .filter(Boolean)
       );
 
+      // Ensure every TSS serial in the call is present in the submitted counterReadings
+      const submittedSerialSet = new Set(parsedCounterReadings.map(cr => cr.serialNumber).filter(Boolean));
+      for (const sn of tssSerialSet) {
+        if (!submittedSerialSet.has(sn))
+          return abort(400, `counterReadings missing for serial number "${sn}"`);
+      }
+
       for (const cr of parsedCounterReadings) {
-        if (!cr.serialNumber || !Array.isArray(cr.categories) || cr.categories.length === 0) continue;
+        if (!cr.serialNumber || !Array.isArray(cr.categories) || cr.categories.length === 0)
+          return abort(400, `counterReadings entry for serial "${cr.serialNumber}" must have at least one category`);
 
         if (!tssSerialSet.has(cr.serialNumber))
           return abort(400, `Serial number "${cr.serialNumber}" does not belong to this call or does not have TSS contract type`);
@@ -1040,9 +1051,16 @@ const completeCall = async (req, res) => {
         const costPerPageMap = new Map(
           (soldSnEntry?.pagesCategories ?? []).map(pc => [
             pc.pagesCategoryId.toString(),
-            { pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage },
+            { pagesCategory: pc.pagesCategory, costPerPage: pc.costPerPage, minCopies: pc.minCopies ?? 0 },
           ])
         );
+
+        // Ensure all categories from SoldMachine are submitted
+        const submittedCategoryIds = new Set(cr.categories.map(c => c.pagesCategoryId?.toString()));
+        for (const [pcId, pc] of costPerPageMap) {
+          if (!submittedCategoryIds.has(pcId))
+            return abort(400, `Pages category "${pc.pagesCategory}" is required but missing for serial ${cr.serialNumber}`);
+        }
 
         // Get lastReading from the most recent completed Counter-Reading call
         const lastCall = await ServiceCall.findOne(
@@ -1081,13 +1099,31 @@ const completeCall = async (req, res) => {
             lastReading,
             currentReading:  current,
             costPerPage:     pc.costPerPage,
+            minCopies:       pc.minCopies ?? 0,
             diff,
             chargesInRupees,
           });
         }
 
-        if (categories.length > 0)
-          counterReadingsMap.set(cr.serialNumber, { serialNumber: cr.serialNumber, categories });
+        if (categories.length > 0) {
+          const soldMinCopies      = soldSnEntry?.minCopies ?? 0;
+          const totalCopiesPrinted = categories.reduce((sum, c) => sum + c.diff, 0);
+          let minCopiesEntry       = null;
+
+          if (soldMinCopies > 0 && totalCopiesPrinted < soldMinCopies) {
+            const remainingCopies  = soldMinCopies - totalCopiesPrinted;
+            const minCostPerPage   = Math.min(...categories.map(c => c.costPerPage));
+            minCopiesEntry = {
+              minCopies:          soldMinCopies,
+              currentTotalCopies: totalCopiesPrinted,
+              diff:               remainingCopies,
+              costPerPage:        minCostPerPage,
+              chargesInRupees:    Math.round(remainingCopies * minCostPerPage * 100) / 100,
+            };
+          }
+
+          counterReadingsMap.set(cr.serialNumber, { serialNumber: cr.serialNumber, categories, minCopies: minCopiesEntry });
+        }
       }
     }
 
@@ -1095,8 +1131,11 @@ const completeCall = async (req, res) => {
     const totalPartsCharges             = Math.round(partsCharges * 100) / 100;
     const totalCounterReadingCharges    = Math.round(
       Array.from(counterReadingsMap.values())
-        .flatMap(cr => cr.categories)
-        .reduce((sum, cat) => sum + cat.chargesInRupees, 0) * 100
+        .reduce((sum, cr) => {
+          const catCharges = cr.categories.reduce((s, c) => s + c.chargesInRupees, 0);
+          const minCharges = cr.minCopies?.chargesInRupees ?? 0;
+          return sum + catCharges + minCharges;
+        }, 0) * 100
     ) / 100;
     const totalCharges = Math.round((totalServiceCharges + totalPartsCharges + totalCounterReadingCharges) * 100) / 100;
 
@@ -1335,6 +1374,162 @@ const completeCall = async (req, res) => {
           });
         } catch (err) {
           console.error("Invoice generation/email error after completeCall:", err.message);
+        }
+      });
+    }
+
+    if ((sendToEmail === true || sendToEmail === "true") && call.callType === "Counter-Reading") {
+      setImmediate(async () => {
+        try {
+          const updatedCall = await ServiceCall.findById(callId);
+          if (!updatedCall) return;
+
+          const Company = require("../../admin/companyManagement/admin.company.model");
+          const Counter = require("../../admin/auth/counter.model");
+          const companyId = updatedCall.companyInfo?.companyId;
+          const company   = companyId ? await Company.findById(companyId) : null;
+
+          const counter = await Counter.findByIdAndUpdate(
+            "counterReadingInvoice",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const invoiceNumber = `CR-INV-${counter.seq}`;
+
+          const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+          const basicTotal  = updatedCall.totalCounterReadingCharges ?? updatedCall.totalCharges ?? 0;
+          const cgstPercent = updatedCall.cgst?.percent ?? 0;
+          const sgstPercent = updatedCall.sgst?.percent ?? 0;
+          const igstPercent = updatedCall.igst?.percent ?? 0;
+          const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+          const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+          const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+          const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          const completedDate = updatedCall.dates?.completed
+            ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : invoiceDate;
+
+          const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+          const templatePath = path.join(__dirname, "../../../invoicesExamples/counter-reading-invoice.html");
+          let html = await fs.readFile(templatePath, "utf-8");
+
+          html = html
+            .replace(/{{invoiceNumber}}/g,    invoiceNumber)
+            .replace(/{{invoiceDate}}/g,      invoiceDate)
+            .replace(/{{companyName}}/g,      company?.name        || updatedCall.companyInfo?.name    || "")
+            .replace(/{{companyTagline}}/g,   company?.tagline     || "")
+            .replace(/{{companyAddress}}/g,   company?.address     || updatedCall.companyInfo?.address || "")
+            .replace(/{{companyPhone}}/g,     company?.phone       || updatedCall.companyInfo?.phone   || "")
+            .replace(/{{companyEmail}}/g,     company?.email       || updatedCall.companyInfo?.email   || "")
+            .replace(/{{companyGst}}/g,       company?.gstNumber   || updatedCall.companyInfo?.gstNumber || "")
+            .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
+            .replace(/{{bankName}}/g,         company?.bankName    || "")
+            .replace(/{{ifscCode}}/g,         company?.ifscCode    || "")
+            .replace(/{{bankBranch}}/g,       company?.bankBranch  || "")
+            .replace(/{{qrCode}}/g,           company?.qrCode      || "")
+            .replace(/{{invoiceLogoUrl}}/g,   invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g,  invoiceLogoText)
+            .replace(/{{customerName}}/g,     updatedCall.customerInfo?.name    || "")
+            .replace(/{{customerAddress}}/g,  updatedCall.customerInfo?.address || "")
+            .replace(/{{customerUniqueId}}/g, updatedCall.customerInfo?.customerUniqueId || "")
+            .replace(/{{customerGst}}/g,      updatedCall.customerInfo?.gstNumber || "")
+            .replace(/{{basicTotal}}/g,  fmt(basicTotal))
+            .replace(/{{cgstPercent}}/g, cgstPercent)
+            .replace(/{{cgstAmount}}/g,  fmt(cgstAmount))
+            .replace(/{{sgstPercent}}/g, sgstPercent)
+            .replace(/{{sgstAmount}}/g,  fmt(sgstAmount))
+            .replace(/{{igstPercent}}/g, igstPercent)
+            .replace(/{{igstAmount}}/g,  fmt(igstAmount))
+            .replace(/{{grandTotal}}/g,  fmt(grandTotal));
+
+          html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
+          html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
+          html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
+
+          const rows = [];
+          for (const machine of updatedCall.machines) {
+            const cr = machine.counterReadings?.[0];
+            if (!cr || !cr.categories?.length) continue;
+            const categories   = cr.categories;
+            const minCopies    = cr.minCopies;
+            const machineTotal = categories.reduce((s, c) => s + c.chargesInRupees, 0) + (minCopies?.chargesInRupees ?? 0);
+            const totalDataRows = categories.length + (minCopies ? 1 : 0);
+            categories.forEach((cat, idx) => {
+              const isFirst   = idx === 0;
+              const isLastCat = idx === categories.length - 1;
+              rows.push(`<tr class="cat-row${isLastCat && !minCopies ? " last-cat" : ""}">
+                ${isFirst ? `<td rowspan="${totalDataRows}" style="font-weight:600;vertical-align:top;">${machine.machineName}${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.serialNumber || ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
+                <td>${cat.pagesCategory}</td><td class="right">${cat.diff}</td><td class="right">${fmt(cat.costPerPage)}</td><td class="right">${fmt(cat.chargesInRupees)}</td>
+              </tr>`);
+            });
+            if (minCopies) {
+              rows.push(`<tr class="min-copies-row"><td class="min-copies-label">Min Copies</td><td class="right">${minCopies.diff}</td><td class="right">${fmt(minCopies.costPerPage)}</td><td class="right">${fmt(minCopies.chargesInRupees)}</td></tr>`);
+            }
+            rows.push(`<tr class="machine-total-row"><td colspan="3"></td><td class="machine-total-label">Total</td><td></td><td></td><td class="right"><strong>${fmt(machineTotal)}</strong></td></tr>`);
+          }
+          html = html.replace("{{tableRows}}", rows.join(""));
+
+          const DOCS_DIR = process.env.NODE_ENV === "production"
+            ? "/app/cloud/Documents"
+            : path.join(__dirname, "../../../cloud/Documents");
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const filename = `counter_reading_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+          const filepath = path.join(DOCS_DIR, filename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: "networkidle0" });
+          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          await ServiceCall.findByIdAndUpdate(callId, { invoiceUrl, invoiceNumber, invoiceGrandTotal: grandTotal });
+
+          await sendServiceCallInvoiceEmail({
+            invoiceNumber,
+            invoiceDate,
+            customerName:        updatedCall.customerInfo?.name    || "",
+            customerEmail:       updatedCall.customerInfo?.email   || "",
+            callId:              updatedCall.callId,
+            callType:            updatedCall.callType,
+            completedDate,
+            engineerName:        updatedCall.engineerInfo?.name    || "",
+            machines:            updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
+            totalServiceCharges: 0,
+            totalPartsCharges:   0,
+            basicTotal,
+            cgstPercent,  cgstAmount,
+            sgstPercent,  sgstAmount,
+            igstPercent,  igstAmount,
+            grandTotal,
+            invoiceUrl,
+            companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
+            companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
+            companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
+            companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
+            companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
+          });
+        } catch (err) {
+          console.error("Counter reading invoice/email error after completeCall:", err.message);
         }
       });
     }

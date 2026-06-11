@@ -155,6 +155,13 @@ const raiseServiceCall = async (req, res) => {
         problemTypes:     ptIds.map(id => problemTypeMap.get(id)),
         images,
         serviceCharge:    0,
+        ...((callType || "Service-Call") === "Counter-Reading" && {
+          counterReadings: [{
+            serialNumber: sn,
+            categories:   [],
+            minCopies:    foundEntry.minCopies > 0 ? { minCopies: foundEntry.minCopies, currentTotalCopies: 0, diff: 0, costPerPage: 0, chargesInRupees: 0 } : null,
+          }],
+        }),
       });
     }
 

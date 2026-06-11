@@ -274,6 +274,24 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   <FileText className="h-4 w-4 text-muted-foreground" />
                 </Button>
           )}
+          {(c as any).callType === "Counter-Reading" && c.status === "Completed" && (
+            (c as any).invoiceUrl
+              ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Counter Reading Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
+                  <FileText className="h-4 w-4" />
+                </Button>
+              : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Counter Reading Invoice" onClick={async (e) => {
+                  e.stopPropagation();
+                  const tab = window.open("", "_blank");
+                  try {
+                    const res = await serviceCallsApi.getCounterReadingInvoice(c._id);
+                    toast.success("Invoice generated");
+                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
+                    fetchCalls(pagination.page);
+                  } catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
+                }}>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </Button>
+          )}
           {c.status === "Open" && (
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
               e.stopPropagation();

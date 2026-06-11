@@ -26,10 +26,21 @@ const counterReadingCategorySchema = new mongoose.Schema(
   { _id: false }
 );
 
+const counterReadingMinCopiesSchema = new mongoose.Schema(
+  {
+    minCopies: { type: Number, required: true },
+    currentTotalCopies: { type: Number, required: true },
+    diff:{ type: Number, required: true },
+    costPerPage: { type: Number, required: true },
+    chargesInRupees: { type: Number, required: true },
+  }
+)
+
 const counterReadingSchema = new mongoose.Schema(
   {
     serialNumber: { type: String, trim: true, required: true },
     categories:   { type: [counterReadingCategorySchema], default: [] },
+    minCopies:    { type: counterReadingMinCopiesSchema, default: null },
   },
   { _id: false }
 );

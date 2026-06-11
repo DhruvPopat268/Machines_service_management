@@ -25,6 +25,7 @@ const pagesCategoryEntrySchema = new mongoose.Schema(
 const serialNumberEntrySchema = new mongoose.Schema(
   {
     serialNumber:    { type: String, trim: true, required: true },
+    minCopies:       { type: Number, default: 0 },
     contractType:    { type: contractTypeSnapshotSchema, default: null },
     pagesCategories: { type: [pagesCategoryEntrySchema], default: [] },
   },

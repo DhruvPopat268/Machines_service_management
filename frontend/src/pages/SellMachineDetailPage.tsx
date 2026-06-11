@@ -25,6 +25,7 @@ interface ContractTypeSnapshot {
 
 interface SerialNumberEntry {
   serialNumber: string;
+  minCopies?: number;
   contractType: ContractTypeSnapshot | null;
   pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[];
 }
@@ -206,7 +207,7 @@ const SellMachineDetailPage = () => {
           const isParts = m.categoryId === PARTS_CATEGORY_ID;
           const items   = isParts
             ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType, pagesCategories: undefined }))
-            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, contractType: e.contractType, pagesCategories: e.pagesCategories }));
+            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, minCopies: e.minCopies, contractType: e.contractType, pagesCategories: e.pagesCategories }));
           return (
             <Card key={mi} className="border-0 shadow-sm">
               <CardHeader>
@@ -275,8 +276,12 @@ const SellMachineDetailPage = () => {
                                   {item.pagesCategories && item.pagesCategories.length > 0
                                     ? <div className="flex flex-col gap-0.5">{item.pagesCategories.map((pc, pi) => (
                                         <span key={pi} className="text-xs"><span className="font-medium">{pc.pagesCategory}</span> <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span></span>
-                                      ))}</div>
-                                    : <span className="text-muted-foreground text-xs">—</span>}
+                                      ))}
+                                      {item.minCopies ? <span className="text-xs text-blue-600">Min: {item.minCopies} copies</span> : null}
+                                    </div>
+                                    : item.minCopies
+                                      ? <span className="text-xs text-blue-600">Min: {item.minCopies} copies</span>
+                                      : <span className="text-muted-foreground text-xs">—</span>}
                                 </td>
                               </>
                             )}

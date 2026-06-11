@@ -134,4 +134,9 @@ export const serviceCallsApi = {
     const res = await api.post(`/admin/service-calls/${id}/invoice`);
     return res.data;
   },
+
+  getCounterReadingInvoice: async (id: string): Promise<{ invoiceUrl: string; invoiceNumber: string }> => {
+    const res = await api.post(`/admin/service-calls/${id}/counter-reading-invoice`);
+    return res.data;
+  },
 };

@@ -105,6 +105,21 @@ const CallDetailsPage = () => {
                   finally { setGeneratingInvoice(false); }
                 }}><FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate Invoice"}</Button>
           )}
+          {(call as any).callType === "Counter-Reading" && call.status === "Completed" && (
+            (call as any).invoiceUrl
+              ? <Button variant="outline" size="sm" className="gap-2" onClick={() => window.open((call as any).invoiceUrl, "_blank")}><FileText className="h-4 w-4" /> View Invoice</Button>
+              : <Button variant="outline" size="sm" className="gap-2" disabled={generatingInvoice} onClick={async () => {
+                  setGeneratingInvoice(true);
+                  const tab = window.open("", "_blank");
+                  try {
+                    const res = await serviceCallsApi.getCounterReadingInvoice(id!);
+                    toast.success("Invoice generated");
+                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
+                    queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  } catch (err: any) { toast.error(err?.response?.data?.message || "Failed to generate invoice"); if (tab) tab.close(); }
+                  finally { setGeneratingInvoice(false); }
+                }}><FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate Invoice"}</Button>
+          )}
           {(call.status === "Open" || call.status === "Assigned") && (
           <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setSelectedCompanyId((call as any).companyInfo?.companyId || ""); setAssignGst({ cgst: (call as any).cgst?.percent != null ? String((call as any).cgst.percent) : "", sgst: (call as any).sgst?.percent != null ? String((call as any).sgst.percent) : "", igst: (call as any).igst?.percent != null ? String((call as any).igst.percent) : "" }); setAssignDialog(true); }}>
             {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
@@ -352,20 +367,18 @@ const CallDetailsPage = () => {
                     <TableHead>Pages Category</TableHead>
                     <TableHead className="text-right">Last Reading</TableHead>
                     <TableHead className="text-right">Current Reading</TableHead>
-                    <TableHead className="text-right">Diff</TableHead>
+                    <TableHead className="text-right">Copies Printed</TableHead>
                     <TableHead className="text-right">Cost / Page</TableHead>
                     <TableHead className="text-right">Charges (₹)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {call.machines.flatMap((machine: any, mi: number) =>
-                    (machine.counterReadings || []).flatMap((cr: any) =>
-                      (cr.categories || []).map((cat: any, ci: number) => (
-                        <TableRow key={`${mi}-${ci}`}>
+                    (machine.counterReadings || []).flatMap((cr: any) => {
+                      const categoryRows = (cr.categories || []).map((cat: any, ci: number) => (
+                        <TableRow key={`${mi}-cat-${ci}`}>
                           <TableCell>{ci + 1}</TableCell>
-                          <TableCell>
-                            <p className="font-medium">{machine.machineName}</p>
-                          </TableCell>
+                          <TableCell><p className="font-medium">{machine.machineName}</p></TableCell>
                           <TableCell className="font-mono text-sm">{cr.serialNumber}</TableCell>
                           <TableCell>{cat.pagesCategory}</TableCell>
                           <TableCell className="text-right">{cat.lastReading}</TableCell>
@@ -374,8 +387,38 @@ const CallDetailsPage = () => {
                           <TableCell className="text-right">₹{cat.costPerPage}</TableCell>
                           <TableCell className="text-right font-semibold text-blue-600">₹{cat.chargesInRupees}</TableCell>
                         </TableRow>
-                      ))
-                    )
+                      ));
+
+                      const mc = cr.minCopies;
+                      const totalCopies = (cr.categories || []).reduce((sum: number, c: any) => sum + c.diff, 0);
+                      const summaryRow = (
+                        <TableRow key={`${mi}-summary`} className="bg-muted/40">
+                          <TableCell colSpan={4} className="font-medium text-sm">
+                            <span className="text-muted-foreground">Total Copies Printed:</span>{" "}
+                            <span className="font-semibold">{totalCopies}</span>
+                            {mc && (
+                              <span className="ml-4">
+                                <span className="text-muted-foreground">Min Required:</span>{" "}
+                                <span className="font-semibold">{mc.minCopies}</span>
+                                <span className="ml-4 text-orange-600">
+                                  <span className="text-muted-foreground text-orange-600">Remaining:</span>{" "}
+                                  <span className="font-semibold">{mc.diff}</span>
+                                </span>
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-muted-foreground text-sm" colSpan={3}>
+                            {mc ? `Min Copies Charge @ ₹${mc.costPerPage}/page` : ""}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">₹{mc?.costPerPage ?? "—"}</TableCell>
+                          <TableCell className="text-right font-semibold text-orange-600">
+                            {mc ? `₹${mc.chargesInRupees}` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      );
+
+                      return [...categoryRows, summaryRow];
+                    })
                   )}
                 </TableBody>
               </Table>

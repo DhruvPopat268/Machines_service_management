@@ -36,7 +36,7 @@ interface MachineEntry {
   quantity: string;
   sellingPrice: string;
   discountedSellingPrice: string;
-  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string; pagesCategories: PagesCategoryEntry[] }[];
+  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string; minCopies: string; pagesCategories: PagesCategoryEntry[] }[];
   partCodes: string[];
 }
 
@@ -44,7 +44,7 @@ interface CodesDialogState {
   mi: number; machineName: string; isParts: boolean;
   quantity: number;
   availableCodes: string[];
-  codes: { value: string; contractTypeId: string; validFrom: string; validTo: string }[];
+  codes: { value: string; contractTypeId: string; validFrom: string; validTo: string; minCopies: string }[];
   saving: boolean;
   loading: boolean;
 }
@@ -166,8 +166,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
 
     const existingCodes = isParts
-      ? (e.partCodes.length > 0 ? e.partCodes.map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "" })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "" })))
-      : (e.serialNumbers.length > 0 ? e.serialNumbers.map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "" })));
+      ? (e.partCodes.length > 0 ? e.partCodes.map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })))
+      : (e.serialNumbers.length > 0 ? e.serialNumbers.map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo, minCopies: s.minCopies })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })));
 
     setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, availableCodes: available, codes: existingCodes.slice(0, qty), saving: false, loading: false });
   };
@@ -215,7 +215,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     } else {
       updateEntry(mi, "serialNumbers", codes.slice(0, quantity).map(c => ({
         serialNumber: c.value.trim(), contractTypeId: c.contractTypeId,
-        validFrom: c.validFrom, validTo: c.validTo, pagesCategories: [],
+        validFrom: c.validFrom, validTo: c.validTo, minCopies: c.minCopies, pagesCategories: [],
       })));
       setCodesDialog(null);
     }
@@ -248,7 +248,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
           ...(isParts
             ? { partCodes: e.partCodes }
-            : { serialNumbers: e.serialNumbers.map(s => ({ ...s, pagesCategories: (s.pagesCategories ?? []).map(p => ({ ...p, costPerPage: Number(p.costPerPage) })) })) }),
+            : { serialNumbers: e.serialNumbers.map(s => ({ ...s, minCopies: Number(s.minCopies) || 0, pagesCategories: (s.pagesCategories ?? []).map(p => ({ ...p, costPerPage: Number(p.costPerPage) })) })) }),
         };
       }),
     };
@@ -453,6 +453,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                       {s.pagesCategories.length > 0
                                         ? s.pagesCategories.map(p => `${p.pagesCategory} — ₹${p.costPerPage}/pg`).join(", ")
                                         : <span className="text-amber-600">No pages categories configured</span>}
+                                      {s.minCopies ? <span className="ml-1 text-blue-600">· Min: {s.minCopies} copies</span> : null}
                                     </p>
                                   </div>
                                   <Button
@@ -465,7 +466,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                         serialNumbers: [s.serialNumber],
                                         currentIndex: 0,
                                         mi,
-                                        pendingCodes: entry.serialNumbers.map(sn => ({ value: sn.serialNumber, contractTypeId: sn.contractTypeId, validFrom: sn.validFrom, validTo: sn.validTo })),
+                                        pendingCodes: entry.serialNumbers.map(sn => ({ value: sn.serialNumber, contractTypeId: sn.contractTypeId, validFrom: sn.validFrom, validTo: sn.validTo, minCopies: sn.minCopies })),
                                         configs: existingConfigs,
                                       });
                                     }}
@@ -529,6 +530,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             contractTypeId:  c.contractTypeId,
             validFrom:       c.validFrom,
             validTo:         c.validTo,
+            minCopies:       c.minCopies,
             pagesCategories: (configs[c.value.trim()] ?? entries[mi].serialNumbers.find(s => s.serialNumber === c.value.trim())?.pagesCategories?.map(e => ({ ...e, costPerPage: String(e.costPerPage) })) ?? []).map(e => ({
               pagesCategoryId: e.pagesCategoryId,
               pagesCategory:   e.pagesCategory,
@@ -694,6 +696,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                 disabled={!codesDialog.codes[i]?.contractTypeId}
                                 onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validTo: e.target.value }; return { ...p, codes: c }; })} />
                             </div>
+                            {codesDialog.codes[i]?.contractTypeId === TSS_CONTRACT_TYPE_ID && (
+                              <div className="space-y-1">
+                                <Label className="text-[10px] text-muted-foreground">Min Copies</Label>
+                                <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
+                                  value={codesDialog.codes[i]?.minCopies ?? ""}
+                                  onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], minCopies: e.target.value }; return { ...p, codes: c }; })} />
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
