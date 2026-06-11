@@ -123,6 +123,7 @@ const SellMachineDetailPage = () => {
     if (!invoiceForm.companyId) { toast.error("Please select a company"); return; }
     if (invoiceForm.cgst === "" || invoiceForm.sgst === "" || invoiceForm.igst === "") { toast.error("Enter all tax fields (use 0 if not applicable)"); return; }
     setGeneratingInvoice(true);
+    const tab = window.open("", "_blank");
     try {
       const res = await api.post(`/admin/sales/${id}/generate-invoice`, {
         companyId: invoiceForm.companyId,
@@ -131,10 +132,10 @@ const SellMachineDetailPage = () => {
         igst: Number(invoiceForm.igst),
       });
       toast.success("Invoice generated");
-      window.open(res.data.invoiceUrl, "_blank");
+      if (tab) tab.location.href = res.data.invoiceUrl; else window.open(res.data.invoiceUrl, "_blank");
       setInvoiceDialog(false);
       setSale(prev => prev ? { ...prev, invoiceUrl: res.data.invoiceUrl, invoiceNumber: res.data.invoiceNumber } : prev);
-    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to generate invoice"); }
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to generate invoice"); if (tab) tab.close(); }
     finally { setGeneratingInvoice(false); }
   };
 
@@ -303,7 +304,7 @@ const SellMachineDetailPage = () => {
               <Label className="text-sm">Company <span className="text-destructive">*</span></Label>
               <Select value={invoiceForm.companyId} onValueChange={(v) => setInvoiceForm(p => ({ ...p, companyId: v }))}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select company" /></SelectTrigger>
-                <SelectContent>{companies.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
+                <SelectContent>{companies.filter(c => c._id).map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-3 gap-3">

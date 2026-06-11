@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2 } from "lucide-react";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import Spinner from "@/components/Spinner";
@@ -38,12 +39,13 @@ const CallDetailsPage = () => {
   const [assignDialog, setAssignDialog] = useState(false);
   const [noteDialog, setNoteDialog] = useState(false);
   const [priorityDialog, setPriorityDialog] = useState(false);
-  const [companyDialog, setCompanyDialog] = useState(false);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [assignGst, setAssignGst] = useState({ cgst: "", sgst: "", igst: "" });
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
+  const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
   const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean }[]>([]);
   const [companies, setCompanies] = useState<{ _id: string; name: string; gstNumber?: string }[]>([]);
@@ -88,11 +90,23 @@ const CallDetailsPage = () => {
         </div>
         {/* Quick action buttons */}
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedCompanyId((call as any).companyInfo?.companyId || ""); setCompanyDialog(true); }}>
-            <Building2 className="h-4 w-4" /> {(call as any).companyInfo ? "Change Company" : "Assign Company"}
-          </Button>
+          {(call as any).callType === "Service-Call" && call.status === "Completed" && (
+            call.invoiceUrl
+              ? <Button variant="outline" size="sm" className="gap-2" onClick={() => window.open(call.invoiceUrl, "_blank")}><FileText className="h-4 w-4" /> View Invoice</Button>
+              : <Button variant="outline" size="sm" className="gap-2" disabled={generatingInvoice} onClick={async () => {
+                  setGeneratingInvoice(true);
+                  const tab = window.open("", "_blank");
+                  try {
+                    const res = await serviceCallsApi.getInvoice(id!);
+                    toast.success("Invoice generated");
+                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
+                    queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  } catch (err: any) { toast.error(err?.response?.data?.message || "Failed to generate invoice"); if (tab) tab.close(); }
+                  finally { setGeneratingInvoice(false); }
+                }}><FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate Invoice"}</Button>
+          )}
           {(call.status === "Open" || call.status === "Assigned") && (
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setAssignDialog(true); }}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setSelectedCompanyId((call as any).companyInfo?.companyId || ""); setAssignGst({ cgst: (call as any).cgst?.percent != null ? String((call as any).cgst.percent) : "", sgst: (call as any).sgst?.percent != null ? String((call as any).sgst.percent) : "", igst: (call as any).igst?.percent != null ? String((call as any).igst.percent) : "" }); setAssignDialog(true); }}>
             {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
             {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
           </Button>
@@ -575,37 +589,65 @@ const CallDetailsPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Engineer Dialog */}
       <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"} — {call.callId}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 py-4">
-            <Label>Select Engineer</Label>
-            <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
-              <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
-              <SelectContent>
-                {engineers.map((e) => (
-                  <SelectItem key={e._id} value={e._id}>
-                    <span className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
-                      {e.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Select Engineer</Label>
+              <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
+                <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
+                <SelectContent>
+                  {engineers.map((e) => (
+                    <SelectItem key={e._id} value={e._id}>
+                      <span className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                        {e.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Company <span className="text-destructive">*</span></Label>
+              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>
+                  {companies.filter(c => c._id).map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}{c.gstNumber ? ` — ${c.gstNumber}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm">CGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.cgst} onChange={(e) => setAssignGst(p => ({ ...p, cgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">SGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.sgst} onChange={(e) => setAssignGst(p => ({ ...p, sgst: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">IGST %</Label>
+                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.igst} onChange={(e) => setAssignGst(p => ({ ...p, igst: e.target.value }))} />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignDialog(false)}>Cancel</Button>
             <Button
-              disabled={!selectedEngineerId || saving}
+              disabled={!selectedEngineerId || !selectedCompanyId || assignGst.cgst === "" || assignGst.sgst === "" || assignGst.igst === "" || saving}
               onClick={async () => {
                 if (!id) return;
                 setSaving(true);
                 try {
-                  await serviceCallsApi.assignEngineer(id, selectedEngineerId);
+                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId, Number(assignGst.cgst), Number(assignGst.sgst), Number(assignGst.igst));
                   toast.success(`Engineer assigned to ${call.callId}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setAssignDialog(false);
@@ -696,50 +738,6 @@ const CallDetailsPage = () => {
               }}
             >
               {saving ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Assign Company Dialog */}
-      <Dialog open={companyDialog} onOpenChange={setCompanyDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{(call as any).companyInfo ? "Change Company" : "Assign Company"} — {call.callId}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2 py-4">
-            <Label>Select Company</Label>
-            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-              <SelectTrigger><SelectValue placeholder="Choose company" /></SelectTrigger>
-              <SelectContent>
-                {companies.map((c) => (
-                  <SelectItem key={c._id} value={c._id}>
-                    <span>{c.name}{c.gstNumber ? ` — ${c.gstNumber}` : ""}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCompanyDialog(false)}>Cancel</Button>
-            <Button
-              disabled={!selectedCompanyId || saving}
-              onClick={async () => {
-                if (!id) return;
-                setSaving(true);
-                try {
-                  await serviceCallsApi.updateCall(id, { companyId: selectedCompanyId });
-                  toast.success("Company assigned successfully");
-                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
-                  setCompanyDialog(false);
-                } catch {
-                  toast.error("Failed to assign company");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              {saving ? "Saving..." : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>

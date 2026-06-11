@@ -39,6 +39,8 @@ const usedPartSchema = new mongoose.Schema(
     partCode:               { type: String, trim: true, required: true },
     machineId:              { type: mongoose.Schema.Types.ObjectId, ref: "Machine", default: null },
     machineName:            { type: String, trim: true, default: "" },
+    modelNumber:            { type: String, trim: true, default: "" },
+    hsnCode:                { type: String, trim: true, default: "" },
     categoryId:             { type: mongoose.Schema.Types.ObjectId, default: null },
     category:               { type: String, trim: true, default: "" },
     sellingPrice:           { type: Number, default: 0 },
@@ -158,6 +160,12 @@ const serviceCallSchema = new mongoose.Schema(
     sendToEmail:         { type: Boolean, default: false },
     sendToWhatsapp:      { type: Boolean, default: false },
     companyInfo:         { type: companyInfoSchema, default: null },
+    cgst:                { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    sgst:                { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    igst:                { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    invoiceGrandTotal:   { type: Number, default: null },
+    invoiceUrl:          { type: String, default: null },
+    invoiceNumber:       { type: String, default: null },
   },
   { timestamps: true }
 );

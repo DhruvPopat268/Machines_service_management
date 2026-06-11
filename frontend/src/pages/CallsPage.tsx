@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X } from "lucide-react";
+import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import api from "@/lib/axiosInterceptor";
@@ -51,6 +51,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [assignDialog, setAssignDialog]     = useState<ServiceCall | null>(null);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [assigning, setAssigning]           = useState(false);
+  const [companies, setCompanies]           = useState<DropdownOption[]>([]);
+  const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
 
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
@@ -103,6 +105,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       }
     };
     fetchOptions();
+    // fetch companies for assignment/invoice selection
+    api.get("/admin/companies", { params: { status: "Active", limit: 100 } }).then(r => setCompanies(r.data.data)).catch(() => {});
   }, []);
 
   const fetchProblemTypes = useCallback(async (q: string) => {
@@ -252,8 +256,31 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); navigate(`/calls/${c._id}`); }}>
             <Eye className="h-4 w-4" />
           </Button>
+          {(c as any).callType === "Service-Call" && c.status === "Completed" && (
+            (c as any).invoiceUrl
+              ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
+                  <FileText className="h-4 w-4" />
+                </Button>
+              : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async (e) => {
+                  e.stopPropagation();
+                  const tab = window.open("", "_blank");
+                  try {
+                    const res = await serviceCallsApi.getInvoice(c._id);
+                    toast.success("Invoice generated");
+                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
+                    fetchCalls(pagination.page);
+                  } catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
+                }}>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </Button>
+          )}
           {c.status === "Open" && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setAssignDialog(c); setSelectedEngineerId(c.engineerInfo?._id || ""); }}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
+              e.stopPropagation();
+              setAssignDialog(c);
+              setSelectedEngineerId(c.engineerInfo?._id || "");
+              setAssignForm({ companyId: c.companyInfo?.companyId ?? "", cgst: c.cgst?.percent != null ? String(c.cgst.percent) : "", sgst: c.sgst?.percent != null ? String(c.sgst.percent) : "", igst: c.igst?.percent != null ? String(c.igst.percent) : "" });
+            }}>
               <UserPlus className="h-4 w-4" />
             </Button>
           )}
@@ -388,6 +415,32 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
+                  <Label className="text-sm">Company (for invoice)</Label>
+                  <Select value={assignForm.companyId} onValueChange={(v) => setAssignForm(p => ({ ...p, companyId: v }))}>
+                    <SelectTrigger className="h-9"><SelectValue placeholder="Select company (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No company</SelectItem>
+                      {companies.filter(c => c._id).map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">CGST %</Label>
+                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.cgst} onChange={(e) => setAssignForm(p => ({ ...p, cgst: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">SGST %</Label>
+                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.sgst} onChange={(e) => setAssignForm(p => ({ ...p, sgst: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">IGST %</Label>
+                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.igst} onChange={(e) => setAssignForm(p => ({ ...p, igst: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Select Engineer</Label>
                   <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
                     <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
@@ -412,7 +465,14 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                     if (!assignDialog) return;
                     setAssigning(true);
                     try {
-                      await serviceCallsApi.assignEngineer(assignDialog._id, selectedEngineerId);
+                      await serviceCallsApi.assignEngineer(
+                        assignDialog._id,
+                        selectedEngineerId,
+                        assignForm.companyId !== "none" ? assignForm.companyId : undefined,
+                        assignForm.cgst !== "" ? Number(assignForm.cgst) : undefined,
+                        assignForm.sgst !== "" ? Number(assignForm.sgst) : undefined,
+                        assignForm.igst !== "" ? Number(assignForm.igst) : undefined,
+                      );
                       toast.success(`Engineer assigned to ${assignDialog.callId}`);
                       setAssignDialog(null);
                       fetchCalls(pagination.page);

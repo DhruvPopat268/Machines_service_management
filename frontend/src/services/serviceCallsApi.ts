@@ -63,6 +63,8 @@ export interface ServiceCall {
   totalPartsCharges?: number;
   createdAt: string;
   updatedAt: string;
+  invoiceUrl?: string;
+  invoiceNumber?: string;
 }
 
 export interface CallStats {
@@ -113,8 +115,8 @@ export const serviceCallsApi = {
     return { data: response.data.data, stats: response.data.stats, pagination: response.data.pagination };
   },
 
-  assignEngineer: async (id: string, engineerId: string): Promise<ServiceCall> => {
-    const res = await api.patch(`/admin/service-calls/${id}/assign-engineer`, { engineerId });
+  assignEngineer: async (id: string, engineerId: string, companyId?: string, cgst?: number, sgst?: number, igst?: number): Promise<ServiceCall> => {
+    const res = await api.patch(`/admin/service-calls/${id}/assign-engineer`, { engineerId, companyId, cgst, sgst, igst });
     return res.data.data;
   },
 
@@ -126,5 +128,10 @@ export const serviceCallsApi = {
   getCallDetail: async (id: string): Promise<ServiceCall> => {
     const response = await api.get(`/admin/service-calls/${id}`);
     return response.data.data;
+  },
+
+  getInvoice: async (id: string): Promise<{ invoiceUrl: string; invoiceNumber: string }> => {
+    const res = await api.post(`/admin/service-calls/${id}/invoice`);
+    return res.data;
   },
 };

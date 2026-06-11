@@ -862,6 +862,7 @@ const completeCall = async (req, res) => {
         { "machines.partCodes.partCode": { $in: partCodesList } },
         { "machines.machineId": 1, "machines.machineName": 1,
           "machines.categoryId": 1, "machines.category": 1, "machines.divisionId": 1, "machines.division": 1,
+          "machines.modelNumber": 1,
           "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
       ).session(session);
 
@@ -877,6 +878,7 @@ const completeCall = async (req, res) => {
                 unitPrice,
                 machineId:              machine.machineId,
                 machineName:            machine.machineName,
+                modelNumber:            machine.modelNumber || "",
                 categoryId:             machine.categoryId,
                 category:               machine.category || "",
                 divisionId:             machine.divisionId,
@@ -892,6 +894,15 @@ const completeCall = async (req, res) => {
       const notFound = partCodesList.filter(c => !partInfoMap.has(c));
       if (notFound.length > 0)
         return abort(404, `Part code(s) not found: ${notFound.join(", ")}`);
+
+      // Fetch hsnCode from Machine docs for all unique machineIds
+      const uniqueMachineIds = [...new Set([...partInfoMap.values()].map(i => i.machineId?.toString()).filter(Boolean))];
+      const machineDocs = uniqueMachineIds.length > 0
+        ? await Machine.find({ _id: { $in: uniqueMachineIds } }).select("_id hsnCode").session(session)
+        : [];
+      const hsnMap = new Map(machineDocs.map(m => [m._id.toString(), m.hsnCode || ""]));
+      for (const [code, info] of partInfoMap)
+        partInfoMap.set(code, { ...info, hsnCode: hsnMap.get(info.machineId?.toString()) || "" });
 
       // Build contractType map: serialNumber -> contractType
       const contractMap = new Map();
@@ -913,6 +924,8 @@ const completeCall = async (req, res) => {
           partCode:               p.partCode.trim(),
           machineId:              info.machineId,
           machineName:            info.machineName,
+          modelNumber:            info.modelNumber || "",
+          hsnCode:                info.hsnCode || "",
           categoryId:             info.categoryId,
           category:               info.category,
           sellingPrice:           info.sellingPrice,

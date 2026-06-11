@@ -125,7 +125,7 @@ const getCallDetail = async (req, res) => {
 const assignEngineer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { engineerId } = req.body;
+    const { engineerId, companyId, cgst, sgst, igst } = req.body;
 
     if (!mongoose.isValidObjectId(engineerId))
       return res.status(400).json({ success: false, message: "Invalid engineerId" });
@@ -139,8 +139,39 @@ const assignEngineer = async (req, res) => {
     if (!call)
       return res.status(400).json({ success: false, message: "Call not found or cannot be assigned in current status" });
 
-    if (!call.companyInfo)
-      return res.status(400).json({ success: false, message: "Assign a company to this call before assigning an engineer" });
+    // Resolve company
+    let companyInfo = call.companyInfo ?? null;
+    if (companyId !== undefined) {
+      if (companyId === null) {
+        companyInfo = null;
+      } else {
+        if (!mongoose.isValidObjectId(companyId))
+          return res.status(400).json({ success: false, message: "Invalid companyId" });
+        const Company = require("../companyManagement/admin.company.model");
+        const company = await Company.findById(companyId);
+        if (!company)
+          return res.status(404).json({ success: false, message: "Company not found" });
+        companyInfo = {
+          companyId: company._id,
+          name:      company.name,
+          address:   company.address,
+          phone:     company.phone,
+          email:     company.email,
+          gstNumber: company.gstNumber || "",
+        };
+      }
+    }
+
+    // Resolve GST
+    const cgstPercent = cgst !== undefined ? Number(cgst) : (call.cgst?.percent ?? 0);
+    const sgstPercent = sgst !== undefined ? Number(sgst) : (call.sgst?.percent ?? 0);
+    const igstPercent = igst !== undefined ? Number(igst) : (call.igst?.percent ?? 0);
+
+    const basicTotal     = call.totalCharges ?? call.totalServiceCharges ?? 0;
+    const cgstAmount     = Math.round(basicTotal * cgstPercent / 100 * 100) / 100;
+    const sgstAmount     = Math.round(basicTotal * sgstPercent / 100 * 100) / 100;
+    const igstAmount     = Math.round(basicTotal * igstPercent / 100 * 100) / 100;
+    const invoiceGrandTotal = Math.round((basicTotal + cgstAmount + sgstAmount + igstAmount) * 100) / 100;
 
     await call.updateOne({
       engineerInfo: {
@@ -152,6 +183,11 @@ const assignEngineer = async (req, res) => {
       },
       status: "Assigned",
       "dates.assigned": new Date(),
+      companyInfo,
+      cgst: { percent: cgstPercent, amount: cgstAmount },
+      sgst: { percent: sgstPercent, amount: sgstAmount },
+      igst: { percent: igstPercent, amount: igstAmount },
+      invoiceGrandTotal,
     });
 
     return res.status(200).json({ success: true, data: await ServiceCall.findById(id) });
@@ -576,4 +612,188 @@ const raiseServiceCall = async (req, res) => {
   }
 };
 
-module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall };
+const DOCS_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/Documents"
+  : path.join(__dirname, "../../../cloud/Documents");
+
+const getServiceCallInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const call = await ServiceCall.findById(id);
+    if (!call)
+      return res.status(404).json({ success: false, message: "Service call not found" });
+
+    if (call.callType !== "Service-Call" || call.status !== "Completed")
+      return res.status(400).json({ success: false, message: "Invoice only available for completed Service-Call type calls" });
+
+    const Company = require("../companyManagement/admin.company.model");
+    const companyId = call.companyInfo?.companyId;
+    const company = companyId ? await Company.findById(companyId) : null;
+
+    const Counter = require("../auth/counter.model");
+    const counter = await Counter.findByIdAndUpdate(
+      "serviceCallInvoice",
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    const invoiceNumber = `SVC-INV-${counter.seq}`;
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Recalculate GST fresh on totalCharges (the real base)
+    const basicTotal  = call.totalCharges ?? 0;
+    const cgstPercent = call.cgst?.percent ?? 0;
+    const sgstPercent = call.sgst?.percent ?? 0;
+    const igstPercent = call.igst?.percent ?? 0;
+    const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+    const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+    const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+    const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+    // Persist updated invoiceGrandTotal
+    await ServiceCall.findByIdAndUpdate(id, { invoiceGrandTotal: grandTotal });
+
+    const invoiceDate = call.dates?.completed
+      ? new Date(call.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+      : new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+    const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+    const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+    const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
+    let html = await fs.readFile(templatePath, "utf-8");
+
+    // Patch template: add Machine S/N column after Description
+    html = html
+      .replace(
+        `<th>Description</th>`,
+        `<th>Description</th>\n          <th style="width:120px;">Machine S/N</th>`
+      )
+      .replace(
+        `<td>\n            <div class="item-name">{{machineName}}</div>\n            {{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}\n            {{#if serials}}<div class="item-serials">{{serialLabel}}: {{serials}}</div>{{/if}}\n          </td>`,
+        `<td><div class="item-name">{{machineName}}</div>{{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}{{#if partCode}}<div class="item-serials">P/C: {{partCode}}</div>{{/if}}</td>\n          <td style="font-size:11px;">{{machineSN}}</td>`
+      );
+
+    // Substitutions
+    html = html
+      .replace(/{{invoiceNumber}}/g, invoiceNumber)
+      .replace(/{{invoiceDate}}/g, invoiceDate)
+      .replace(/{{companyName}}/g, company?.name       || call.companyInfo?.name    || "")
+      .replace(/{{companyTagline}}/g, company?.tagline  || "")
+      .replace(/{{companyAddress}}/g, company?.address  || call.companyInfo?.address || "")
+      .replace(/{{companyPhone}}/g,   company?.phone    || call.companyInfo?.phone   || "")
+      .replace(/{{companyEmail}}/g,   company?.email    || call.companyInfo?.email   || "")
+      .replace(/{{companyGst}}/g,     company?.gstNumber || call.companyInfo?.gstNumber || "")
+      .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
+      .replace(/{{bankName}}/g,       company?.bankName   || "")
+      .replace(/{{ifscCode}}/g,       company?.ifscCode   || "")
+      .replace(/{{bankBranch}}/g,     company?.bankBranch || "")
+      .replace(/{{qrCode}}/g,         company?.qrCode     || "")
+      .replace(/{{invoiceLogoUrl}}/g,  invoiceLogoUrl)
+      .replace(/{{invoiceLogoText}}/g, invoiceLogoText)
+      .replace(/{{customerName}}/g,    call.customerInfo?.name    || "")
+      .replace(/{{customerAddress}}/g, call.customerInfo?.address || "")
+      .replace(/{{customerUniqueId}}/g, call.customerInfo?.customerUniqueId || "")
+      .replace(/{{customerGst}}/g,     call.customerInfo?.gstNumber || "")
+      .replace(/{{basicTotal}}/g,  fmt(basicTotal))
+      .replace(/{{cgstPercent}}/g, cgstPercent)
+      .replace(/{{cgstAmount}}/g,  fmt(cgstAmount))
+      .replace(/{{sgstPercent}}/g, sgstPercent)
+      .replace(/{{sgstAmount}}/g,  fmt(sgstAmount))
+      .replace(/{{igstPercent}}/g, igstPercent)
+      .replace(/{{igstAmount}}/g,  fmt(igstAmount))
+      .replace(/{{grandTotal}}/g,  fmt(grandTotal));
+
+    // Conditional blocks
+    html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = igstPercent > 0 ? html.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\.\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+
+    // Build machine rows — service charges row first, then one row per used part
+    const machineRowsMatch = html.match(/{{#each machines}}([\.\s\S]*?){{\/each}}/);
+    if (machineRowsMatch) {
+      const rowTemplate = machineRowsMatch[1];
+      const rows = [];
+      let srNo = 1;
+
+      // Row 1: Service Charges
+      const totalSC = call.totalServiceCharges ?? 0;
+      if (totalSC > 0) {
+        let row = rowTemplate
+          .replace(/{{srNo}}/g,        srNo++)
+          .replace(/{{machineName}}/g, "Service Charges")
+          .replace(/{{hsnCode}}/g,     "-")
+          .replace(/{{quantity}}/g,    "-")
+          .replace(/{{rate}}/g,        fmt(totalSC))
+          .replace(/{{amount}}/g,      fmt(totalSC))
+          .replace(/{{machineSN}}/g,   "-");
+        row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+        row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+        row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+        rows.push(row);
+      }
+
+      // Rows: one per used part across all machines
+      for (const machine of call.machines) {
+        for (const part of (machine.usedParts || [])) {
+          const qty    = part.quantity ?? 1;
+          const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
+          const amount = part.total ?? (qty * rate);
+          let row = rowTemplate
+            .replace(/{{srNo}}/g,        srNo++)
+            .replace(/{{machineName}}/g, part.machineName || "")
+            .replace(/{{hsnCode}}/g,     part.hsnCode || "")
+            .replace(/{{quantity}}/g,    qty)
+            .replace(/{{rate}}/g,        fmt(rate))
+            .replace(/{{amount}}/g,      fmt(amount))
+            .replace(/{{machineSN}}/g,   machine.serialNumber || "");
+          // Model number
+          row = part.modelNumber
+            ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
+            : row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+          // Part code (P/C)
+          row = part.partCode
+            ? row.replace(/{{#if partCode}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{partCode}}/g, part.partCode)
+            : row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+          row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+          rows.push(row);
+        }
+      }
+
+      html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows.join(""));
+    }
+
+    const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+      import("puppeteer"),
+      import("@sparticuz/chromium"),
+    ]);
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+    await fs.mkdir(DOCS_DIR, { recursive: true });
+    const filename = `service_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+    const filepath = path.join(DOCS_DIR, filename);
+
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+    await browser.close();
+
+    const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+    await ServiceCall.findByIdAndUpdate(id, { invoiceUrl, invoiceNumber });
+
+    return res.status(200).json({ success: true, invoiceUrl, invoiceNumber });
+  } catch (error) {
+    console.error("Error generating service call invoice:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice };
