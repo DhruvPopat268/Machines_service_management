@@ -56,12 +56,16 @@ const buildCounterReadingInfo = async (calls) => {
           status:   "Completed",
           _id:      { $ne: call._id },
         },
-        { "machines.counterReadings": 1 }
+        { "machines.counterReadings": 1, "dates.completed": 1 }
       ).sort({ "dates.completed": -1 }).lean();
 
       const lastSnReading = lastCall?.machines
         ?.flatMap(m => m.counterReadings ?? [])
         .find(cr => cr.serialNumber === sn);
+
+      const lastReadingDate = lastCall?.dates?.completed
+        ? new Date(lastCall.dates.completed).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "2-digit" })
+        : null;
 
       const categories = Array.from(costPerPageMap.values()).map(pc => {
         const lastCat = lastSnReading?.categories?.find(
@@ -71,6 +75,7 @@ const buildCounterReadingInfo = async (calls) => {
           pagesCategoryId: pc.pagesCategoryId,
           pagesCategory:   pc.pagesCategory,
           lastReading:     lastCat?.currentReading ?? 0,
+          lastReadingDate,
           costPerPage:     pc.costPerPage,
         };
       });
