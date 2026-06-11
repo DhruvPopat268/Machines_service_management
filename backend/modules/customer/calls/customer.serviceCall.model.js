@@ -55,6 +55,7 @@ const machineEntrySchema = new mongoose.Schema(
     machineId:        { type: mongoose.Schema.Types.ObjectId, ref: "Machine", default: null },
     machineName:      { type: String, trim: true, required: true },
     modelNumber:      { type: String, trim: true, default: "" },
+    hsnCode:          { type: String, trim: true, default: "" },
     serialNumber:     { type: String, trim: true, default: "" },
     divisionId:       { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision", default: null },
     division:         { type: String, trim: true, default: "" },

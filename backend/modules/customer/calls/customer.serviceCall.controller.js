@@ -161,6 +161,12 @@ const raiseServiceCall = async (req, res) => {
     if (machines.length === 0)
       return res.status(404).json({ success: false, message: "No valid machines found" });
 
+    // Batch fetch hsnCode from Machine docs
+    const machineIds = [...new Set(machines.map(m => m.machineId?.toString()).filter(Boolean))];
+    const machineDocs = machineIds.length > 0 ? await require("../../admin/inventoryManagement/admin.machine.model").find({ _id: { $in: machineIds } }).select("_id hsnCode") : [];
+    const hsnMap = new Map(machineDocs.map(m => [m._id.toString(), m.hsnCode || ""]));
+    for (const m of machines) m.hsnCode = hsnMap.get(m.machineId?.toString()) || "";
+
     const lastCall = await ServiceCall.findOne().sort({ createdAt: -1 }).select("callId");
     let callNumber = 1;
     if (lastCall?.callId) {

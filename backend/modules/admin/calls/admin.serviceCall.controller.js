@@ -566,6 +566,12 @@ const raiseServiceCall = async (req, res) => {
     if (machineEntries.length === 0)
       return res.status(404).json({ success: false, message: "No valid machines found" });
 
+    // Batch fetch hsnCode from Machine docs
+    const machineIds = [...new Set(machineEntries.map(m => m.machineId?.toString()).filter(Boolean))];
+    const machineDocs = machineIds.length > 0 ? await Machine.find({ _id: { $in: machineIds } }).select("_id hsnCode") : [];
+    const hsnMap = new Map(machineDocs.map(m => [m._id.toString(), m.hsnCode || ""]));
+    for (const m of machineEntries) m.hsnCode = hsnMap.get(m.machineId?.toString()) || "";
+
     const lastCall = await ServiceCall.findOne().sort({ createdAt: -1 }).select("callId");
     let callNumber = 1;
     if (lastCall?.callId) {
@@ -720,17 +726,18 @@ const getServiceCallInvoice = async (req, res) => {
       const rows = [];
       let srNo = 1;
 
-      // Row 1: Service Charges
-      const totalSC = call.totalServiceCharges ?? 0;
-      if (totalSC > 0) {
+      // Rows: one per machine service charge (skip if 0)
+      for (const machine of call.machines) {
+        const sc = machine.serviceCharge ?? 0;
+        if (sc <= 0) continue;
         let row = rowTemplate
           .replace(/{{srNo}}/g,        srNo++)
-          .replace(/{{machineName}}/g, "Service Charges")
-          .replace(/{{hsnCode}}/g,     "-")
+          .replace(/{{machineName}}/g, "Service Charge")
+          .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
           .replace(/{{quantity}}/g,    "-")
-          .replace(/{{rate}}/g,        fmt(totalSC))
-          .replace(/{{amount}}/g,      fmt(totalSC))
-          .replace(/{{machineSN}}/g,   "-");
+          .replace(/{{rate}}/g,        fmt(sc))
+          .replace(/{{amount}}/g,      fmt(sc))
+          .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
         row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
         row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
         row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
