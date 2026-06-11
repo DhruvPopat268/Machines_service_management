@@ -10,6 +10,7 @@ const InventoryLog = require("../../admin/inventoryLogs/admin.inventoryLog.model
 const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
 const mongoose = require("mongoose");
 const axios = require("axios");
+const { sendServiceCallInvoiceEmail } = require("../../../utils/emailService");
 
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
@@ -1150,6 +1151,193 @@ const completeCall = async (req, res) => {
 
     await session.commitTransaction();
     session.endSession();
+
+    // Generate invoice and send email if requested — runs after transaction, non-blocking
+    if ((sendToEmail === true || sendToEmail === "true") && call.callType === "Service-Call") {
+      setImmediate(async () => {
+        try {
+          const updatedCall = await ServiceCall.findById(callId);
+          if (!updatedCall) return;
+
+          const Company  = require("../../admin/companyManagement/admin.company.model");
+          const Counter  = require("../../admin/auth/counter.model");
+          const companyId = updatedCall.companyInfo?.companyId;
+          const company   = companyId ? await Company.findById(companyId) : null;
+
+          const counter = await Counter.findByIdAndUpdate(
+            "serviceCallInvoice",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const invoiceNumber = `SVC-INV-${counter.seq}`;
+
+          const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+          const basicTotal  = updatedCall.totalCharges ?? 0;
+          const cgstPercent = updatedCall.cgst?.percent ?? 0;
+          const sgstPercent = updatedCall.sgst?.percent ?? 0;
+          const igstPercent = updatedCall.igst?.percent ?? 0;
+          const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+          const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+          const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+          const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          const completedDate = updatedCall.dates?.completed
+            ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : invoiceDate;
+
+          const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+          const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
+          let html = await fs.readFile(templatePath, "utf-8");
+
+          html = html
+            .replace(`<th>Description</th>`, `<th>Description</th>\n          <th style="width:120px;">Machine S/N</th>`)
+            .replace(
+              `<td>\n            <div class="item-name">{{machineName}}</div>\n            {{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}\n            {{#if serials}}<div class="item-serials">{{serialLabel}}: {{serials}}</div>{{/if}}\n          </td>`,
+              `<td><div class="item-name">{{machineName}}</div>{{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}{{#if partCode}}<div class="item-serials">P/C: {{partCode}}</div>{{/if}}</td>\n          <td style="font-size:11px;">{{machineSN}}</td>`
+            );
+
+          html = html
+            .replace(/{{invoiceNumber}}/g,     invoiceNumber)
+            .replace(/{{invoiceDate}}/g,        invoiceDate)
+            .replace(/{{companyName}}/g,        company?.name        || updatedCall.companyInfo?.name    || "")
+            .replace(/{{companyTagline}}/g,     company?.tagline     || "")
+            .replace(/{{companyAddress}}/g,     company?.address     || updatedCall.companyInfo?.address || "")
+            .replace(/{{companyPhone}}/g,       company?.phone       || updatedCall.companyInfo?.phone   || "")
+            .replace(/{{companyEmail}}/g,       company?.email       || updatedCall.companyInfo?.email   || "")
+            .replace(/{{companyGst}}/g,         company?.gstNumber   || updatedCall.companyInfo?.gstNumber || "")
+            .replace(/{{bankAccountNumber}}/g,  company?.bankAccountNumber || "")
+            .replace(/{{bankName}}/g,           company?.bankName    || "")
+            .replace(/{{ifscCode}}/g,           company?.ifscCode    || "")
+            .replace(/{{bankBranch}}/g,         company?.bankBranch  || "")
+            .replace(/{{qrCode}}/g,             company?.qrCode      || "")
+            .replace(/{{invoiceLogoUrl}}/g,     invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g,    invoiceLogoText)
+            .replace(/{{customerName}}/g,       updatedCall.customerInfo?.name    || "")
+            .replace(/{{customerAddress}}/g,    updatedCall.customerInfo?.address || "")
+            .replace(/{{customerUniqueId}}/g,   updatedCall.customerInfo?.customerUniqueId || "")
+            .replace(/{{customerGst}}/g,        updatedCall.customerInfo?.gstNumber || "")
+            .replace(/{{basicTotal}}/g,         fmt(basicTotal))
+            .replace(/{{cgstPercent}}/g,        cgstPercent)
+            .replace(/{{cgstAmount}}/g,         fmt(cgstAmount))
+            .replace(/{{sgstPercent}}/g,        sgstPercent)
+            .replace(/{{sgstAmount}}/g,         fmt(sgstAmount))
+            .replace(/{{igstPercent}}/g,        igstPercent)
+            .replace(/{{igstAmount}}/g,         fmt(igstAmount))
+            .replace(/{{grandTotal}}/g,         fmt(grandTotal));
+
+          html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
+          html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
+          html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.tagline    ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.qrCode     ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl      ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText     ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
+
+          const machineRowsMatch = html.match(/{{#each machines}}([\s\S]*?){{\/each}}/);
+          if (machineRowsMatch) {
+            const rowTemplate = machineRowsMatch[1];
+            const rows = [];
+            let srNo = 1;
+            for (const machine of updatedCall.machines) {
+              const sc = machine.serviceCharge ?? 0;
+              if (sc > 0) {
+                let row = rowTemplate
+                  .replace(/{{srNo}}/g,        srNo++)
+                  .replace(/{{machineName}}/g, "Service Charge")
+                  .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
+                  .replace(/{{quantity}}/g,    "-")
+                  .replace(/{{rate}}/g,        fmt(sc))
+                  .replace(/{{amount}}/g,      fmt(sc))
+                  .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
+                row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+                row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+                row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+                rows.push(row);
+              }
+              for (const part of (machine.usedParts || [])) {
+                const qty    = part.quantity ?? 1;
+                const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
+                const amount = part.total ?? (qty * rate);
+                let row = rowTemplate
+                  .replace(/{{srNo}}/g,        srNo++)
+                  .replace(/{{machineName}}/g, part.machineName || "")
+                  .replace(/{{hsnCode}}/g,     part.hsnCode || "")
+                  .replace(/{{quantity}}/g,    qty)
+                  .replace(/{{rate}}/g,        fmt(rate))
+                  .replace(/{{amount}}/g,      fmt(amount))
+                  .replace(/{{machineSN}}/g,   machine.serialNumber || "");
+                row = part.modelNumber
+                  ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
+                  : row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+                row = part.partCode
+                  ? row.replace(/{{#if partCode}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{partCode}}/g, part.partCode)
+                  : row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+                row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+                rows.push(row);
+              }
+            }
+            html = html.replace(/{{#each machines}}[\s\S]*?{{\/each}}/, rows.join(""));
+          }
+
+          const DOCS_DIR = process.env.NODE_ENV === "production"
+            ? "/app/cloud/Documents"
+            : path.join(__dirname, "../../../cloud/Documents");
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const filename = `service_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+          const filepath = path.join(DOCS_DIR, filename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: "networkidle0" });
+          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          await ServiceCall.findByIdAndUpdate(callId, { invoiceUrl, invoiceNumber, invoiceGrandTotal: grandTotal });
+
+          await sendServiceCallInvoiceEmail({
+            invoiceNumber,
+            invoiceDate,
+            customerName:          updatedCall.customerInfo?.name    || "",
+            customerEmail:         updatedCall.customerInfo?.email   || "",
+            callId:                updatedCall.callId,
+            callType:              updatedCall.callType,
+            completedDate,
+            engineerName:          updatedCall.engineerInfo?.name    || "",
+            machines:              updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
+            totalServiceCharges:   updatedCall.totalServiceCharges   ?? 0,
+            totalPartsCharges:     updatedCall.totalPartsCharges     ?? 0,
+            basicTotal,
+            cgstPercent,  cgstAmount,
+            sgstPercent,  sgstAmount,
+            igstPercent,  igstAmount,
+            grandTotal,
+            invoiceUrl,
+            companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
+            companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
+            companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
+            companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
+            companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
+          });
+        } catch (err) {
+          console.error("Invoice generation/email error after completeCall:", err.message);
+        }
+      });
+    }
 
     return res.status(200).json({
       success: true,

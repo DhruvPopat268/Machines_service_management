@@ -364,4 +364,68 @@ const sendEngineerPasswordResetSuccess = async (engineerName, engineerEmail) => 
   }
 };
 
-module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess };
+const sendServiceCallInvoiceEmail = async (data) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/serviceCallInvoice.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    html = html
+      .replace(/{{invoiceNumber}}/g,        data.invoiceNumber)
+      .replace(/{{invoiceDate}}/g,           data.invoiceDate)
+      .replace(/{{customerName}}/g,          data.customerName)
+      .replace(/{{callId}}/g,                data.callId)
+      .replace(/{{callType}}/g,              data.callType)
+      .replace(/{{completedDate}}/g,         data.completedDate)
+      .replace(/{{engineerName}}/g,          data.engineerName)
+      .replace(/{{totalServiceCharges}}/g,   fmt(data.totalServiceCharges))
+      .replace(/{{totalPartsCharges}}/g,     fmt(data.totalPartsCharges))
+      .replace(/{{basicTotal}}/g,            fmt(data.basicTotal))
+      .replace(/{{cgstPercent}}/g,           data.cgstPercent)
+      .replace(/{{cgstAmount}}/g,            fmt(data.cgstAmount))
+      .replace(/{{sgstPercent}}/g,           data.sgstPercent)
+      .replace(/{{sgstAmount}}/g,            fmt(data.sgstAmount))
+      .replace(/{{igstPercent}}/g,           data.igstPercent)
+      .replace(/{{igstAmount}}/g,            fmt(data.igstAmount))
+      .replace(/{{grandTotal}}/g,            fmt(data.grandTotal))
+      .replace(/{{invoiceUrl}}/g,            data.invoiceUrl)
+      .replace(/{{companyName}}/g,           data.companyName)
+      .replace(/{{companyAddress}}/g,        data.companyAddress)
+      .replace(/{{companyPhone}}/g,          data.companyPhone)
+      .replace(/{{companyGst}}/g,            data.companyGst)
+      .replace(/{{companyEmail}}/g,          data.companyEmail);
+
+    // Machines rows
+    const machineRowsMatch = html.match(/{{#each machines}}([\.\s\S]*?){{\/each}}/);
+    if (machineRowsMatch) {
+      const rowTemplate = machineRowsMatch[1];
+      const rows = (data.machines || []).map(m =>
+        rowTemplate
+          .replace(/{{machineName}}/g,  m.machineName)
+          .replace(/{{serialNumber}}/g, m.serialNumber)
+      ).join("");
+      html = html.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, rows);
+    }
+
+    // GST conditional blocks
+    html = data.cgstPercent > 0 ? html.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = data.sgstPercent > 0 ? html.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
+    html = data.igstPercent > 0 ? html.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: data.customerEmail,
+      subject: `Service Call Invoice — ${data.invoiceNumber} (${data.callId})`,
+      html,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    console.error("Invoice email sending error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
