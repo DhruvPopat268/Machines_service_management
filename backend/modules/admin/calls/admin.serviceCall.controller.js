@@ -79,30 +79,29 @@ const getCalls = async (req, res) => {
       ServiceCall.countDocuments(query),
     ]);
 
-    const response = {
+    // Always compute stats using active filters (minus status so all buckets show)
+    const statsQuery = { ...query };
+    delete statsQuery.status;
+    const statusCounts = await ServiceCall.aggregate([{ $match: statsQuery }, { $group: { _id: "$status", count: { $sum: 1 } } }]);
+    const stats = { total: 0, open: 0, assigned: 0, inProgress: 0, onHold: 0, completed: 0, cancelled: 0 };
+    let grandTotal = 0;
+    for (const { _id, count } of statusCounts) {
+      grandTotal += count;
+      if (_id === "Open") stats.open = count;
+      else if (_id === "Assigned") stats.assigned = count;
+      else if (_id === "In Progress") stats.inProgress = count;
+      else if (_id === "On Hold") stats.onHold = count;
+      else if (_id === "Completed") stats.completed = count;
+      else if (_id === "Cancelled") stats.cancelled = count;
+    }
+    stats.total = grandTotal;
+
+    return res.status(200).json({
       success: true,
       data: calls,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
-    };
-
-    if (!status && !search && !problemTypeId && !machineName && !customerName && !engineerName && !category && !division && !fromDate && !toDate && !contractTypeId && !contractTypeStatus) {
-      const statusCounts = await ServiceCall.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]);
-      const stats = { total: 0, open: 0, assigned: 0, inProgress: 0, onHold: 0, completed: 0, cancelled: 0 };
-      let grandTotal = 0;
-      for (const { _id, count } of statusCounts) {
-        grandTotal += count;
-        if (_id === "Open") stats.open = count;
-        else if (_id === "Assigned") stats.assigned = count;
-        else if (_id === "In Progress") stats.inProgress = count;
-        else if (_id === "On Hold") stats.onHold = count;
-        else if (_id === "Completed") stats.completed = count;
-        else if (_id === "Cancelled") stats.cancelled = count;
-      }
-      stats.total = grandTotal;
-      response.stats = stats;
-    }
-
-    return res.status(200).json(response);
+      stats,
+    });
   } catch (error) {
     console.error("Error fetching calls:", error);
     return res.status(500).json({ success: false, message: "Failed to fetch calls" });
@@ -375,8 +374,8 @@ const getCustomerMachineDetail = async (req, res) => {
       }
     }
 
-    // Fetch last counter readings for this serial number from the most recent completed service call
-    const lastCall = await ServiceCall.findOne({
+    // Fetch last counter readings from most recent completed Counter-Reading call
+    const lastCounterCall = await ServiceCall.findOne({
       "machines.serialNumber": serialNumber.trim(),
       "machines.counterReadings.serialNumber": serialNumber.trim(),
     })
@@ -384,8 +383,8 @@ const getCustomerMachineDetail = async (req, res) => {
       .select("machines.serialNumber machines.counterReadings");
 
     let lastReadings = [];
-    if (lastCall) {
-      const machine = lastCall.machines.find(m => m.serialNumber === serialNumber.trim());
+    if (lastCounterCall) {
+      const machine = lastCounterCall.machines.find(m => m.serialNumber === serialNumber.trim());
       const counterReading = machine?.counterReadings?.find(cr => cr.serialNumber === serialNumber.trim());
       if (counterReading?.categories?.length) {
         lastReadings = counterReading.categories.map(c => ({
@@ -396,12 +395,38 @@ const getCustomerMachineDetail = async (req, res) => {
       }
     }
 
+    // Fetch last service call readings from most recent completed Service-Call
+    const lastServiceCall = await ServiceCall.findOne({
+      "machines.serialNumber": serialNumber.trim(),
+      callType: "Service-Call",
+      status: "Completed",
+    })
+      .sort({ "dates.completed": -1 })
+      .select("machines.serialNumber machines.serviceCallReadings dates.completed");
+
+    let lastServiceCallReadings = [];
+    if (lastServiceCall) {
+      const machine = lastServiceCall.machines.find(m => m.serialNumber === serialNumber.trim());
+      if (machine?.serviceCallReadings?.length) {
+        const lastReadingDate = lastServiceCall.dates?.completed
+          ? (() => { const d = new Date(lastServiceCall.dates.completed); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`; })()
+          : "";
+        lastServiceCallReadings = machine.serviceCallReadings.map(c => ({
+          pagesCategoryId: c.pagesCategoryId,
+          pagesCategory:   c.pagesCategory,
+          lastReading:     c.currentReading,
+          lastReadingDate,
+        }));
+      }
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         customerInfo: soldRecord.customerInfo,
         machine: resultMachine,
         lastReadings,
+        lastServiceCallReadings,
         createdAt: soldRecord.createdAt,
         updatedAt: soldRecord.updatedAt,
       },

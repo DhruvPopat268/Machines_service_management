@@ -19,6 +19,10 @@ interface LastReading {
   pagesCategoryId: string; pagesCategory: string; lastReading: number;
 }
 
+interface LastServiceCallReading {
+  pagesCategoryId: string; pagesCategory: string; lastReading: number; lastReadingDate: string;
+}
+
 interface MachineDetail {
   customerInfo: {
     customerId: string; name: string; phone: string; email: string;
@@ -31,6 +35,7 @@ interface MachineDetail {
     pagesCategories: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[];
   };
   lastReadings: LastReading[];
+  lastServiceCallReadings: LastServiceCallReading[];
   createdAt: string;
   updatedAt: string;
 }
@@ -213,7 +218,7 @@ const CustomerOwnedMachinePage = () => {
         <Card className="border-0 shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4" /> Pages Categories
+              <FileText className="h-4 w-4" /> Pages Categories added for Counter Readings
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -251,6 +256,28 @@ const CustomerOwnedMachinePage = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {detail.lastReadings.map(r => (
                 <InfoRow key={r.pagesCategoryId} label={r.pagesCategory} value={r.lastReading.toString()} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Last Service Call Readings */}
+      {detail.lastServiceCallReadings?.length > 0 && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4" /> Last Service Call Readings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {detail.lastServiceCallReadings.map(r => (
+                <div key={r.pagesCategoryId}>
+                  <p className="text-xs text-muted-foreground">{r.pagesCategory}</p>
+                  <p className="font-medium text-sm mt-0.5">{r.lastReading}</p>
+                  {r.lastReadingDate && <p className="text-xs text-muted-foreground">{r.lastReadingDate}</p>}
+                </div>
               ))}
             </div>
           </CardContent>

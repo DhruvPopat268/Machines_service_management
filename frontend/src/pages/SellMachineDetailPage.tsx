@@ -163,9 +163,10 @@ const SellMachineDetailPage = () => {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: "Machines",   value: sale.machinesCount },
-          { label: "Total Sold", value: `₹${sale.grandTotal.toLocaleString()}` },
-          { label: "Sold At",    value: formatDateTime(sale.createdAt) },
+          { label: "Machines",        value: sale.machinesCount },
+          { label: "Basic Total",      value: `₹${(sale.basicTotal ?? sale.grandTotal).toLocaleString()}` },
+          { label: "Invoice Total",    value: `₹${(sale.invoiceGrandTotal ?? sale.grandTotal).toLocaleString()}` },
+          { label: "Sold At",          value: formatDateTime(sale.createdAt) },
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">
             <CardContent className="pt-4">
@@ -298,7 +299,34 @@ const SellMachineDetailPage = () => {
       </div>
 
       <div className="flex justify-end">
-        <p className="text-sm font-medium">Grand Total: <span className="text-lg font-bold text-green-600">₹{sale.grandTotal.toLocaleString()}</span></p>
+        <div className="w-72 text-sm space-y-2 border rounded-lg p-4 bg-muted/20">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Basic Total</span>
+            <span className="font-medium">₹{(sale.basicTotal ?? sale.grandTotal).toLocaleString()}</span>
+          </div>
+          {(sale.cgst?.percent ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">CGST ({sale.cgst!.percent}%)</span>
+              <span className="font-medium">₹{sale.cgst!.amount.toLocaleString()}</span>
+            </div>
+          )}
+          {(sale.sgst?.percent ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">SGST ({sale.sgst!.percent}%)</span>
+              <span className="font-medium">₹{sale.sgst!.amount.toLocaleString()}</span>
+            </div>
+          )}
+          {(sale.igst?.percent ?? 0) > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">IGST ({sale.igst!.percent}%)</span>
+              <span className="font-medium">₹{sale.igst!.amount.toLocaleString()}</span>
+            </div>
+          )}
+          <div className="flex justify-between border-t pt-2">
+            <span className="font-semibold">Grand Total</span>
+            <span className="text-lg font-bold text-green-600">₹{(sale.invoiceGrandTotal ?? sale.grandTotal).toLocaleString()}</span>
+          </div>
+        </div>
       </div>
 
       <Dialog open={invoiceDialog} onOpenChange={(o) => { if (!o) setInvoiceDialog(false); }}>

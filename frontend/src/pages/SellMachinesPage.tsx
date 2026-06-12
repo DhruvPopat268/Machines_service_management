@@ -881,7 +881,7 @@ const SellMachinesPage = () => {
     { key: "_id",          label: "No.",          render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "customerInfo", label: "Customer",     render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
     { key: "machinesCount",label: "Machines",     render: (s) => <span className="font-medium">{s.machinesCount}</span> },
-    { key: "grandTotal",   label: "Total Sold",   render: (s) => <span className="font-medium">₹{s.grandTotal.toLocaleString()}</span> },
+    { key: "grandTotal",   label: "Total Sold",   render: (s) => <span className="font-medium">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
     { key: "createdAt",    label: "Sold At",      render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     { key: "actions", label: "Actions", sticky: true, render: (s) => (
       <div className="flex items-center gap-1">
