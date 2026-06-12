@@ -51,7 +51,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [assignDialog, setAssignDialog]     = useState<ServiceCall | null>(null);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [assigning, setAssigning]           = useState(false);
-  const [companies, setCompanies]           = useState<DropdownOption[]>([]);
+  const [companies, setCompanies]           = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
+  const [assignEngineers, setAssignEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
+  const [assignDialogLoading, setAssignDialogLoading] = useState(false);
   const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
 
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
@@ -105,8 +107,6 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       }
     };
     fetchOptions();
-    // fetch companies for assignment/invoice selection
-    api.get("/admin/companies", { params: { status: "Active", limit: 100 } }).then(r => setCompanies(r.data.data)).catch(() => {});
   }, []);
 
   const fetchProblemTypes = useCallback(async (q: string) => {
@@ -175,6 +175,22 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (!controller.signal.aborted) setContractTypes(res.data.data);
     } catch {}
   }, []);
+
+  const openAssignDialog = async (c: ServiceCall) => {
+    setAssignDialog(c);
+    setSelectedEngineerId(c.engineerInfo?._id || "");
+    setAssignForm({ companyId: (c as any).companyInfo?.companyId ?? "none", cgst: (c as any).cgst?.percent != null ? String((c as any).cgst.percent) : "", sgst: (c as any).sgst?.percent != null ? String((c as any).sgst.percent) : "", igst: (c as any).igst?.percent != null ? String((c as any).igst.percent) : "" });
+    setAssignDialogLoading(true);
+    try {
+      const [engData, compRes] = await Promise.all([
+        engineersApi.getActive(undefined, c._id),
+        api.get("/admin/companies", { params: { status: "Active", limit: 100 } }),
+      ]);
+      setAssignEngineers(engData);
+      setCompanies(compRes.data.data);
+    } catch {}
+    finally { setAssignDialogLoading(false); }
+  };
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -293,12 +309,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 </Button>
           )}
           {c.status === "Open" && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => {
-              e.stopPropagation();
-              setAssignDialog(c);
-              setSelectedEngineerId(c.engineerInfo?._id || "");
-              setAssignForm({ companyId: c.companyInfo?.companyId ?? "", cgst: c.cgst?.percent != null ? String(c.cgst.percent) : "", sgst: c.sgst?.percent != null ? String(c.sgst.percent) : "", igst: c.igst?.percent != null ? String(c.igst.percent) : "" });
-            }}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openAssignDialog(c); }}>
               <UserPlus className="h-4 w-4" />
             </Button>
           )}
@@ -432,6 +443,10 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <DialogTitle>Assign Engineer — {assignDialog?.callId}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                {assignDialogLoading ? (
+                  <div className="flex justify-center py-6"><Spinner /></div>
+                ) : (
+                <>
                 <div className="space-y-2">
                   <Label className="text-sm">Company (for invoice)</Label>
                   <Select value={assignForm.companyId} onValueChange={(v) => setAssignForm(p => ({ ...p, companyId: v }))}>
@@ -463,22 +478,27 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
                     <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
                     <SelectContent>
-                      {engineers.map((e) => (
+                      {assignEngineers.map((e) => (
                         <SelectItem key={e._id} value={e._id}>
                           <span className="flex items-center gap-2">
                             <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
-                            {e.name}
+                            <span>{e.name}</span>
+                            {e.distanceKm != null && (
+                              <span className="ml-auto text-xs text-muted-foreground">{e.distanceKm} km{e.estimatedTimeMin != null ? ` · ${e.estimatedTimeMin} min` : ""}</span>
+                            )}
                           </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+                </>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAssignDialog(null)}>Cancel</Button>
                 <Button
-                  disabled={!selectedEngineerId || assigning}
+                  disabled={!selectedEngineerId || assigning || assignDialogLoading}
                   onClick={async () => {
                     if (!assignDialog) return;
                     setAssigning(true);

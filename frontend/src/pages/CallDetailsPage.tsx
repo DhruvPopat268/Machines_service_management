@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Spinner from "@/components/Spinner";
 
 const formatDate = (dateString: string) => {
@@ -47,8 +47,9 @@ const CallDetailsPage = () => {
   const [selectedPriority, setSelectedPriority] = useState("");
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
 
-  const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean }[]>([]);
+  const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [companies, setCompanies] = useState<{ _id: string; name: string; gstNumber?: string }[]>([]);
+  const [assignDialogLoading, setAssignDialogLoading] = useState(false);
 
   const { data: call, isLoading, isFetching } = useQuery({
     queryKey: ["serviceCall", id],
@@ -57,13 +58,22 @@ const CallDetailsPage = () => {
     staleTime: 0,
   });
 
-  useEffect(() => {
-    engineersApi.getActive().then(setEngineers).catch(() => {});
-    companiesApi.getAll().then(setCompanies).catch(() => {});
-  }, []);
-
   if (isLoading || isFetching) return <Spinner />;
   if (!call) return <div className="text-center py-12 text-muted-foreground">Call not found</div>;
+
+  const openAssignDialog = async () => {
+    setSelectedEngineerId(call.engineerInfo?._id || "");
+    setSelectedCompanyId((call as any).companyInfo?.companyId || "");
+    setAssignGst({ cgst: (call as any).cgst?.percent != null ? String((call as any).cgst.percent) : "", sgst: (call as any).sgst?.percent != null ? String((call as any).sgst.percent) : "", igst: (call as any).igst?.percent != null ? String((call as any).igst.percent) : "" });
+    setAssignDialog(true);
+    setAssignDialogLoading(true);
+    try {
+      const [engData, compData] = await Promise.all([engineersApi.getActive(undefined, id), companiesApi.getAll()]);
+      setEngineers(engData);
+      setCompanies(compData);
+    } catch {}
+    finally { setAssignDialogLoading(false); }
+  };
 
   const timelineSteps = [
     { label: "Call Created",      date: formatDateTime(call.dates.created),                description: "Service call registered",              completed: true },
@@ -121,7 +131,7 @@ const CallDetailsPage = () => {
                 }}><FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate Invoice"}</Button>
           )}
           {(call.status === "Open" || call.status === "Assigned") && (
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedEngineerId(call.engineerInfo?._id || ""); setSelectedCompanyId((call as any).companyInfo?.companyId || ""); setAssignGst({ cgst: (call as any).cgst?.percent != null ? String((call as any).cgst.percent) : "", sgst: (call as any).sgst?.percent != null ? String((call as any).sgst.percent) : "", igst: (call as any).igst?.percent != null ? String((call as any).igst.percent) : "" }); setAssignDialog(true); }}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={openAssignDialog}>
             {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
             {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
           </Button>
@@ -729,6 +739,10 @@ const CallDetailsPage = () => {
             <DialogTitle>{call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"} — {call.callId}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {assignDialogLoading ? (
+              <div className="flex justify-center py-6"><Spinner /></div>
+            ) : (
+            <>
             <div className="space-y-2">
               <Label>Select Engineer</Label>
               <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
@@ -738,7 +752,10 @@ const CallDetailsPage = () => {
                     <SelectItem key={e._id} value={e._id}>
                       <span className="flex items-center gap-2">
                         <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
-                        {e.name}
+                        <span>{e.name}</span>
+                        {e.distanceKm != null && (
+                          <span className="ml-auto text-xs text-muted-foreground">{e.distanceKm} km{e.estimatedTimeMin != null ? ` · ${e.estimatedTimeMin} min` : ""}</span>
+                        )}
                       </span>
                     </SelectItem>
                   ))}
@@ -772,11 +789,13 @@ const CallDetailsPage = () => {
                 <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.igst} onChange={(e) => setAssignGst(p => ({ ...p, igst: e.target.value }))} />
               </div>
             </div>
+            </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignDialog(false)}>Cancel</Button>
             <Button
-              disabled={!selectedEngineerId || !selectedCompanyId || assignGst.cgst === "" || assignGst.sgst === "" || assignGst.igst === "" || saving}
+              disabled={!selectedEngineerId || !selectedCompanyId || assignGst.cgst === "" || assignGst.sgst === "" || assignGst.igst === "" || saving || assignDialogLoading}
               onClick={async () => {
                 if (!id) return;
                 setSaving(true);

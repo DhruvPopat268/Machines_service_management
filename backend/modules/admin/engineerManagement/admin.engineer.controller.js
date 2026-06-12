@@ -1,4 +1,9 @@
 const AdminUser = require("../auth/admin.user.model");
+const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
+const axios = require("axios");
+const mongoose = require("mongoose");
+
+const MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
 const getEngineers = async (req, res) => {
   try {
@@ -44,7 +49,7 @@ const getEngineers = async (req, res) => {
 
 const getActiveEngineers = async (req, res) => {
   try {
-    const { search, page = 1, limit = 10 } = req.query;
+    const { search, callId, page = 1, limit = 10 } = req.query;
 
     const query = { role: "Engineer", status: "Active" };
 
@@ -67,16 +72,49 @@ const getActiveEngineers = async (req, res) => {
 
     const [engineers, total] = await Promise.all([
       AdminUser.find(query)
-        .select("_id name email phone engineerId profilePhoto engineerLocation isOnline status lastLoginAt createdAt updatedAt isOnline")
+        .select("_id name email phone engineerId profilePhoto engineerCurrentLocation isOnline status")
         .sort({ name: 1 })
         .skip(skip)
         .limit(limitNum),
       AdminUser.countDocuments(query),
     ]);
 
+    // If callId provided and valid, fetch customer location and calculate distances
+    let customerLat = null, customerLng = null;
+    if (callId && mongoose.isValidObjectId(callId)) {
+      const call = await ServiceCall.findById(callId).select("customerInfo.location").lean();
+      customerLat = call?.customerInfo?.location?.latitude ?? null;
+      customerLng = call?.customerInfo?.location?.longitude ?? null;
+    }
+
+    let enrichedEngineers = engineers.map(e => e.toObject());
+
+    if (customerLat && customerLng && MAPS_KEY) {
+      const withLocation = enrichedEngineers.filter(e => e.engineerCurrentLocation?.latitude && e.engineerCurrentLocation?.longitude);
+      const withoutLocation = enrichedEngineers.filter(e => !e.engineerCurrentLocation?.latitude || !e.engineerCurrentLocation?.longitude);
+
+      if (withLocation.length > 0) {
+        const origins = withLocation.map(e => `${e.engineerCurrentLocation.latitude},${e.engineerCurrentLocation.longitude}`).join("|");
+        try {
+          const { data } = await axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
+            params: { origins, destinations: `${customerLat},${customerLng}`, key: MAPS_KEY },
+          });
+          withLocation.forEach((e, i) => {
+            const element = data.rows?.[i]?.elements?.[0];
+            if (element?.status === "OK") {
+              e.distanceKm      = Math.round((element.distance.value / 1000) * 100) / 100;
+              e.estimatedTimeMin = Math.round(element.duration.value / 60);
+            }
+          });
+        } catch (_) { /* distance fetch failed, skip enrichment */ }
+      }
+
+      enrichedEngineers = [...withLocation, ...withoutLocation];
+    }
+
     return res.status(200).json({
       success: true,
-      data: engineers,
+      data: enrichedEngineers,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     });
   } catch (err) {

@@ -44,6 +44,30 @@ const getHome = async (req, res) => {
   }
 };
 
+const updateCurrentLocation = async (req, res) => {
+  try {
+    const engineerId = req.engineer.id;
+    const { latitude, longitude } = req.body;
+
+    if (latitude == null || longitude == null)
+      return res.status(400).json({ success: false, message: "latitude and longitude are required" });
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+
+    if (isNaN(lat) || lat < -90  || lat > 90)
+      return res.status(400).json({ success: false, message: "latitude must be between -90 and 90" });
+    if (isNaN(lng) || lng < -180 || lng > 180)
+      return res.status(400).json({ success: false, message: "longitude must be between -180 and 180" });
+
+    await AdminUser.findByIdAndUpdate(engineerId, { engineerCurrentLocation: { latitude: lat, longitude: lng } });
+
+    return res.status(200).json({ success: true, message: "Current location updated" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const updateOnlineStatus = async (req, res) => {
   try {
     const engineerId = req.engineer.id;
@@ -60,4 +84,4 @@ const updateOnlineStatus = async (req, res) => {
   }
 };
 
-module.exports = { getHome, updateOnlineStatus };
+module.exports = { getHome, updateOnlineStatus, updateCurrentLocation };
