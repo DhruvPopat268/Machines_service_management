@@ -13,11 +13,24 @@ const contractTypeSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const serviceCallReadingCategorySchema = new mongoose.Schema(
+  {
+    pagesCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: "PagesCategory", required: true },
+    pagesCategory:   { type: String, trim: true, required: true },
+    lastReading:     { type: Number, required: true },
+    lastReadingDate: { type: String, trim: true, default: "" },
+    currentReading:  { type: Number, required: true },
+    diff:            { type: Number, required: true },
+  },
+  { _id: false }
+);
+
 const counterReadingCategorySchema = new mongoose.Schema(
   {
     pagesCategoryId: { type: mongoose.Schema.Types.ObjectId, ref: "PagesCategory", required: true },
     pagesCategory:   { type: String, trim: true, required: true },
     lastReading:     { type: Number, required: true },
+    lastReadingDate: { type: String, trim: true, default: "" },
     currentReading:  { type: Number, required: true },
     costPerPage:     { type: Number, required: true },
     diff:            { type: Number, required: true },
@@ -77,11 +90,11 @@ const machineEntrySchema = new mongoose.Schema(
     problemTypeIds:   { type: [mongoose.Schema.Types.ObjectId], ref: "ProblemType", default: [] },
     problemTypes:     { type: [String], default: [] },
     images:           { type: [String], default: [] },
-    serviceCharge:    { type: Number },
-    partsCharge:      { type: Number },
-    lastReading:      { type: Number },
-    usedParts:        { type: [usedPartSchema], default: [] },
-    counterReadings:  { type: [counterReadingSchema], default: [] },
+    serviceCharge:       { type: Number },
+    partsCharge:         { type: Number },
+    serviceCallReadings: { type: [serviceCallReadingCategorySchema], default: [] },
+    usedParts:           { type: [usedPartSchema], default: [] },
+    counterReadings:     { type: [counterReadingSchema], default: [] },
   },
   { _id: false }
 );

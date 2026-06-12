@@ -1,6 +1,6 @@
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const AdminUser   = require("../../admin/auth/admin.user.model");
-const { buildCounterReadingInfo } = require("../calls/engineer.serviceCall.controller");
+const { buildCounterReadingInfo, buildServiceCallReadingInfo } = require("../calls/engineer.serviceCall.controller");
 
 const getHome = async (req, res) => {
   try {
@@ -25,12 +25,13 @@ const getHome = async (req, res) => {
     ]);
 
     const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
+    const enrichedActiveCalls = await buildServiceCallReadingInfo(activeCalls);
 
     return res.status(200).json({
       success: true,
       data: {
         engineer,
-        activeCalls,
+        activeCalls: enrichedActiveCalls,
         todaySummary: {
           assignedCalls:  assignedToday,
           onHoldCalls:    onHoldToday,

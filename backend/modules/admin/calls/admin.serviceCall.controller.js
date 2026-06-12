@@ -6,7 +6,7 @@ const ProblemType = require("../problemTypeManagement/admin.problemType.model");
 const mongoose = require("mongoose");
 const AdminUser = require("../auth/admin.user.model");
 const path = require("path");
-const fs   = require("fs/promises");
+const fs = require("fs/promises");
 const sharp = require("sharp");
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -23,18 +23,18 @@ const getCalls = async (req, res) => {
     if (search) {
       const s = escapeRegex(search.trim().slice(0, 100));
       query.$or = [
-        { callId:               { $regex: s, $options: "i" } },
-        { "customerInfo.name":  { $regex: s, $options: "i" } },
+        { callId: { $regex: s, $options: "i" } },
+        { "customerInfo.name": { $regex: s, $options: "i" } },
         { "customerInfo.phone": { $regex: s, $options: "i" } },
-        { "engineerInfo.name":  { $regex: s, $options: "i" } },
+        { "engineerInfo.name": { $regex: s, $options: "i" } },
       ];
     }
 
     if (problemTypeId && mongoose.isValidObjectId(problemTypeId)) query["machines.problemTypeIds"] = new mongoose.Types.ObjectId(problemTypeId);
-    if (machineName)  query["machines.machineName"]   = { $regex: escapeRegex(machineName), $options: "i" };
+    if (machineName) query["machines.machineName"] = { $regex: escapeRegex(machineName), $options: "i" };
     if (req.query.serialNumber) query["machines.serialNumber"] = { $regex: escapeRegex(req.query.serialNumber.trim()), $options: "i" };
-    if (customerName) query["customerInfo.name"]       = { $regex: escapeRegex(customerName), $options: "i" };
-    if (engineerName) query["engineerInfo.name"]       = { $regex: escapeRegex(engineerName), $options: "i" };
+    if (customerName) query["customerInfo.name"] = { $regex: escapeRegex(customerName), $options: "i" };
+    if (engineerName) query["engineerInfo.name"] = { $regex: escapeRegex(engineerName), $options: "i" };
     if (category && mongoose.isValidObjectId(category)) query["machines.categoryId"] = new mongoose.Types.ObjectId(category);
     if (division && mongoose.isValidObjectId(division)) query["machines.divisionId"] = new mongoose.Types.ObjectId(division);
 
@@ -56,19 +56,19 @@ const getCalls = async (req, res) => {
       };
       query.createdAt = {};
       if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (toDate) query.createdAt.$lte = parseIST(toDate, true);
     }
 
-    const sortKey = status === "Assigned"    ? "dates.assigned"
+    const sortKey = status === "Assigned" ? "dates.assigned"
       : status === "In Progress" ? "dates.inProgress"
-      : status === "On Hold"     ? "dates.onHold"
-      : status === "Completed"   ? "dates.completed"
-      : status === "Cancelled"   ? "dates.cancelled"
-      : "createdAt";
+        : status === "On Hold" ? "dates.onHold"
+          : status === "Completed" ? "dates.completed"
+            : status === "Cancelled" ? "dates.cancelled"
+              : "createdAt";
 
-    const pageNum  = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip     = (pageNum - 1) * limitNum;
+    const skip = (pageNum - 1) * limitNum;
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
@@ -91,12 +91,12 @@ const getCalls = async (req, res) => {
       let grandTotal = 0;
       for (const { _id, count } of statusCounts) {
         grandTotal += count;
-        if (_id === "Open")           stats.open       = count;
-        else if (_id === "Assigned")    stats.assigned   = count;
+        if (_id === "Open") stats.open = count;
+        else if (_id === "Assigned") stats.assigned = count;
         else if (_id === "In Progress") stats.inProgress = count;
-        else if (_id === "On Hold")     stats.onHold     = count;
-        else if (_id === "Completed")   stats.completed  = count;
-        else if (_id === "Cancelled")   stats.cancelled  = count;
+        else if (_id === "On Hold") stats.onHold = count;
+        else if (_id === "Completed") stats.completed = count;
+        else if (_id === "Cancelled") stats.cancelled = count;
       }
       stats.total = grandTotal;
       response.stats = stats;
@@ -153,10 +153,10 @@ const assignEngineer = async (req, res) => {
           return res.status(404).json({ success: false, message: "Company not found" });
         companyInfo = {
           companyId: company._id,
-          name:      company.name,
-          address:   company.address,
-          phone:     company.phone,
-          email:     company.email,
+          name: company.name,
+          address: company.address,
+          phone: company.phone,
+          email: company.email,
           gstNumber: company.gstNumber || "",
         };
       }
@@ -167,19 +167,19 @@ const assignEngineer = async (req, res) => {
     const sgstPercent = sgst !== undefined ? Number(sgst) : (call.sgst?.percent ?? 0);
     const igstPercent = igst !== undefined ? Number(igst) : (call.igst?.percent ?? 0);
 
-    const basicTotal     = call.totalCharges ?? call.totalServiceCharges ?? 0;
-    const cgstAmount     = Math.round(basicTotal * cgstPercent / 100 * 100) / 100;
-    const sgstAmount     = Math.round(basicTotal * sgstPercent / 100 * 100) / 100;
-    const igstAmount     = Math.round(basicTotal * igstPercent / 100 * 100) / 100;
+    const basicTotal = call.totalCharges ?? call.totalServiceCharges ?? 0;
+    const cgstAmount = Math.round(basicTotal * cgstPercent / 100 * 100) / 100;
+    const sgstAmount = Math.round(basicTotal * sgstPercent / 100 * 100) / 100;
+    const igstAmount = Math.round(basicTotal * igstPercent / 100 * 100) / 100;
     const invoiceGrandTotal = Math.round((basicTotal + cgstAmount + sgstAmount + igstAmount) * 100) / 100;
 
     await call.updateOne({
       engineerInfo: {
-        _id:        engineer._id,
+        _id: engineer._id,
         identityId: engineer.engineerId,
-        name:       engineer.name,
-        email:      engineer.email,
-        phone:      engineer.phone,
+        name: engineer.name,
+        email: engineer.email,
+        phone: engineer.phone,
       },
       status: "Assigned",
       "dates.assigned": new Date(),
@@ -200,22 +200,22 @@ const assignEngineer = async (req, res) => {
 const VALID_PRIORITIES = ["Low", "Medium", "High", "Critical"];
 
 const STATUS_TRANSITIONS = {
-  "Open":             ["Assigned", "Cancelled"],
-  "Assigned":         ["Travel Started", "Cancelled"],
-  "Travel Started":   ["Reached Location", "Cancelled"],
+  "Open": ["Assigned", "Cancelled"],
+  "Assigned": ["Travel Started", "Cancelled"],
+  "Travel Started": ["Reached Location", "Cancelled"],
   "Reached Location": ["In Progress", "Cancelled"],
-  "In Progress":      ["On Hold", "Completed", "Cancelled"],
-  "On Hold":          ["In Progress", "Cancelled"],
+  "In Progress": ["On Hold", "Completed", "Cancelled"],
+  "On Hold": ["In Progress", "Cancelled"],
 };
 
 const STATUS_DATE_MAP = {
-  "Assigned":         "dates.assigned",
-  "Travel Started":   "dates.travelStarted",
+  "Assigned": "dates.assigned",
+  "Travel Started": "dates.travelStarted",
   "Reached Location": "dates.reachedLocation",
-  "In Progress":      "dates.inProgress",
-  "On Hold":          "dates.onHold",
-  "Completed":        "dates.completed",
-  "Cancelled":        "dates.cancelled",
+  "In Progress": "dates.inProgress",
+  "On Hold": "dates.onHold",
+  "Completed": "dates.completed",
+  "Cancelled": "dates.cancelled",
 };
 
 const updateCall = async (req, res) => {
@@ -262,10 +262,10 @@ const updateCall = async (req, res) => {
           return res.status(404).json({ success: false, message: "Company not found" });
         update.companyInfo = {
           companyId: company._id,
-          name:      company.name,
-          address:   company.address,
-          phone:     company.phone,
-          email:     company.email,
+          name: company.name,
+          address: company.address,
+          phone: company.phone,
+          email: company.email,
           gstNumber: company.gstNumber || "",
         };
       }
@@ -301,18 +301,18 @@ const getCustomerMachines = async (req, res) => {
       record.machines.flatMap(machine =>
         (machine.serialNumbers || []).map(entry => ({
           customerInfo: record.customerInfo,
-          machineId:    machine.machineId,
-          machineName:  machine.machineName,
-          modelNumber:  machine.modelNumber,
-          categoryId:   machine.categoryId,
-          category:     machine.category,
-          divisionId:   machine.divisionId,
-          division:     machine.division,
-          images:       machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
+          machineId: machine.machineId,
+          machineName: machine.machineName,
+          modelNumber: machine.modelNumber,
+          categoryId: machine.categoryId,
+          category: machine.category,
+          divisionId: machine.divisionId,
+          division: machine.division,
+          images: machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
           serialNumber: entry.serialNumber,
           contractType: entry.contractType,
-          createdAt:    record.createdAt,
-          updatedAt:    record.updatedAt,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
         }))
       )
     );
@@ -326,11 +326,11 @@ const getCustomerMachines = async (req, res) => {
     if (division && mongoose.isValidObjectId(division))
       allData = allData.filter(m => m.divisionId?.toString() === division);
 
-    const total    = allData.length;
-    const pageNum  = Math.max(1, parseInt(page));
+    const total = allData.length;
+    const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip     = (pageNum - 1) * limitNum;
-    const data     = allData.slice(skip, skip + limitNum);
+    const skip = (pageNum - 1) * limitNum;
+    const data = allData.slice(skip, skip + limitNum);
 
     return res.status(200).json({ success: true, data, pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) } });
   } catch (err) {
@@ -359,15 +359,15 @@ const getCustomerMachineDetail = async (req, res) => {
           images = machineDoc?.images || [];
         }
         resultMachine = {
-          machineId:       machine.machineId,
-          machineName:     machine.machineName,
-          modelNumber:     machine.modelNumber,
-          categoryId:      machine.categoryId,
-          category:        machine.category,
-          divisionId:      machine.divisionId,
-          division:        machine.division,
-          serialNumber:    entry.serialNumber,
-          contractType:    entry.contractType,
+          machineId: machine.machineId,
+          machineName: machine.machineName,
+          modelNumber: machine.modelNumber,
+          categoryId: machine.categoryId,
+          category: machine.category,
+          divisionId: machine.divisionId,
+          division: machine.division,
+          serialNumber: entry.serialNumber,
+          contractType: entry.contractType,
           pagesCategories: entry.pagesCategories ?? [],
           images,
         };
@@ -390,8 +390,8 @@ const getCustomerMachineDetail = async (req, res) => {
       if (counterReading?.categories?.length) {
         lastReadings = counterReading.categories.map(c => ({
           pagesCategoryId: c.pagesCategoryId,
-          pagesCategory:   c.pagesCategory,
-          lastReading:     c.currentReading,
+          pagesCategory: c.pagesCategory,
+          lastReading: c.currentReading,
         }));
       }
     }
@@ -400,10 +400,10 @@ const getCustomerMachineDetail = async (req, res) => {
       success: true,
       data: {
         customerInfo: soldRecord.customerInfo,
-        machine:      resultMachine,
+        machine: resultMachine,
         lastReadings,
-        createdAt:    soldRecord.createdAt,
-        updatedAt:    soldRecord.updatedAt,
+        createdAt: soldRecord.createdAt,
+        updatedAt: soldRecord.updatedAt,
       },
     });
   } catch (err) {
@@ -485,8 +485,8 @@ const raiseServiceCall = async (req, res) => {
       return res.status(404).json({ success: false, message: "No machines found for this customer" });
 
     const allPtIds = [...new Set(parsedMachines.flatMap(m => Array.isArray(m.problemTypeIds) ? m.problemTypeIds : []).filter(Boolean))];
-    const ptDocs   = allPtIds.length > 0 ? await ProblemType.find({ _id: { $in: allPtIds } }) : [];
-    const ptMap    = new Map(ptDocs.map(p => [p._id.toString(), p.name]));
+    const ptDocs = allPtIds.length > 0 ? await ProblemType.find({ _id: { $in: allPtIds } }) : [];
+    const ptMap = new Map(ptDocs.map(p => [p._id.toString(), p.name]));
 
     const filesByIndex = {};
     for (const file of (req.files || [])) {
@@ -518,13 +518,7 @@ const raiseServiceCall = async (req, res) => {
       if (!foundMachine)
         return res.status(404).json({ success: false, message: `Serial number "${sn}" not found for this customer` });
 
-      if (callType !== "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() === process.env.TSS_CONTRACT_TYPE_ID)
-        return res.status(400).json({ success: false, message: `Serial number "${sn}" has a TSS contract and can only be used for Counter-Reading calls` });
-
-      if (callType === "Counter-Reading" && foundEntry.contractType?.contractTypeId?.toString() !== process.env.TSS_CONTRACT_TYPE_ID)
-        return res.status(400).json({ success: false, message: `Serial number "${sn}" is not eligible for Counter-Reading calls` });
-
-      const isExpired     = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
+      const isExpired = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
       const notFreeService = !foundEntry.contractType?.freeService;
       const requiresCharge = isExpired || notFreeService;
 
@@ -546,25 +540,25 @@ const raiseServiceCall = async (req, res) => {
       }
 
       machineEntries.push({
-        machineId:        foundMachine.machineId,
-        machineName:      foundMachine.machineName,
-        modelNumber:      foundMachine.modelNumber,
-        serialNumber:     sn,
-        divisionId:       foundMachine.divisionId,
-        division:         foundMachine.division,
-        categoryId:       foundMachine.categoryId,
-        category:         foundMachine.category,
-        contractType:     foundEntry.contractType,
+        machineId: foundMachine.machineId,
+        machineName: foundMachine.machineName,
+        modelNumber: foundMachine.modelNumber,
+        serialNumber: sn,
+        divisionId: foundMachine.divisionId,
+        division: foundMachine.division,
+        categoryId: foundMachine.categoryId,
+        category: foundMachine.category,
+        contractType: foundEntry.contractType,
         issueDescription: issueDescription.trim(),
-        problemTypeIds:   ptIds,
-        problemTypes:     ptIds.map(id => ptMap.get(id)),
+        problemTypeIds: ptIds,
+        problemTypes: ptIds.map(id => ptMap.get(id)),
         images,
-        serviceCharge:    requiresCharge ? serviceCharge : 0,
+        serviceCharge: requiresCharge ? serviceCharge : 0,
         ...(callType === "Counter-Reading" && {
           counterReadings: [{
             serialNumber: sn,
-            categories:   [],
-            minCopies:    foundEntry.minCopies > 0 ? { minCopies: foundEntry.minCopies, currentTotalCopies: 0, diff: 0, costPerPage: 0, chargesInRupees: 0 } : null,
+            categories: [],
+            minCopies: foundEntry.minCopies > 0 ? { minCopies: foundEntry.minCopies, currentTotalCopies: 0, diff: 0, costPerPage: 0, chargesInRupees: 0 } : null,
           }],
         }),
       });
@@ -596,18 +590,18 @@ const raiseServiceCall = async (req, res) => {
       callId: `SC-${callNumber}`,
       callType,
       customerInfo: {
-        customerId:      customer._id,
+        customerId: customer._id,
         customerUniqueId: customer.customerId || "",
-        name:       customer.name,
-        phone:      customer.phone,
-        email:      customer.email,
-        address:    customerAddress,
-        zone:       customer.zone?.name || "",
-        gstNumber:  customer.gstNumber || "",
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+        address: customerAddress,
+        zone: customer.zone?.name || "",
+        gstNumber: customer.gstNumber || "",
         ...(parsedCustomerLocation && {
           location: {
-            address:   parsedCustomerLocation.address,
-            latitude:  parsedCustomerLocation.latitude,
+            address: parsedCustomerLocation.address,
+            latitude: parsedCustomerLocation.latitude,
             longitude: parsedCustomerLocation.longitude,
           }
         }),
@@ -657,14 +651,14 @@ const getServiceCallInvoice = async (req, res) => {
     const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // Recalculate GST fresh on totalCharges (the real base)
-    const basicTotal  = call.totalCharges ?? 0;
+    const basicTotal = call.totalCharges ?? 0;
     const cgstPercent = call.cgst?.percent ?? 0;
     const sgstPercent = call.sgst?.percent ?? 0;
     const igstPercent = call.igst?.percent ?? 0;
-    const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
-    const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
-    const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-    const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+    const cgstAmount = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+    const sgstAmount = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+    const igstAmount = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+    const grandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
 
     // Persist updated invoiceGrandTotal
     await ServiceCall.findByIdAndUpdate(id, { invoiceGrandTotal: grandTotal });
@@ -673,7 +667,7 @@ const getServiceCallInvoice = async (req, res) => {
       ? new Date(call.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
       : new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-    const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+    const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
     const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
     const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
@@ -694,40 +688,40 @@ const getServiceCallInvoice = async (req, res) => {
     html = html
       .replace(/{{invoiceNumber}}/g, invoiceNumber)
       .replace(/{{invoiceDate}}/g, invoiceDate)
-      .replace(/{{companyName}}/g, company?.name       || call.companyInfo?.name    || "")
-      .replace(/{{companyTagline}}/g, company?.tagline  || "")
-      .replace(/{{companyAddress}}/g, company?.address  || call.companyInfo?.address || "")
-      .replace(/{{companyPhone}}/g,   company?.phone    || call.companyInfo?.phone   || "")
-      .replace(/{{companyEmail}}/g,   company?.email    || call.companyInfo?.email   || "")
-      .replace(/{{companyGst}}/g,     company?.gstNumber || call.companyInfo?.gstNumber || "")
+      .replace(/{{companyName}}/g, company?.name || call.companyInfo?.name || "")
+      .replace(/{{companyTagline}}/g, company?.tagline || "")
+      .replace(/{{companyAddress}}/g, company?.address || call.companyInfo?.address || "")
+      .replace(/{{companyPhone}}/g, company?.phone || call.companyInfo?.phone || "")
+      .replace(/{{companyEmail}}/g, company?.email || call.companyInfo?.email || "")
+      .replace(/{{companyGst}}/g, company?.gstNumber || call.companyInfo?.gstNumber || "")
       .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
-      .replace(/{{bankName}}/g,       company?.bankName   || "")
-      .replace(/{{ifscCode}}/g,       company?.ifscCode   || "")
-      .replace(/{{bankBranch}}/g,     company?.bankBranch || "")
-      .replace(/{{qrCode}}/g,         company?.qrCode     || "")
-      .replace(/{{invoiceLogoUrl}}/g,  invoiceLogoUrl)
+      .replace(/{{bankName}}/g, company?.bankName || "")
+      .replace(/{{ifscCode}}/g, company?.ifscCode || "")
+      .replace(/{{bankBranch}}/g, company?.bankBranch || "")
+      .replace(/{{qrCode}}/g, company?.qrCode || "")
+      .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
       .replace(/{{invoiceLogoText}}/g, invoiceLogoText)
-      .replace(/{{customerName}}/g,    call.customerInfo?.name    || "")
+      .replace(/{{customerName}}/g, call.customerInfo?.name || "")
       .replace(/{{customerAddress}}/g, call.customerInfo?.address || "")
       .replace(/{{customerUniqueId}}/g, call.customerInfo?.customerUniqueId || "")
-      .replace(/{{customerGst}}/g,     call.customerInfo?.gstNumber || "")
-      .replace(/{{basicTotal}}/g,  fmt(basicTotal))
+      .replace(/{{customerGst}}/g, call.customerInfo?.gstNumber || "")
+      .replace(/{{basicTotal}}/g, fmt(basicTotal))
       .replace(/{{cgstPercent}}/g, cgstPercent)
-      .replace(/{{cgstAmount}}/g,  fmt(cgstAmount))
+      .replace(/{{cgstAmount}}/g, fmt(cgstAmount))
       .replace(/{{sgstPercent}}/g, sgstPercent)
-      .replace(/{{sgstAmount}}/g,  fmt(sgstAmount))
+      .replace(/{{sgstAmount}}/g, fmt(sgstAmount))
       .replace(/{{igstPercent}}/g, igstPercent)
-      .replace(/{{igstAmount}}/g,  fmt(igstAmount))
-      .replace(/{{grandTotal}}/g,  fmt(grandTotal));
+      .replace(/{{igstAmount}}/g, fmt(igstAmount))
+      .replace(/{{grandTotal}}/g, fmt(grandTotal));
 
     // Conditional blocks
     html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
     html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
     html = igstPercent > 0 ? html.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
-    html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
-    html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\.\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\.\s\S]*?{{\/if}}/g, "");
-    html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
-    html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company?.tagline ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+    html = company?.qrCode ? html.replace(/{{#if qrCode}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if qrCode}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoUrl ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoText ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
 
     // Build machine rows — service charges row first, then one row per used part
     const machineRowsMatch = html.match(/{{#each machines}}([\.\s\S]*?){{\/each}}/);
@@ -741,13 +735,13 @@ const getServiceCallInvoice = async (req, res) => {
         const sc = machine.serviceCharge ?? 0;
         if (sc <= 0) continue;
         let row = rowTemplate
-          .replace(/{{srNo}}/g,        srNo++)
+          .replace(/{{srNo}}/g, srNo++)
           .replace(/{{machineName}}/g, "Service Charge")
-          .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
-          .replace(/{{quantity}}/g,    "-")
-          .replace(/{{rate}}/g,        fmt(sc))
-          .replace(/{{amount}}/g,      fmt(sc))
-          .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
+          .replace(/{{hsnCode}}/g, machine.hsnCode || "-")
+          .replace(/{{quantity}}/g, "-")
+          .replace(/{{rate}}/g, fmt(sc))
+          .replace(/{{amount}}/g, fmt(sc))
+          .replace(/{{machineSN}}/g, machine.serialNumber || "-");
         row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
         row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
         row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
@@ -757,17 +751,17 @@ const getServiceCallInvoice = async (req, res) => {
       // Rows: one per used part across all machines
       for (const machine of call.machines) {
         for (const part of (machine.usedParts || [])) {
-          const qty    = part.quantity ?? 1;
-          const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
+          const qty = part.quantity ?? 1;
+          const rate = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
           const amount = part.total ?? (qty * rate);
           let row = rowTemplate
-            .replace(/{{srNo}}/g,        srNo++)
+            .replace(/{{srNo}}/g, srNo++)
             .replace(/{{machineName}}/g, part.machineName || "")
-            .replace(/{{hsnCode}}/g,     part.hsnCode || "")
-            .replace(/{{quantity}}/g,    qty)
-            .replace(/{{rate}}/g,        fmt(rate))
-            .replace(/{{amount}}/g,      fmt(amount))
-            .replace(/{{machineSN}}/g,   machine.serialNumber || "");
+            .replace(/{{hsnCode}}/g, part.hsnCode || "")
+            .replace(/{{quantity}}/g, qty)
+            .replace(/{{rate}}/g, fmt(rate))
+            .replace(/{{amount}}/g, fmt(amount))
+            .replace(/{{machineSN}}/g, machine.serialNumber || "");
           // Model number
           row = part.modelNumber
             ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
@@ -840,14 +834,14 @@ const getCounterReadingInvoice = async (req, res) => {
 
     const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const basicTotal  = call.totalCounterReadingCharges ?? call.totalCharges ?? 0;
+    const basicTotal = call.totalCounterReadingCharges ?? call.totalCharges ?? 0;
     const cgstPercent = call.cgst?.percent ?? 0;
     const sgstPercent = call.sgst?.percent ?? 0;
     const igstPercent = call.igst?.percent ?? 0;
-    const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
-    const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
-    const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-    const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+    const cgstAmount = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+    const sgstAmount = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+    const igstAmount = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+    const grandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
 
     await ServiceCall.findByIdAndUpdate(id, { invoiceGrandTotal: grandTotal });
 
@@ -855,48 +849,50 @@ const getCounterReadingInvoice = async (req, res) => {
       ? new Date(call.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
       : new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
-    const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+    const currentReadingDate = (() => { const d = call.dates?.completed ? new Date(call.dates.completed) : new Date(); const dd = String(d.getDate()).padStart(2, "0"); const mm = String(d.getMonth() + 1).padStart(2, "0"); const yy = String(d.getFullYear()).slice(2); return `${dd}/${mm}/${yy}`; })();
+
+    const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
     const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
     const templatePath = path.join(__dirname, "../../../invoicesExamples/counter-reading-invoice.html");
     let html = await fs.readFile(templatePath, "utf-8");
 
     html = html
-      .replace(/{{invoiceNumber}}/g,    invoiceNumber)
-      .replace(/{{invoiceDate}}/g,      invoiceDate)
-      .replace(/{{companyName}}/g,      company?.name        || call.companyInfo?.name    || "")
-      .replace(/{{companyTagline}}/g,   company?.tagline     || "")
-      .replace(/{{companyAddress}}/g,   company?.address     || call.companyInfo?.address || "")
-      .replace(/{{companyPhone}}/g,     company?.phone       || call.companyInfo?.phone   || "")
-      .replace(/{{companyEmail}}/g,     company?.email       || call.companyInfo?.email   || "")
-      .replace(/{{companyGst}}/g,       company?.gstNumber   || call.companyInfo?.gstNumber || "")
+      .replace(/{{invoiceNumber}}/g, invoiceNumber)
+      .replace(/{{invoiceDate}}/g, invoiceDate)
+      .replace(/{{companyName}}/g, company?.name || call.companyInfo?.name || "")
+      .replace(/{{companyTagline}}/g, company?.tagline || "")
+      .replace(/{{companyAddress}}/g, company?.address || call.companyInfo?.address || "")
+      .replace(/{{companyPhone}}/g, company?.phone || call.companyInfo?.phone || "")
+      .replace(/{{companyEmail}}/g, company?.email || call.companyInfo?.email || "")
+      .replace(/{{companyGst}}/g, company?.gstNumber || call.companyInfo?.gstNumber || "")
       .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
-      .replace(/{{bankName}}/g,         company?.bankName    || "")
-      .replace(/{{ifscCode}}/g,         company?.ifscCode    || "")
-      .replace(/{{bankBranch}}/g,       company?.bankBranch  || "")
-      .replace(/{{qrCode}}/g,           company?.qrCode      || "")
-      .replace(/{{invoiceLogoUrl}}/g,   invoiceLogoUrl)
-      .replace(/{{invoiceLogoText}}/g,  invoiceLogoText)
-      .replace(/{{customerName}}/g,     call.customerInfo?.name    || "")
-      .replace(/{{customerAddress}}/g,  call.customerInfo?.address || "")
+      .replace(/{{bankName}}/g, company?.bankName || "")
+      .replace(/{{ifscCode}}/g, company?.ifscCode || "")
+      .replace(/{{bankBranch}}/g, company?.bankBranch || "")
+      .replace(/{{qrCode}}/g, company?.qrCode || "")
+      .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
+      .replace(/{{invoiceLogoText}}/g, invoiceLogoText)
+      .replace(/{{customerName}}/g, call.customerInfo?.name || "")
+      .replace(/{{customerAddress}}/g, call.customerInfo?.address || "")
       .replace(/{{customerUniqueId}}/g, call.customerInfo?.customerUniqueId || "")
-      .replace(/{{customerGst}}/g,      call.customerInfo?.gstNumber || "")
-      .replace(/{{basicTotal}}/g,  fmt(basicTotal))
+      .replace(/{{customerGst}}/g, call.customerInfo?.gstNumber || "")
+      .replace(/{{basicTotal}}/g, fmt(basicTotal))
       .replace(/{{cgstPercent}}/g, cgstPercent)
-      .replace(/{{cgstAmount}}/g,  fmt(cgstAmount))
+      .replace(/{{cgstAmount}}/g, fmt(cgstAmount))
       .replace(/{{sgstPercent}}/g, sgstPercent)
-      .replace(/{{sgstAmount}}/g,  fmt(sgstAmount))
+      .replace(/{{sgstAmount}}/g, fmt(sgstAmount))
       .replace(/{{igstPercent}}/g, igstPercent)
-      .replace(/{{igstAmount}}/g,  fmt(igstAmount))
-      .replace(/{{grandTotal}}/g,  fmt(grandTotal));
+      .replace(/{{igstAmount}}/g, fmt(igstAmount))
+      .replace(/{{grandTotal}}/g, fmt(grandTotal));
 
-    html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
-    html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
-    html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
-    html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
-    html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
-    html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
-    html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
+    html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
+    html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
+    html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
+    html = company?.tagline ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
+    html = company?.qrCode ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoUrl ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
+    html = invoiceLogoText ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
 
     // Build table rows
     const rows = [];
@@ -904,49 +900,91 @@ const getCounterReadingInvoice = async (req, res) => {
       const cr = machine.counterReadings?.[0];
       if (!cr || !cr.categories?.length) continue;
 
+      // Fetch lastReadingDate from previous call if not stored
+      const lastCall = await ServiceCall.findOne(
+        {
+          "machines.serialNumber": machine.serialNumber,
+          "machines.counterReadings.serialNumber": machine.serialNumber,
+          callType: "Counter-Reading",
+          status: "Completed",
+          _id: { $ne: call._id },
+        },
+        { "dates.completed": 1 }
+      ).sort({ "dates.completed": -1 }).lean();
+      const fallbackLastReadingDate = lastCall?.dates?.completed
+        ? (() => { const d = new Date(lastCall.dates.completed); const dd = String(d.getDate()).padStart(2, "0"); const mm = String(d.getMonth() + 1).padStart(2, "0"); const yy = String(d.getFullYear()).slice(2); return `${dd}/${mm}/${yy}`; })()
+        : "";
+
       const categories = cr.categories;
-      const minCopies  = cr.minCopies;
+      const minCopies = cr.minCopies;
       const machineTotal = categories.reduce((s, c) => s + c.chargesInRupees, 0)
         + (minCopies?.chargesInRupees ?? 0);
 
-      const totalDataRows = categories.length + (minCopies ? 1 : 0);
+      const totalCopiesTaken = categories.reduce((s, c) => s + c.diff, 0);
+      const usedCopiesCharges = categories.reduce((s, c) => s + c.chargesInRupees, 0);
+
       categories.forEach((cat, idx) => {
         const isFirst = idx === 0;
         const isLastCat = idx === categories.length - 1;
         rows.push(`
-          <tr class="cat-row${isLastCat && !minCopies ? " last-cat" : ""}">
+          <tr class="cat-row${isLastCat ? " last-cat" : ""}">
             ${isFirst ? `
-            <td rowspan="${totalDataRows}" style="font-weight:600; vertical-align:top;">
+            <td rowspan="${categories.length}" style="font-weight:600; vertical-align:top;">
               ${machine.machineName}
               ${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}
+              ${machine.serialNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">S/N: ${machine.serialNumber}</div>` : ""}
             </td>
-            <td rowspan="${totalDataRows}" style="font-size:11px; vertical-align:top;">${machine.serialNumber || ""}</td>
-            <td rowspan="${totalDataRows}" style="font-size:11px; vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
-            <td>${cat.pagesCategory}</td>
+            <td rowspan="${categories.length}" style="font-size:11px; vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
+          <td>
+  ${cat.pagesCategory}
+</td>
+
+<td class="right">
+  <div>${cat.lastReading}</div>
+  <div style="font-size:10px;color:#666;">
+    ${cat.lastReadingDate || fallbackLastReadingDate || ""}
+  </div>
+</td>
+
+<td class="right">
+  <div>${cat.currentReading}</div>
+  <div style="font-size:10px;color:#666;">
+    ${currentReadingDate}
+  </div>
+</td>
             <td class="right">${cat.diff}</td>
             <td class="right">${fmt(cat.costPerPage)}</td>
             <td class="right">${fmt(cat.chargesInRupees)}</td>
           </tr>`);
       });
 
-      if (minCopies) {
-        rows.push(`
-          <tr class="min-copies-row">
-            <td class="min-copies-label">Min Copies</td>
-            <td class="right">${minCopies.diff}</td>
-            <td class="right">${fmt(minCopies.costPerPage)}</td>
-            <td class="right">${fmt(minCopies.chargesInRupees)}</td>
-          </tr>`);
-      }
+      
 
-      rows.push(`
-        <tr class="machine-total-row">
-          <td colspan="3"></td>
-          <td class="machine-total-label">Total</td>
-          <td></td>
-          <td></td>
-          <td class="right"><strong>${fmt(machineTotal)}</strong></td>
-        </tr>`);
+     rows.push(`
+<tr class="machine-summary-row">
+  <td colspan="8" style="background:#f7f7f7;border-top:1px solid #ccc;padding:6px 10px;">
+    <div style="display:flex;justify-content:flex-end;">
+      <table style="border-collapse:collapse;font-size:11px;min-width:320px;line-height:1.2;">
+        <tr>
+          <td colspan="2" style="font-weight:700;font-size:11px;padding:0 0 3px 0;border-bottom:1px solid #ddd;letter-spacing:0.3px;">COPIES &amp; CHARGES SUMMARY</td>
+        </tr>
+        <tr><td style="color:#555;padding:0 12px 0 0;font-size:11px;">Used Copies</td><td style="text-align:right;font-weight:600;font-size:11px;">${totalCopiesTaken} &nbsp;<span style="color:#555;font-weight:400;">(&#8377;${fmt(usedCopiesCharges)})</span></td></tr>
+        ${
+          minCopies ? `
+        <tr><td style="color:#555;padding:0 12px 0 0;font-size:11px;">Minimum Required</td><td style="text-align:right;font-weight:600;font-size:11px;">${minCopies.minCopies}</td></tr>
+        <tr><td style="color:#555;padding:0 12px 0 0;font-size:11px;">Shortfall Copies</td><td style="text-align:right;font-weight:600;font-size:11px;">${minCopies.diff} &times; &#8377;${fmt(minCopies.costPerPage)} &nbsp;<span style="color:#555;font-weight:400;">(&#8377;${fmt(minCopies.chargesInRupees)})</span></td></tr>
+        ` : ''
+        }
+        <tr style="border-top:1px solid #ddd;">
+          <td style="font-weight:700;padding:2px 12px 0 0;font-size:11px;">Total Charges</td>
+          <td style="text-align:right;font-weight:700;font-size:12px;padding:2px 0 0 0;">&#8377;${fmt(machineTotal)}</td>
+        </tr>
+      </table>
+    </div>
+  </td>
+</tr>
+<tr><td colspan="8" style="height:6px;border-bottom:2px solid #111;"></td></tr>
+`);
     }
 
     html = html.replace("{{tableRows}}", rows.join(""));

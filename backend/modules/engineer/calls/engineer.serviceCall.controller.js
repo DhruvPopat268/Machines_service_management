@@ -8,11 +8,51 @@ const PurchasedMachine = require("../../admin/purchasedMachines/admin.purchasedM
 const Machine = require("../../admin/inventoryManagement/admin.machine.model");
 const InventoryLog = require("../../admin/inventoryLogs/admin.inventoryLog.model");
 const SoldMachine = require("../../admin/soldMachines/admin.soldMachine.model");
+const PagesCategory = require("../../admin/pagesCategoryManagement/admin.pagesCategory.model");
 const mongoose = require("mongoose");
 const axios = require("axios");
 const { sendServiceCallInvoiceEmail } = require("../../../utils/emailService");
 
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
+
+// ── Reusable: inject lastReading for Service-Call machines ─────────────────
+const buildServiceCallReadingInfo = async (calls) => {
+  const pagesCategories = await PagesCategory.find({ status: "Active" }).select("_id name").lean();
+  if (!pagesCategories.length) return calls.map(c => c.toObject ? c.toObject() : c);
+
+  return Promise.all(calls.map(async (call) => {
+    const callObj = call.toObject ? call.toObject() : call;
+    if (callObj.callType !== "Service-Call") return callObj;
+
+    const machines = await Promise.all(callObj.machines.map(async (m) => {
+      if (!m.serialNumber) return m;
+
+      const lastCall = await ServiceCall.findOne(
+        { "machines.serialNumber": m.serialNumber, callType: "Service-Call", status: "Completed", _id: { $ne: call._id } },
+        { "machines.$": 1, "dates.completed": 1 }
+      ).sort({ "dates.completed": -1 }).lean();
+      const lastMachine = lastCall?.machines?.find(lm => lm.serialNumber === m.serialNumber);
+      const lastReadingDate = lastCall?.dates?.completed
+        ? (() => { const d = new Date(lastCall.dates.completed); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`; })()
+        : "";
+
+      const serviceCallReadingCategories = pagesCategories.map(pc => {
+        const lastCat = lastMachine?.serviceCallReadings?.find(c => c.pagesCategoryId.toString() === pc._id.toString());
+        const lastReading = lastCat?.currentReading ?? 0;
+        return {
+          pagesCategoryId: pc._id,
+          pagesCategory:   pc.name,
+          lastReading,
+          lastReadingDate: lastReading > 0 ? lastReadingDate : "",
+        };
+      });
+
+      return { ...m, serviceCallReadingCategories };
+    }));
+
+    return { ...callObj, machines };
+  }));
+};
 
 // ── Reusable: build counterReadingInfo for a list of calls ──────────────────
 const buildCounterReadingInfo = async (calls) => {
@@ -153,7 +193,8 @@ const getOnHoldCalls = async (req, res) => {
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
       .sort({ updatedAt: -1 });
 
-    return res.status(200).json({ success: true, data: calls });
+    const data = await buildServiceCallReadingInfo(calls);
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -189,7 +230,8 @@ const getAssignedCalls = async (req, res) => {
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType")
       .sort({ updatedAt: -1 });
 
-    return res.status(200).json({ success: true, data: calls });
+    const data = await buildServiceCallReadingInfo(calls);
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -816,8 +858,7 @@ const completeCall = async (req, res) => {
 
     const isCounterReading = call.callType === "Counter-Reading";
 
-    if (!isCounterReading) {
-      if (afterFiles.length === 0)
+    if (afterFiles.length === 0)
         return abort(400, "afterWorkImages are required");
       if (afterFiles.length > 5)
         return abort(400, "afterWorkImages must not exceed 5 images");
@@ -825,7 +866,6 @@ const completeCall = async (req, res) => {
         return abort(400, "customerSignature is required");
       if (sigFiles.length > 1)
         return abort(400, "customerSignature must be a single image");
-    }
 
     // usedParts only apply to Service-Call type; ignore for other call types
     const hasUsedParts = Array.isArray(parsedUsedParts) && parsedUsedParts.length > 0 && call.callType === "Service-Call";
@@ -841,13 +881,11 @@ const completeCall = async (req, res) => {
 
     // ── Upload images ──
     let afterWorkImages, customerSignature;
-    if (!isCounterReading) {
-      try {
-        afterWorkImages   = await processImages(afterFiles);
-        customerSignature = (await processImages(sigFiles))[0];
-      } catch (imgErr) {
-        return abort(400, imgErr.message);
-      }
+    try {
+      afterWorkImages   = await processImages(afterFiles);
+      customerSignature = sigFiles.length > 0 ? (await processImages(sigFiles))[0] : undefined;
+    } catch (imgErr) {
+      return abort(400, imgErr.message);
     }
 
     // ── Resolve parts pricing and build inventory structures ──
@@ -1076,12 +1114,16 @@ const completeCall = async (req, res) => {
             status:   "Completed",
             _id:      { $ne: call._id },
           },
-          { "machines.counterReadings": 1 }
+          { "machines.counterReadings": 1, "dates.completed": 1 }
         ).sort({ "dates.completed": -1 }).session(session).lean();
 
         const lastSnReading = lastCall?.machines
           ?.flatMap(m => m.counterReadings ?? [])
           .find(r => r.serialNumber === cr.serialNumber);
+
+        const lastReadingDate = lastCall?.dates?.completed
+          ? (() => { const d = new Date(lastCall.dates.completed); const dd = String(d.getDate()).padStart(2,"0"); const mm = String(d.getMonth()+1).padStart(2,"0"); const yy = String(d.getFullYear()).slice(2); return `${dd}/${mm}/${yy}`; })()
+          : "";
 
         const categories = [];
         for (const cat of cr.categories) {
@@ -1102,6 +1144,7 @@ const completeCall = async (req, res) => {
             pagesCategoryId: cat.pagesCategoryId,
             pagesCategory:   pc.pagesCategory,
             lastReading,
+            lastReadingDate,
             currentReading:  current,
             costPerPage:     pc.costPerPage,
             minCopies:       pc.minCopies ?? 0,
@@ -1144,19 +1187,53 @@ const completeCall = async (req, res) => {
     ) / 100;
     const totalCharges = Math.round((totalServiceCharges + totalPartsCharges + totalCounterReadingCharges) * 100) / 100;
 
-    // ── Build lastReading map for Service-Call readings ──
-    const lastReadingMap = new Map(); // serialNumber -> reading
+    // ── Build serviceCallReadings per machine ──
+    const serviceCallReadingsMap = new Map(); // serialNumber -> [{ pagesCategoryId, pagesCategory, lastReading, lastReadingDate, currentReading, diff }]
 
     if (call.callType === "Service-Call" && Array.isArray(parsedServiceCallReadings) && parsedServiceCallReadings.length > 0) {
       const callSerialNumbers = new Set(call.machines.map(m => m.serialNumber).filter(Boolean));
+
       for (const entry of parsedServiceCallReadings) {
         if (!entry.serialNumber || typeof entry.serialNumber !== "string")
           return abort(400, "Each serviceCallReading must have a serialNumber");
         if (!callSerialNumbers.has(entry.serialNumber))
           return abort(400, `serialNumber "${entry.serialNumber}" does not belong to this call`);
-        if (entry.reading == null || isNaN(Number(entry.reading)) || Number(entry.reading) < 0)
-          return abort(400, `reading must be a non-negative number for serial ${entry.serialNumber}`);
-        lastReadingMap.set(entry.serialNumber, Number(entry.reading));
+        if (!Array.isArray(entry.categories) || entry.categories.length === 0)
+          return abort(400, `serviceCallReading for serial "${entry.serialNumber}" must have at least one category`);
+
+        const activeCategories = await PagesCategory.find({ status: "Active" }).select("_id name").lean();
+        const pagesCategoryMap = new Map(activeCategories.map(pc => [pc._id.toString(), pc.name]));
+
+        const lastCall = await ServiceCall.findOne(
+          { "machines.serialNumber": entry.serialNumber, callType: "Service-Call", status: "Completed", _id: { $ne: call._id } },
+          { "machines.$": 1, "dates.completed": 1 }
+        ).sort({ "dates.completed": -1 }).session(session).lean();
+        const lastMachine = lastCall?.machines?.find(m => m.serialNumber === entry.serialNumber);
+        const lastReadingDate = lastCall?.dates?.completed
+          ? (() => { const d = new Date(lastCall.dates.completed); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`; })()
+          : "";
+
+        const categories = [];
+        for (const cat of entry.categories) {
+          const pcId = cat.pagesCategoryId?.toString();
+          if (!pcId) return abort(400, `pagesCategoryId is required in serviceCallReading for serial ${entry.serialNumber}`);
+          const pagesCategory = pagesCategoryMap.get(pcId);
+          if (!pagesCategory) return abort(400, `pagesCategoryId "${pcId}" is not a valid active pages category`);
+          const lastCat    = lastMachine?.serviceCallReadings?.find(c => c.pagesCategoryId.toString() === pcId);
+          const lastReading = lastCat?.currentReading ?? 0;
+          const current = Number(cat.currentReading);
+          if (isNaN(current) || current < 0) return abort(400, `currentReading must be a non-negative number for serial ${entry.serialNumber} category ${pagesCategory}`);
+          if (current < lastReading) return abort(400, `currentReading (${current}) cannot be less than lastReading (${lastReading}) for serial ${entry.serialNumber} category ${pagesCategory}`);
+          categories.push({
+            pagesCategoryId: cat.pagesCategoryId,
+            pagesCategory,
+            lastReading,
+            lastReadingDate,
+            currentReading: current,
+            diff: current - lastReading,
+          });
+        }
+        serviceCallReadingsMap.set(entry.serialNumber, categories);
       }
     }
 
@@ -1165,13 +1242,10 @@ const completeCall = async (req, res) => {
     call.machines.forEach((m, idx) => {
       const mParts       = variantPartsMap.get(m.serialNumber) || [];
       const mPartsCharge = Math.round(mParts.reduce((s, p) => s + p.total, 0) * 100) / 100;
-      machineSetFields[`machines.${idx}.partsCharge`]      = mPartsCharge;
-      machineSetFields[`machines.${idx}.usedParts`]        = mParts;
-      machineSetFields[`machines.${idx}.counterReadings`]  = counterReadingsMap.has(m.serialNumber)
-        ? [counterReadingsMap.get(m.serialNumber)]
-        : [];
-      if (lastReadingMap.has(m.serialNumber))
-        machineSetFields[`machines.${idx}.lastReading`] = lastReadingMap.get(m.serialNumber);
+      machineSetFields[`machines.${idx}.partsCharge`]         = mPartsCharge;
+      machineSetFields[`machines.${idx}.usedParts`]           = mParts;
+      machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(m.serialNumber) ? [counterReadingsMap.get(m.serialNumber)] : [];
+      machineSetFields[`machines.${idx}.serviceCallReadings`] = serviceCallReadingsMap.get(m.serialNumber) ?? [];
     });
 
     const cgstPercent       = call.cgst?.percent ?? 0;
@@ -1249,6 +1323,8 @@ const completeCall = async (req, res) => {
             ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
             : invoiceDate;
 
+          const currentReadingDate = (() => { const d = updatedCall.dates?.completed ? new Date(updatedCall.dates.completed) : new Date(); const dd = String(d.getDate()).padStart(2,"0"); const mm = String(d.getMonth()+1).padStart(2,"0"); const yy = String(d.getFullYear()).slice(2); return `${dd}/${mm}/${yy}`; })();
+
           const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
           const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
@@ -1306,21 +1382,25 @@ const completeCall = async (req, res) => {
             for (const machine of updatedCall.machines) {
               const cr = machine.counterReadings?.[0];
               if (!cr || !cr.categories?.length) continue;
-              const categories    = cr.categories;
-              const minCopies     = cr.minCopies;
-              const machineTotal  = categories.reduce((s, c) => s + c.chargesInRupees, 0) + (minCopies?.chargesInRupees ?? 0);
-              const totalDataRows = categories.length + (minCopies ? 1 : 0);
+              const categories   = cr.categories;
+              const minCopies    = cr.minCopies;
+              const machineTotal = categories.reduce((s, c) => s + c.chargesInRupees, 0) + (minCopies?.chargesInRupees ?? 0);
+              const totalCopiesTaken = categories.reduce((s, c) => s + c.diff, 0);
               categories.forEach((cat, idx) => {
                 const isFirst   = idx === 0;
                 const isLastCat = idx === categories.length - 1;
-                rows.push(`<tr class="cat-row${isLastCat && !minCopies ? " last-cat" : ""}">
-                  ${isFirst ? `<td rowspan="${totalDataRows}" style="font-weight:600;vertical-align:top;">${machine.machineName}${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.serialNumber || ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
-                  <td>${cat.pagesCategory}</td><td class="right">${cat.diff}</td><td class="right">${fmt(cat.costPerPage)}</td><td class="right">${fmt(cat.chargesInRupees)}</td>
+                rows.push(`<tr class="cat-row${isLastCat ? " last-cat" : ""}">
+                  ${isFirst ? `<td rowspan="${categories.length}" style="font-weight:600;vertical-align:top;">${machine.machineName}${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}${machine.serialNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">S/N: ${machine.serialNumber}</div>` : ""}</td><td rowspan="${categories.length}" style="font-size:11px;vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
+                  <td>${cat.pagesCategory}</td><td class="right">${cat.lastReading}${cat.lastReadingDate ? ` (${cat.lastReadingDate})` : ""}</td><td class="right">${cat.currentReading} (${currentReadingDate})</td><td class="right">${cat.diff}</td><td class="right">${fmt(cat.costPerPage)}</td><td class="right">${fmt(cat.chargesInRupees)}</td>
                 </tr>`);
               });
-              if (minCopies)
-                rows.push(`<tr class="min-copies-row"><td class="min-copies-label">Min Copies</td><td class="right">${minCopies.diff}</td><td class="right">${fmt(minCopies.costPerPage)}</td><td class="right">${fmt(minCopies.chargesInRupees)}</td></tr>`);
-              rows.push(`<tr class="machine-total-row"><td colspan="3"></td><td class="machine-total-label">Total</td><td></td><td></td><td class="right"><strong>${fmt(machineTotal)}</strong></td></tr>`);
+              const summaryParts = [
+                `Total Copies Taken Out: <strong>${totalCopiesTaken}</strong>`,
+                ...(minCopies ? [`Min Required: <strong>${minCopies.minCopies}</strong>`] : []),
+                ...(minCopies ? [`Remaining: <strong>${minCopies.diff}</strong> &nbsp;@&nbsp; ₹${fmt(minCopies.costPerPage)}/copy = <strong>₹${fmt(minCopies.chargesInRupees)}</strong>`] : []),
+              ].join(' &nbsp;|&nbsp; ');
+              rows.push(`<tr class="machine-summary-row"><td colspan="7" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-size:11px;color:#333;">${summaryParts}</td><td class="right" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-weight:700;font-size:12px;border-left:1px solid #ddd;">₹${fmt(machineTotal)}</td></tr>`);
+              rows.push(`<tr><td colspan="8" style="height:6px;border-bottom:2px solid #111;"></td></tr>`);
             }
             html = html.replace("{{tableRows}}", rows.join(""));
           } else {
@@ -1486,4 +1566,4 @@ const getCounterReadingHistoryCalls = async (req, res) => {
   }
 };
 
-module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo };
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo, buildServiceCallReadingInfo };

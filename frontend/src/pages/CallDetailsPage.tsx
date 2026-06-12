@@ -467,7 +467,52 @@ const CallDetailsPage = () => {
         </Card>
       )}
 
-      {/* Parts Replaced Section */}
+      {/* Service-Call Readings Section */}
+      {(call as any).callType === "Service-Call" && call.machines.some((m: any) => m.serviceCallReadings?.length > 0) && (
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Wrench className="h-5 w-5" /> Counter Readings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Machine</TableHead>
+                    <TableHead>Serial No.</TableHead>
+                    <TableHead>Pages Category</TableHead>
+                    <TableHead className="text-right">Last Reading</TableHead>
+                    <TableHead className="text-right">Last Reading Date</TableHead>
+                    <TableHead className="text-right">Current Reading</TableHead>
+                    <TableHead className="text-right">Diff</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {call.machines.flatMap((machine: any, mi: number) =>
+                    (machine.serviceCallReadings || []).map((cat: any, ci: number) => (
+                      <TableRow key={`${mi}-${ci}`}>
+                        <TableCell>{ci + 1}</TableCell>
+                        <TableCell><p className="font-medium">{machine.machineName}</p></TableCell>
+                        <TableCell className="font-mono text-sm">{machine.serialNumber || "N/A"}</TableCell>
+                        <TableCell>{cat.pagesCategory}</TableCell>
+                        <TableCell className="text-right">{cat.lastReading}</TableCell>
+                        <TableCell className="text-right">{cat.lastReadingDate || "—"}</TableCell>
+                        <TableCell className="text-right">{cat.currentReading}</TableCell>
+                        <TableCell className="text-right font-semibold">{cat.diff}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
       {call.machines.some((m: any) => m.usedParts?.length > 0) && (
         <Card className="border-0 shadow-sm">
           <CardHeader>
@@ -532,7 +577,6 @@ const CallDetailsPage = () => {
                     <TableHead>Machine</TableHead>
                     <TableHead>Serial No.</TableHead>
                     <TableHead>Contract</TableHead>
-                    <TableHead className="text-right">Last Reading</TableHead>
                     <TableHead className="text-right">Service Charge</TableHead>
                     <TableHead className="text-right">Parts Charge</TableHead>
                     <TableHead className="text-right">Total</TableHead>
@@ -550,11 +594,6 @@ const CallDetailsPage = () => {
                         <TableCell className="font-medium">{machine.machineName}</TableCell>
                         <TableCell className="font-mono text-sm">{machine.serialNumber}</TableCell>
                         <TableCell className="text-sm">{machine.contractType.name}</TableCell>
-                        <TableCell className="text-right">
-                          {machine.lastReading !== undefined && machine.lastReading !== null
-                            ? machine.lastReading
-                            : <span className="text-muted-foreground text-xs">—</span>}
-                        </TableCell>
                         <TableCell className="text-right">
                           {machine.serviceCharge !== undefined
                             ? <span className="text-green-600 font-medium">₹{machine.serviceCharge}</span>
