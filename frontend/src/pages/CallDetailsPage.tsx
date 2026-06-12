@@ -423,19 +423,45 @@ const CallDetailsPage = () => {
                 </TableBody>
               </Table>
             </div>
-            <div className="flex justify-end gap-8 px-6 py-4 border-t text-sm">
-              {(call as any).totalCounterReadingCharges !== undefined && (
-                <div className="text-right">
-                  <p className="text-muted-foreground">Total Counter Reading Charges</p>
-                  <p className="text-blue-600 font-semibold text-base">₹{(call as any).totalCounterReadingCharges}</p>
-                </div>
-              )}
-              {(call as any).totalCharges !== undefined && (
-                <div className="text-right">
-                  <p className="text-muted-foreground">Grand Total</p>
-                  <p className="font-bold text-base">₹{(call as any).totalCharges}</p>
-                </div>
-              )}
+            <div className="flex justify-end px-6 py-4 border-t">
+              <div className="w-64 text-sm space-y-2">
+                {(call as any).totalCounterReadingCharges !== undefined && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Counter Reading Charges</span>
+                    <span className="font-medium text-blue-600">₹{(call as any).totalCounterReadingCharges}</span>
+                  </div>
+                )}
+                {(call as any).totalCharges !== undefined && (
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-muted-foreground">Basic Total</span>
+                    <span className="font-medium">₹{(call as any).totalCharges}</span>
+                  </div>
+                )}
+                {(call as any).cgst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CGST ({(call as any).cgst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).cgst.amount}</span>
+                  </div>
+                )}
+                {(call as any).sgst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">SGST ({(call as any).sgst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).sgst.amount}</span>
+                  </div>
+                )}
+                {(call as any).igst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IGST ({(call as any).igst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).igst.amount}</span>
+                  </div>
+                )}
+                {(call as any).invoiceGrandTotal != null && (
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="font-semibold">Grand Total</span>
+                    <span className="font-bold text-base">₹{(call as any).invoiceGrandTotal}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -546,25 +572,51 @@ const CallDetailsPage = () => {
                 </TableBody>
               </Table>
             </div>
-            <div className="flex justify-end gap-8 px-6 py-4 border-t text-sm">
-              {call.totalServiceCharges !== undefined && (
-                <div className="text-right">
-                  <p className="text-muted-foreground">Total Service Charges</p>
-                  <p className="text-green-600 font-semibold text-base">₹{call.totalServiceCharges}</p>
-                </div>
-              )}
-              {call.totalPartsCharges !== undefined && (
-                <div className="text-right">
-                  <p className="text-muted-foreground">Total Parts Charges</p>
-                  <p className="text-blue-600 font-semibold text-base">₹{call.totalPartsCharges}</p>
-                </div>
-              )}
-              {(call.totalServiceCharges !== undefined || call.totalPartsCharges !== undefined) && (
-                <div className="text-right">
-                  <p className="text-muted-foreground">Grand Total</p>
-                  <p className="font-bold text-base">₹{(call as any).totalCharges ?? ((call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0))}</p>
-                </div>
-              )}
+            <div className="flex justify-end px-6 py-4 border-t">
+              <div className="w-64 text-sm space-y-2">
+                {call.totalServiceCharges !== undefined && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Service Charges</span>
+                    <span className="font-medium text-green-600">₹{call.totalServiceCharges}</span>
+                  </div>
+                )}
+                {call.totalPartsCharges !== undefined && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Parts Charges</span>
+                    <span className="font-medium text-blue-600">₹{call.totalPartsCharges}</span>
+                  </div>
+                )}
+                {(call.totalServiceCharges !== undefined || call.totalPartsCharges !== undefined) && (
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-muted-foreground">Basic Total</span>
+                    <span className="font-medium">₹{(call as any).totalCharges ?? ((call.totalServiceCharges ?? 0) + (call.totalPartsCharges ?? 0))}</span>
+                  </div>
+                )}
+                {(call as any).cgst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">CGST ({(call as any).cgst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).cgst.amount}</span>
+                  </div>
+                )}
+                {(call as any).sgst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">SGST ({(call as any).sgst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).sgst.amount}</span>
+                  </div>
+                )}
+                {(call as any).igst?.percent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">IGST ({(call as any).igst.percent}%)</span>
+                    <span className="font-medium">₹{(call as any).igst.amount}</span>
+                  </div>
+                )}
+                {(call as any).invoiceGrandTotal != null && (
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="font-semibold">Grand Total</span>
+                    <span className="font-bold text-base">₹{(call as any).invoiceGrandTotal}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

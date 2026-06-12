@@ -1174,6 +1174,15 @@ const completeCall = async (req, res) => {
         machineSetFields[`machines.${idx}.lastReading`] = lastReadingMap.get(m.serialNumber);
     });
 
+    const cgstPercent       = call.cgst?.percent ?? 0;
+    const sgstPercent       = call.sgst?.percent ?? 0;
+    const igstPercent       = call.igst?.percent ?? 0;
+    const basicTotal        = isCounterReading ? totalCounterReadingCharges : totalCharges;
+    const cgstAmount        = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+    const sgstAmount        = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+    const igstAmount        = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+    const invoiceGrandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
     await call.updateOne(
       {
         $set: {
@@ -1185,6 +1194,10 @@ const completeCall = async (req, res) => {
           totalServiceCharges,
           totalCharges,
           totalCounterReadingCharges,
+          "cgst.amount":  cgstAmount,
+          "sgst.amount":  sgstAmount,
+          "igst.amount":  igstAmount,
+          invoiceGrandTotal,
           sendToEmail:    sendToEmail    === true || sendToEmail    === "true",
           sendToWhatsapp: sendToWhatsapp === true || sendToWhatsapp === "true",
           ...machineSetFields,
@@ -1196,28 +1209,33 @@ const completeCall = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // Generate invoice and send email if requested — runs after transaction, non-blocking
-    if ((sendToEmail === true || sendToEmail === "true") && call.callType === "Service-Call") {
+    // Always generate invoice after completion — send email only if sendToEmail is true
+    const doSendEmail = sendToEmail === true || sendToEmail === "true";
+    if (call.callType === "Service-Call" || call.callType === "Counter-Reading") {
       setImmediate(async () => {
         try {
           const updatedCall = await ServiceCall.findById(callId);
           if (!updatedCall) return;
 
-          const Company  = require("../../admin/companyManagement/admin.company.model");
-          const Counter  = require("../../admin/auth/counter.model");
+          const Company = require("../../admin/companyManagement/admin.company.model");
+          const Counter = require("../../admin/auth/counter.model");
           const companyId = updatedCall.companyInfo?.companyId;
           const company   = companyId ? await Company.findById(companyId) : null;
 
+          const isCR = updatedCall.callType === "Counter-Reading";
+
+          const counterKey    = isCR ? "counterReadingInvoice" : "serviceCallInvoice";
+          const invoicePrefix = isCR ? "CR-INV" : "SVC-INV";
           const counter = await Counter.findByIdAndUpdate(
-            "serviceCallInvoice",
+            counterKey,
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const invoiceNumber = `SVC-INV-${counter.seq}`;
+          const invoiceNumber = `${invoicePrefix}-${counter.seq}`;
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-          const basicTotal  = updatedCall.totalCharges ?? 0;
+          const basicTotal  = isCR ? (updatedCall.totalCounterReadingCharges ?? updatedCall.totalCharges ?? 0) : (updatedCall.totalCharges ?? 0);
           const cgstPercent = updatedCall.cgst?.percent ?? 0;
           const sgstPercent = updatedCall.sgst?.percent ?? 0;
           const igstPercent = updatedCall.igst?.percent ?? 0;
@@ -1226,7 +1244,7 @@ const completeCall = async (req, res) => {
           const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
           const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
 
-          const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          const invoiceDate   = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
           const completedDate = updatedCall.dates?.completed
             ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
             : invoiceDate;
@@ -1234,15 +1252,17 @@ const completeCall = async (req, res) => {
           const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
           const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
-          const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
+          const templatePath = path.join(__dirname, `../../../invoicesExamples/${isCR ? "counter-reading-invoice" : "sales-invoice"}.html`);
           let html = await fs.readFile(templatePath, "utf-8");
 
-          html = html
-            .replace(`<th>Description</th>`, `<th>Description</th>\n          <th style="width:120px;">Machine S/N</th>`)
-            .replace(
-              `<td>\n            <div class="item-name">{{machineName}}</div>\n            {{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}\n            {{#if serials}}<div class="item-serials">{{serialLabel}}: {{serials}}</div>{{/if}}\n          </td>`,
-              `<td><div class="item-name">{{machineName}}</div>{{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}{{#if partCode}}<div class="item-serials">P/C: {{partCode}}</div>{{/if}}</td>\n          <td style="font-size:11px;">{{machineSN}}</td>`
-            );
+          if (!isCR) {
+            html = html
+              .replace(`<th>Description</th>`, `<th>Description</th>\n          <th style="width:120px;">Machine S/N</th>`)
+              .replace(
+                `<td>\n            <div class="item-name">{{machineName}}</div>\n            {{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}\n            {{#if serials}}<div class="item-serials">{{serialLabel}}: {{serials}}</div>{{/if}}\n          </td>`,
+                `<td><div class="item-name">{{machineName}}</div>{{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}{{#if partCode}}<div class="item-serials">P/C: {{partCode}}</div>{{/if}}</td>\n          <td style="font-size:11px;">{{machineSN}}</td>`
+              );
+          }
 
           html = html
             .replace(/{{invoiceNumber}}/g,     invoiceNumber)
@@ -1276,55 +1296,79 @@ const completeCall = async (req, res) => {
           html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
           html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
           html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
-          html = company?.tagline    ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
-          html = company?.qrCode     ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
-          html = invoiceLogoUrl      ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
-          html = invoiceLogoText     ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.tagline   ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.qrCode    ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl     ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText    ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
 
-          const machineRowsMatch = html.match(/{{#each machines}}([\s\S]*?){{\/each}}/);
-          if (machineRowsMatch) {
-            const rowTemplate = machineRowsMatch[1];
+          if (isCR) {
             const rows = [];
-            let srNo = 1;
             for (const machine of updatedCall.machines) {
-              const sc = machine.serviceCharge ?? 0;
-              if (sc > 0) {
-                let row = rowTemplate
-                  .replace(/{{srNo}}/g,        srNo++)
-                  .replace(/{{machineName}}/g, "Service Charge")
-                  .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
-                  .replace(/{{quantity}}/g,    "-")
-                  .replace(/{{rate}}/g,        fmt(sc))
-                  .replace(/{{amount}}/g,      fmt(sc))
-                  .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
-                row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
-                row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
-                row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
-                rows.push(row);
-              }
-              for (const part of (machine.usedParts || [])) {
-                const qty    = part.quantity ?? 1;
-                const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
-                const amount = part.total ?? (qty * rate);
-                let row = rowTemplate
-                  .replace(/{{srNo}}/g,        srNo++)
-                  .replace(/{{machineName}}/g, part.machineName || "")
-                  .replace(/{{hsnCode}}/g,     part.hsnCode || "")
-                  .replace(/{{quantity}}/g,    qty)
-                  .replace(/{{rate}}/g,        fmt(rate))
-                  .replace(/{{amount}}/g,      fmt(amount))
-                  .replace(/{{machineSN}}/g,   machine.serialNumber || "");
-                row = part.modelNumber
-                  ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
-                  : row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
-                row = part.partCode
-                  ? row.replace(/{{#if partCode}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{partCode}}/g, part.partCode)
-                  : row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
-                row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
-                rows.push(row);
-              }
+              const cr = machine.counterReadings?.[0];
+              if (!cr || !cr.categories?.length) continue;
+              const categories    = cr.categories;
+              const minCopies     = cr.minCopies;
+              const machineTotal  = categories.reduce((s, c) => s + c.chargesInRupees, 0) + (minCopies?.chargesInRupees ?? 0);
+              const totalDataRows = categories.length + (minCopies ? 1 : 0);
+              categories.forEach((cat, idx) => {
+                const isFirst   = idx === 0;
+                const isLastCat = idx === categories.length - 1;
+                rows.push(`<tr class="cat-row${isLastCat && !minCopies ? " last-cat" : ""}">
+                  ${isFirst ? `<td rowspan="${totalDataRows}" style="font-weight:600;vertical-align:top;">${machine.machineName}${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.serialNumber || ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
+                  <td>${cat.pagesCategory}</td><td class="right">${cat.diff}</td><td class="right">${fmt(cat.costPerPage)}</td><td class="right">${fmt(cat.chargesInRupees)}</td>
+                </tr>`);
+              });
+              if (minCopies)
+                rows.push(`<tr class="min-copies-row"><td class="min-copies-label">Min Copies</td><td class="right">${minCopies.diff}</td><td class="right">${fmt(minCopies.costPerPage)}</td><td class="right">${fmt(minCopies.chargesInRupees)}</td></tr>`);
+              rows.push(`<tr class="machine-total-row"><td colspan="3"></td><td class="machine-total-label">Total</td><td></td><td></td><td class="right"><strong>${fmt(machineTotal)}</strong></td></tr>`);
             }
-            html = html.replace(/{{#each machines}}[\s\S]*?{{\/each}}/, rows.join(""));
+            html = html.replace("{{tableRows}}", rows.join(""));
+          } else {
+            const machineRowsMatch = html.match(/{{#each machines}}([\s\S]*?){{\/each}}/);
+            if (machineRowsMatch) {
+              const rowTemplate = machineRowsMatch[1];
+              const rows = [];
+              let srNo = 1;
+              for (const machine of updatedCall.machines) {
+                const sc = machine.serviceCharge ?? 0;
+                if (sc > 0) {
+                  let row = rowTemplate
+                    .replace(/{{srNo}}/g,        srNo++)
+                    .replace(/{{machineName}}/g, "Service Charge")
+                    .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
+                    .replace(/{{quantity}}/g,    "-")
+                    .replace(/{{rate}}/g,        fmt(sc))
+                    .replace(/{{amount}}/g,      fmt(sc))
+                    .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
+                  row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+                  row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+                  row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+                  rows.push(row);
+                }
+                for (const part of (machine.usedParts || [])) {
+                  const qty    = part.quantity ?? 1;
+                  const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
+                  const amount = part.total ?? (qty * rate);
+                  let row = rowTemplate
+                    .replace(/{{srNo}}/g,        srNo++)
+                    .replace(/{{machineName}}/g, part.machineName || "")
+                    .replace(/{{hsnCode}}/g,     part.hsnCode || "")
+                    .replace(/{{quantity}}/g,    qty)
+                    .replace(/{{rate}}/g,        fmt(rate))
+                    .replace(/{{amount}}/g,      fmt(amount))
+                    .replace(/{{machineSN}}/g,   machine.serialNumber || "");
+                  row = part.modelNumber
+                    ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
+                    : row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
+                  row = part.partCode
+                    ? row.replace(/{{#if partCode}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{partCode}}/g, part.partCode)
+                    : row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
+                  row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
+                  rows.push(row);
+                }
+              }
+              html = html.replace(/{{#each machines}}[\s\S]*?{{\/each}}/, rows.join(""));
+            }
           }
 
           const DOCS_DIR = process.env.NODE_ENV === "production"
@@ -1337,7 +1381,7 @@ const completeCall = async (req, res) => {
           ]);
           const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
           await fs.mkdir(DOCS_DIR, { recursive: true });
-          const filename = `service_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+          const filename = `${isCR ? "counter_reading" : "service"}_invoice_${invoiceNumber}_${Date.now()}.pdf`;
           const filepath = path.join(DOCS_DIR, filename);
 
           const browser = await puppeteer.launch({
@@ -1351,190 +1395,43 @@ const completeCall = async (req, res) => {
           await browser.close();
 
           const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
-          await ServiceCall.findByIdAndUpdate(callId, { invoiceUrl, invoiceNumber, invoiceGrandTotal: grandTotal });
-
-          await sendServiceCallInvoiceEmail({
-            invoiceNumber,
-            invoiceDate,
-            customerName:          updatedCall.customerInfo?.name    || "",
-            customerEmail:         updatedCall.customerInfo?.email   || "",
-            callId:                updatedCall.callId,
-            callType:              updatedCall.callType,
-            completedDate,
-            engineerName:          updatedCall.engineerInfo?.name    || "",
-            machines:              updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
-            totalServiceCharges:   updatedCall.totalServiceCharges   ?? 0,
-            totalPartsCharges:     updatedCall.totalPartsCharges     ?? 0,
-            basicTotal,
-            cgstPercent,  cgstAmount,
-            sgstPercent,  sgstAmount,
-            igstPercent,  igstAmount,
-            grandTotal,
+          await ServiceCall.findByIdAndUpdate(callId, {
             invoiceUrl,
-            companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
-            companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
-            companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
-            companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
-            companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
+            invoiceNumber,
+            invoiceGrandTotal: grandTotal,
+            "cgst.amount": cgstAmount,
+            "sgst.amount": sgstAmount,
+            "igst.amount": igstAmount,
           });
-        } catch (err) {
-          console.error("Invoice generation/email error after completeCall:", err.message);
-        }
-      });
-    }
 
-    if ((sendToEmail === true || sendToEmail === "true") && call.callType === "Counter-Reading") {
-      setImmediate(async () => {
-        try {
-          const updatedCall = await ServiceCall.findById(callId);
-          if (!updatedCall) return;
-
-          const Company = require("../../admin/companyManagement/admin.company.model");
-          const Counter = require("../../admin/auth/counter.model");
-          const companyId = updatedCall.companyInfo?.companyId;
-          const company   = companyId ? await Company.findById(companyId) : null;
-
-          const counter = await Counter.findByIdAndUpdate(
-            "counterReadingInvoice",
-            { $inc: { seq: 1 } },
-            { new: true, upsert: true }
-          );
-          const invoiceNumber = `CR-INV-${counter.seq}`;
-
-          const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-          const basicTotal  = updatedCall.totalCounterReadingCharges ?? updatedCall.totalCharges ?? 0;
-          const cgstPercent = updatedCall.cgst?.percent ?? 0;
-          const sgstPercent = updatedCall.sgst?.percent ?? 0;
-          const igstPercent = updatedCall.igst?.percent ?? 0;
-          const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
-          const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
-          const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
-
-          const invoiceDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-          const completedDate = updatedCall.dates?.completed
-            ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
-            : invoiceDate;
-
-          const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
-          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
-
-          const templatePath = path.join(__dirname, "../../../invoicesExamples/counter-reading-invoice.html");
-          let html = await fs.readFile(templatePath, "utf-8");
-
-          html = html
-            .replace(/{{invoiceNumber}}/g,    invoiceNumber)
-            .replace(/{{invoiceDate}}/g,      invoiceDate)
-            .replace(/{{companyName}}/g,      company?.name        || updatedCall.companyInfo?.name    || "")
-            .replace(/{{companyTagline}}/g,   company?.tagline     || "")
-            .replace(/{{companyAddress}}/g,   company?.address     || updatedCall.companyInfo?.address || "")
-            .replace(/{{companyPhone}}/g,     company?.phone       || updatedCall.companyInfo?.phone   || "")
-            .replace(/{{companyEmail}}/g,     company?.email       || updatedCall.companyInfo?.email   || "")
-            .replace(/{{companyGst}}/g,       company?.gstNumber   || updatedCall.companyInfo?.gstNumber || "")
-            .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
-            .replace(/{{bankName}}/g,         company?.bankName    || "")
-            .replace(/{{ifscCode}}/g,         company?.ifscCode    || "")
-            .replace(/{{bankBranch}}/g,       company?.bankBranch  || "")
-            .replace(/{{qrCode}}/g,           company?.qrCode      || "")
-            .replace(/{{invoiceLogoUrl}}/g,   invoiceLogoUrl)
-            .replace(/{{invoiceLogoText}}/g,  invoiceLogoText)
-            .replace(/{{customerName}}/g,     updatedCall.customerInfo?.name    || "")
-            .replace(/{{customerAddress}}/g,  updatedCall.customerInfo?.address || "")
-            .replace(/{{customerUniqueId}}/g, updatedCall.customerInfo?.customerUniqueId || "")
-            .replace(/{{customerGst}}/g,      updatedCall.customerInfo?.gstNumber || "")
-            .replace(/{{basicTotal}}/g,  fmt(basicTotal))
-            .replace(/{{cgstPercent}}/g, cgstPercent)
-            .replace(/{{cgstAmount}}/g,  fmt(cgstAmount))
-            .replace(/{{sgstPercent}}/g, sgstPercent)
-            .replace(/{{sgstAmount}}/g,  fmt(sgstAmount))
-            .replace(/{{igstPercent}}/g, igstPercent)
-            .replace(/{{igstAmount}}/g,  fmt(igstAmount))
-            .replace(/{{grandTotal}}/g,  fmt(grandTotal));
-
-          html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
-          html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
-          html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1")  : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
-          html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
-          html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
-          html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
-          html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
-
-          const rows = [];
-          for (const machine of updatedCall.machines) {
-            const cr = machine.counterReadings?.[0];
-            if (!cr || !cr.categories?.length) continue;
-            const categories   = cr.categories;
-            const minCopies    = cr.minCopies;
-            const machineTotal = categories.reduce((s, c) => s + c.chargesInRupees, 0) + (minCopies?.chargesInRupees ?? 0);
-            const totalDataRows = categories.length + (minCopies ? 1 : 0);
-            categories.forEach((cat, idx) => {
-              const isFirst   = idx === 0;
-              const isLastCat = idx === categories.length - 1;
-              rows.push(`<tr class="cat-row${isLastCat && !minCopies ? " last-cat" : ""}">
-                ${isFirst ? `<td rowspan="${totalDataRows}" style="font-weight:600;vertical-align:top;">${machine.machineName}${machine.modelNumber ? `<div style="font-size:10px;color:#555;font-weight:400;margin-top:2px;">Model: ${machine.modelNumber}</div>` : ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.serialNumber || ""}</td><td rowspan="${totalDataRows}" style="font-size:11px;vertical-align:top;">${machine.hsnCode || ""}</td>` : ""}
-                <td>${cat.pagesCategory}</td><td class="right">${cat.diff}</td><td class="right">${fmt(cat.costPerPage)}</td><td class="right">${fmt(cat.chargesInRupees)}</td>
-              </tr>`);
+          if (doSendEmail) {
+            await sendServiceCallInvoiceEmail({
+              invoiceNumber,
+              invoiceDate,
+              customerName:        updatedCall.customerInfo?.name    || "",
+              customerEmail:       updatedCall.customerInfo?.email   || "",
+              callId:              updatedCall.callId,
+              callType:            updatedCall.callType,
+              completedDate,
+              engineerName:        updatedCall.engineerInfo?.name    || "",
+              machines:            updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
+              totalServiceCharges: isRC ? 0 : (updatedCall.totalServiceCharges ?? 0),
+              totalPartsCharges:   isRC ? 0 : (updatedCall.totalPartsCharges   ?? 0),
+              basicTotal,
+              cgstPercent, cgstAmount,
+              sgstPercent, sgstAmount,
+              igstPercent, igstAmount,
+              grandTotal,
+              invoiceUrl,
+              companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
+              companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
+              companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
+              companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
+              companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
             });
-            if (minCopies) {
-              rows.push(`<tr class="min-copies-row"><td class="min-copies-label">Min Copies</td><td class="right">${minCopies.diff}</td><td class="right">${fmt(minCopies.costPerPage)}</td><td class="right">${fmt(minCopies.chargesInRupees)}</td></tr>`);
-            }
-            rows.push(`<tr class="machine-total-row"><td colspan="3"></td><td class="machine-total-label">Total</td><td></td><td></td><td class="right"><strong>${fmt(machineTotal)}</strong></td></tr>`);
           }
-          html = html.replace("{{tableRows}}", rows.join(""));
-
-          const DOCS_DIR = process.env.NODE_ENV === "production"
-            ? "/app/cloud/Documents"
-            : path.join(__dirname, "../../../cloud/Documents");
-
-          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
-            import("puppeteer"),
-            import("@sparticuz/chromium"),
-          ]);
-          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
-          await fs.mkdir(DOCS_DIR, { recursive: true });
-          const filename = `counter_reading_invoice_${invoiceNumber}_${Date.now()}.pdf`;
-          const filepath = path.join(DOCS_DIR, filename);
-
-          const browser = await puppeteer.launch({
-            executablePath,
-            headless: true,
-            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-          });
-          const page = await browser.newPage();
-          await page.setContent(html, { waitUntil: "networkidle0" });
-          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
-          await browser.close();
-
-          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
-          await ServiceCall.findByIdAndUpdate(callId, { invoiceUrl, invoiceNumber, invoiceGrandTotal: grandTotal });
-
-          await sendServiceCallInvoiceEmail({
-            invoiceNumber,
-            invoiceDate,
-            customerName:        updatedCall.customerInfo?.name    || "",
-            customerEmail:       updatedCall.customerInfo?.email   || "",
-            callId:              updatedCall.callId,
-            callType:            updatedCall.callType,
-            completedDate,
-            engineerName:        updatedCall.engineerInfo?.name    || "",
-            machines:            updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
-            totalServiceCharges: 0,
-            totalPartsCharges:   0,
-            basicTotal,
-            cgstPercent,  cgstAmount,
-            sgstPercent,  sgstAmount,
-            igstPercent,  igstAmount,
-            grandTotal,
-            invoiceUrl,
-            companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
-            companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
-            companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
-            companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
-            companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
-          });
         } catch (err) {
-          console.error("Counter reading invoice/email error after completeCall:", err.message);
+          console.error("Invoice generation error after completeCall:", err.message);
         }
       });
     }

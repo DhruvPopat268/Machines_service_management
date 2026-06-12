@@ -72,7 +72,7 @@ const getCalls = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy")
+        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber")
         .sort({ [sortKey]: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -639,6 +639,9 @@ const getServiceCallInvoice = async (req, res) => {
     if (call.callType !== "Service-Call" || call.status !== "Completed")
       return res.status(400).json({ success: false, message: "Invoice only available for completed Service-Call type calls" });
 
+    if (call.invoiceUrl)
+      return res.status(200).json({ success: true, invoiceUrl: call.invoiceUrl, invoiceNumber: call.invoiceNumber });
+
     const Company = require("../companyManagement/admin.company.model");
     const companyId = call.companyInfo?.companyId;
     const company = companyId ? await Company.findById(companyId) : null;
@@ -819,6 +822,9 @@ const getCounterReadingInvoice = async (req, res) => {
 
     if (call.callType !== "Counter-Reading" || call.status !== "Completed")
       return res.status(400).json({ success: false, message: "Invoice only available for completed Counter-Reading type calls" });
+
+    if (call.invoiceUrl)
+      return res.status(200).json({ success: true, invoiceUrl: call.invoiceUrl, invoiceNumber: call.invoiceNumber });
 
     const Company = require("../companyManagement/admin.company.model");
     const companyId = call.companyInfo?.companyId;

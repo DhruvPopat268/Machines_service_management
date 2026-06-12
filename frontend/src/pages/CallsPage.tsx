@@ -259,7 +259,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           {(c as any).callType === "Service-Call" && c.status === "Completed" && (
             (c as any).invoiceUrl
               ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
-                  <FileText className="h-4 w-4" />
+                  <FileText className="h-4 w-4 text-green-500" />
                 </Button>
               : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async (e) => {
                   e.stopPropagation();
@@ -277,7 +277,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           {(c as any).callType === "Counter-Reading" && c.status === "Completed" && (
             (c as any).invoiceUrl
               ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Counter Reading Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
-                  <FileText className="h-4 w-4" />
+                  <FileText className="h-4 w-4 text-green-500" />
                 </Button>
               : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Counter Reading Invoice" onClick={async (e) => {
                   e.stopPropagation();
