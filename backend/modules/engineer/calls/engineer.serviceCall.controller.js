@@ -190,7 +190,7 @@ const getOnHoldCalls = async (req, res) => {
       status: "On Hold",
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     const data = await buildServiceCallReadingInfo(calls);
@@ -209,7 +209,7 @@ const getHistoryCalls = async (req, res) => {
       status: { $in: ["Completed", "Cancelled"] },
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     return res.status(200).json({ success: true, data: calls });
@@ -227,7 +227,7 @@ const getAssignedCalls = async (req, res) => {
       status: "Assigned",
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     const data = await buildServiceCallReadingInfo(calls);
@@ -1537,7 +1537,7 @@ const getCounterReadingAssignedCalls = async (req, res) => {
       status: { $in: ["Assigned"] },
       callType: "Counter-Reading",
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     const data = await buildCounterReadingInfo(calls);
@@ -1557,7 +1557,7 @@ const getCounterReadingHistoryCalls = async (req, res) => {
       status: { $in: ["Completed", "Cancelled"] },
       callType: "Counter-Reading",
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     return res.status(200).json({ success: true, data: calls });
