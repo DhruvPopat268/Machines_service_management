@@ -9,6 +9,7 @@ import AdminLayout from "./components/AdminLayout";
 import Dashboard from "./pages/Dashboard";
 import UsersPage from "./pages/UsersPage";
 import EngineersPage from "./pages/EngineersPage";
+import EngineerPerformancePage from "./pages/EngineerPerformancePage";
 import CallsPage from "./pages/CallsPage";
 import RaiseCallPage from "./pages/RaiseCallPage";
 import CustomerMachineDetailPage from "./pages/CustomerMachineDetailPage";
@@ -62,6 +63,7 @@ const App = () => (
             <Route path="/calls/:id" element={<CallDetailsPage />} />
             <Route path="/users" element={<UsersPage />} />
             <Route path="/engineers" element={<EngineersPage />} />
+            <Route path="/engineers/performance" element={<EngineerPerformancePage />} />
             <Route path="/machines" element={<MachinesPage />} />
             <Route path="/machines/add" element={<AddMachineForm type="Machine" />} />
             <Route path="/machines/:id" element={<AddMachineForm type="Machine" mode="view" />} />

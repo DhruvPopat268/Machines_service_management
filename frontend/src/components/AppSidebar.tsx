@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -39,7 +39,8 @@ const pagesCategoryItem: NavItem = { title: "Pages Categories", url: "/pages-cat
 
 const usersItem: NavItem = { title: "System Users", url: "/users", icon: UserCog };
 const userRolesItem: NavItem = { title: "User Roles", url: "/user-roles", icon: Users };
-const engineersItem: NavItem = { title: "Engineers", url: "/engineers", icon: HardHat };
+const engineersItem: NavItem      = { title: "Engineers",           url: "/engineers",             icon: HardHat };
+const engineerPerfItem: NavItem   = { title: "Performance Reports",  url: "/engineers/performance", icon: BarChart2 };
 
 function NestedCollapsible({ label, icon: Icon, urls, items, collapsed, depth = 8 }: {
   label: string; icon: any; urls: string[]; items: NavItem[]; collapsed: boolean; depth?: number;
@@ -536,6 +537,20 @@ export function AppSidebar() {
                         <engineersItem.icon className="h-3.5 w-3.5 shrink-0" />
                         {engineersItem.title}
                       </span>
+                    </NavLink>
+                  )}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  {collapsed ? (
+                    <NavLink to={engineerPerfItem.url} end className={linkClass} activeClassName={activeClass}>
+                      <engineerPerfItem.icon className="h-4 w-4 shrink-0" />
+                    </NavLink>
+                  ) : (
+                    <NavLink to={engineerPerfItem.url} end className={linkClass} activeClassName={activeClass}>
+                      <engineerPerfItem.icon className="h-4 w-4 shrink-0" />
+                      <span>{engineerPerfItem.title}</span>
                     </NavLink>
                   )}
                 </SidebarMenuButton>
