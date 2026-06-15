@@ -1452,8 +1452,8 @@ const completeCall = async (req, res) => {
           }
 
           const DOCS_DIR = process.env.NODE_ENV === "production"
-            ? "/app/cloud/Documents"
-            : path.join(__dirname, "../../../cloud/Documents");
+            ? "/app/cloud/documents"
+            : path.join(__dirname, "../../../cloud/documents");
 
           const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
             import("puppeteer"),
@@ -1474,7 +1474,7 @@ const completeCall = async (req, res) => {
           await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
           await browser.close();
 
-          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${filename}`;
           await ServiceCall.findByIdAndUpdate(callId, {
             invoiceUrl,
             invoiceNumber,
