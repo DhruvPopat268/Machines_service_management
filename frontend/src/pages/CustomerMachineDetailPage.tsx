@@ -510,13 +510,13 @@ const CustomerMachineDetailPage = () => {
 
               {/* Problem Types multiselect dropdown */}
               <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Problem Types</label>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Types</label>
                 <Popover open={ptOpenIdx === idx} onOpenChange={open => setPtOpenIdx(open ? idx : null)}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" role="combobox" className="w-full justify-between font-normal min-h-9 h-auto">
                       <div className="flex flex-wrap gap-1 py-0.5">
                         {entry.problemTypeIds.length === 0
-                          ? <span className="text-muted-foreground">Select problem types...</span>
+                          ? <span className="text-muted-foreground">Select types...</span>
                           : entry.problemTypeIds.map(id => {
                               const pt = problemTypes.find(p => p._id === id);
                               return pt ? (
@@ -540,7 +540,7 @@ const CustomerMachineDetailPage = () => {
                     <Command>
                       <CommandInput placeholder="Search problem types..." />
                       <CommandList>
-                        <CommandEmpty>No problem types found.</CommandEmpty>
+                        <CommandEmpty>No types found.</CommandEmpty>
                         <CommandGroup>
                           {problemTypes.map(pt => (
                             <CommandItem key={pt._id} value={pt.name} onSelect={() => toggleProblemType(idx, pt._id)}>
@@ -558,7 +558,7 @@ const CustomerMachineDetailPage = () => {
               {/* Issue Description */}
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Issue Description <span className="text-red-500">*</span>
+                  Description <span className="text-red-500">*</span>
                 </label>
                 <Textarea
                   placeholder="Describe the issue..."
