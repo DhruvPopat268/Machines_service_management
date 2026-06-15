@@ -422,7 +422,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     },
     {
       key: "note",
-      label: "Note",
+      label: "Remarks",
       className: "w-[120px] max-w-[120px]",
       render: (c) => {
         if (!(c as any).note) return "—";
