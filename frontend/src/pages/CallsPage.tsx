@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { serviceCallsApi, engineersApi, type ServiceCall, type CallStats, type CallsParams } from "@/services/serviceCallsApi";
-import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
 import { StatsCard } from "@/components/StatsCard";
@@ -12,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import api from "@/lib/axiosInterceptor";
@@ -56,6 +56,15 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
   const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
 
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+
+  const toggleExpand = (id: string) => setExpandedCallId(prev => prev === id ? null : id);
+
+  const formatDate = (iso: string) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
+  };
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
   const [customers, setCustomers]           = useState<DropdownOption[]>([]);
@@ -237,87 +246,6 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
   useEffect(() => { fetchCalls(1); }, [fetchCalls]);
 
-  const columns: Column<ServiceCall>[] = [
-    { key: "no",          label: "No.",            render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
-    { key: "callId",      label: "Call ID",         render: (c) => <span className="font-medium text-foreground">{c.callId}</span> },
-    { key: "callType",    label: "Call Type",       render: (c) => <span className="font-medium">{(c as any).callType || "—"}</span> },
-    { key: "customer", label: "Customer", render: (c) => (
-      <div>
-        <p className="font-medium">{c.customerInfo.name}</p>
-        <p className="text-xs text-muted-foreground">{c.customerInfo.phone}</p>
-      </div>
-    ) },
-    { key: "totalMachines", label: "Total Machines", render: (c) => <span className="font-medium">{c.machines.length}</span> },
-    { key: "status",      label: "Status",          render: (c) => <StatusBadge status={c.status} /> },
-    { key: "engineer",    label: "Engineer",        render: (c) => <span className={!c.engineerInfo ? "text-muted-foreground italic" : ""}>{c.engineerInfo?.name || "Unassigned"}</span> },
-    { key: "createdBy",   label: "Created By",      render: (c) => {
-      const val = (c as any).createdBy || "Customer";
-      return <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${ val === "Admin" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700" }`}>{val}</span>;
-    } },
-    {
-      key: "createdAt", label: "Created At", render: (c) => {
-        const { date, time } = formatDateTime(c.createdAt);
-        return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
-      },
-    },
-    {
-      key: "updatedAt", label: "Updated At", render: (c) => {
-        const { date, time } = formatDateTime(c.updatedAt);
-        return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
-      },
-    },
-    {
-      key: "actions", label: "Actions", render: (c) => (
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); navigate(`/calls/${c._id}`); }}>
-            <Eye className="h-4 w-4" />
-          </Button>
-          {(c as any).callType === "Service-Call" && c.status === "Completed" && (
-            (c as any).invoiceUrl
-              ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
-                  <FileText className="h-4 w-4 text-green-500" />
-                </Button>
-              : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async (e) => {
-                  e.stopPropagation();
-                  const tab = window.open("", "_blank");
-                  try {
-                    const res = await serviceCallsApi.getInvoice(c._id);
-                    toast.success("Invoice generated");
-                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
-                    fetchCalls(pagination.page);
-                  } catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
-                }}>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </Button>
-          )}
-          {(c as any).callType === "Counter-Reading" && c.status === "Completed" && (
-            (c as any).invoiceUrl
-              ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Counter Reading Invoice" onClick={(e) => { e.stopPropagation(); window.open((c as any).invoiceUrl, "_blank"); }}>
-                  <FileText className="h-4 w-4 text-green-500" />
-                </Button>
-              : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Counter Reading Invoice" onClick={async (e) => {
-                  e.stopPropagation();
-                  const tab = window.open("", "_blank");
-                  try {
-                    const res = await serviceCallsApi.getCounterReadingInvoice(c._id);
-                    toast.success("Invoice generated");
-                    if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank");
-                    fetchCalls(pagination.page);
-                  } catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
-                }}>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </Button>
-          )}
-          {c.status === "Open" && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openAssignDialog(c); }}>
-              <UserPlus className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
-
   return (
     <div className="space-y-6">
       {loading ? <Spinner /> : (
@@ -338,44 +266,29 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             </div>
           )}
 
-          {/* Row 1: Search (left) + Date Range + Clear (right) */}
+          {/* Row 1: Search + Date Range + Clear */}
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by call ID, customer, mobile, engineer..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
+              <Input placeholder="Search by call ID, customer, mobile, engineer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" />
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
-              </div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
               {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
-                  <X className="h-4 w-4 mr-1" /> Clear
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
               )}
             </div>
           </div>
 
-          {/* Row 2: Filters (right-aligned) */}
+          {/* Row 2: Filters */}
           <div className="flex flex-wrap items-center justify-end gap-3">
             {!statusFilter && (
               <Select value={filters.callType || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, callType: v }))}>
                 <SelectTrigger className="w-[160px]"><SelectValue placeholder="Call Type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  {["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"].map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
+                  {["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
@@ -384,23 +297,14 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  {["Open","Assigned","Travel Started","Reached Location","In Progress","On Hold","Completed","Cancelled"].map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
+                  {["Open","Assigned","Travel Started","Reached Location","In Progress","On Hold","Completed","Cancelled"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
             <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
-            <div className="relative">
-              <Input
-                placeholder="Serial number..."
-                value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
-                className="w-[160px] h-9 text-sm"
-              />
-            </div>
+            <Input placeholder="Serial number..." value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />
@@ -408,15 +312,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
           {/* Row 3: Contract Type filters */}
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <SearchableSelect
-              options={contractTypes.map(c => ({ label: c.name, value: c._id }))}
-              value={filters.contractTypeId ?? ""}
-              onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))}
-              onSearchChange={fetchContractTypeOptions}
-              placeholder="Contract Type"
-              searchPlaceholder="Search contract types..."
-              className="w-[180px] h-9 text-sm"
-            />
+            <SearchableSelect options={contractTypes.map(c => ({ label: c.name, value: c._id }))} value={filters.contractTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))} onSearchChange={fetchContractTypeOptions} placeholder="Contract Type" searchPlaceholder="Search contract types..." className="w-[180px] h-9 text-sm" />
             <Select value={filters.contractTypeStatus || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, contractTypeStatus: v }))}>
               <SelectTrigger className="w-[180px]"><SelectValue placeholder="Contract Status" /></SelectTrigger>
               <SelectContent>
@@ -427,7 +323,194 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             </Select>
           </div>
 
-          <DataTable columns={columns} data={data} />
+          {/* Expandable Calls Table */}
+          <div className="rounded-lg border bg-card overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="w-8" />
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">No.</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Call ID</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Call Type</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Customer</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Status</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Engineer</TableHead>
+                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider sticky right-0 bg-muted shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.length === 0 ? (
+                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow>
+                ) : data.map((c, i) => {
+                  const isExpanded = expandedCallId === c._id;
+                  const callType = (c as any).callType;
+                  const hasCounterReadings = (callType === "Counter-Reading" || callType === "Service-Call") && c.machines.some((m: any) => m.counterReadings?.length > 0 || m.serviceCallReadings?.length > 0);
+                  const hasUsedParts = callType === "Service-Call" && c.machines.some((m: any) => m.usedParts?.length > 0);
+
+                  return (
+                    <>
+                      <TableRow key={c._id} className="cursor-pointer hover:bg-muted/30" onClick={() => toggleExpand(c._id)}>
+                        <TableCell className="w-8">
+                          {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                        </TableCell>
+                        <TableCell><span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span></TableCell>
+                        <TableCell><span className="font-medium text-foreground">{c.callId}</span></TableCell>
+                        <TableCell><span className="font-medium">{callType || "—"}</span></TableCell>
+                        <TableCell>
+                          <p className="font-medium">{c.customerInfo.name}</p>
+                          <p className="text-xs text-muted-foreground">{c.customerInfo.phone}</p>
+                        </TableCell>
+                        <TableCell><StatusBadge status={c.status} /></TableCell>
+                        <TableCell><span className={!c.engineerInfo ? "text-muted-foreground italic" : ""}>{c.engineerInfo?.name || "Unassigned"}</span></TableCell>
+                        <TableCell className="sticky right-0 bg-background shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/calls/${c._id}`)}><Eye className="h-4 w-4" /></Button>
+                            {callType === "Service-Call" && c.status === "Completed" && (
+                              (c as any).invoiceUrl
+                                ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={() => window.open((c as any).invoiceUrl, "_blank")}><FileText className="h-4 w-4 text-green-500" /></Button>
+                                : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async () => {
+                                    const tab = window.open("", "_blank");
+                                    try { const res = await serviceCallsApi.getInvoice(c._id); toast.success("Invoice generated"); if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank"); fetchCalls(pagination.page); }
+                                    catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
+                                  }}><FileText className="h-4 w-4 text-muted-foreground" /></Button>
+                            )}
+                            {callType === "Counter-Reading" && c.status === "Completed" && (
+                              (c as any).invoiceUrl
+                                ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={() => window.open((c as any).invoiceUrl, "_blank")}><FileText className="h-4 w-4 text-green-500" /></Button>
+                                : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async () => {
+                                    const tab = window.open("", "_blank");
+                                    try { const res = await serviceCallsApi.getCounterReadingInvoice(c._id); toast.success("Invoice generated"); if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank"); fetchCalls(pagination.page); }
+                                    catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
+                                  }}><FileText className="h-4 w-4 text-muted-foreground" /></Button>
+                            )}
+                            {c.status === "Open" && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssignDialog(c)}><UserPlus className="h-4 w-4" /></Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {isExpanded && (
+                        <TableRow key={`${c._id}-expanded`} className="bg-muted/20 hover:bg-muted/20">
+                          <TableCell colSpan={8} className="p-4">
+                            <div className="space-y-4">
+
+                              {/* Machines — all call types */}
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Machines</p>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow className="bg-muted/40">
+                                      <TableHead className="text-xs">#</TableHead>
+                                      <TableHead className="text-xs">Machine Name</TableHead>
+                                      <TableHead className="text-xs">Serial No.</TableHead>
+                                      <TableHead className="text-xs">Contract Type</TableHead>
+                                      <TableHead className="text-xs">Contract Status</TableHead>
+                                      <TableHead className="text-xs">Problem Types</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {c.machines.map((m: any, mi: number) => {
+                                      const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
+                                      return (
+                                        <TableRow key={mi}>
+                                          <TableCell className="text-xs">{mi + 1}</TableCell>
+                                          <TableCell className="text-xs font-medium">{m.machineName}</TableCell>
+                                          <TableCell className="text-xs font-mono">{m.serialNumber || "—"}</TableCell>
+                                          <TableCell className="text-xs">{m.contractType?.name ? `${m.contractType.name} (${m.contractType.code})` : "—"}</TableCell>
+                                          <TableCell className="text-xs">
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                                              {isExpired ? "Expired" : "Active"}
+                                            </span>
+                                          </TableCell>
+                                          <TableCell className="text-xs">{m.problemTypes?.filter(Boolean).join(", ") || "—"}</TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              </div>
+
+                              {/* Counter Readings — Service-Call & Counter-Reading */}
+                              {hasCounterReadings && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Counter Readings</p>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow className="bg-muted/40">
+                                        <TableHead className="text-xs">Machine</TableHead>
+                                        <TableHead className="text-xs">Serial No.</TableHead>
+                                        <TableHead className="text-xs">Pages Category</TableHead>
+                                        <TableHead className="text-xs text-right">Last Reading</TableHead>
+                                        <TableHead className="text-xs text-right">Current Reading</TableHead>
+                                        <TableHead className="text-xs text-right">Diff</TableHead>
+                                        {callType === "Counter-Reading" && <TableHead className="text-xs text-right">Charges (₹)</TableHead>}
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {c.machines.flatMap((m: any, mi: number) => {
+                                        const readings = callType === "Counter-Reading"
+                                          ? (m.counterReadings?.[0]?.categories || []).map((cat: any) => ({ ...cat, sn: m.counterReadings[0].serialNumber }))
+                                          : (m.serviceCallReadings || []);
+                                        return readings.map((cat: any, ci: number) => (
+                                          <TableRow key={`${mi}-${ci}`}>
+                                            <TableCell className="text-xs font-medium">{m.machineName}</TableCell>
+                                            <TableCell className="text-xs font-mono">{m.serialNumber || "—"}</TableCell>
+                                            <TableCell className="text-xs">{cat.pagesCategory}</TableCell>
+                                            <TableCell className="text-xs text-right">{cat.lastReading}</TableCell>
+                                            <TableCell className="text-xs text-right">{cat.currentReading}</TableCell>
+                                            <TableCell className="text-xs text-right">{cat.diff}</TableCell>
+                                            {callType === "Counter-Reading" && <TableCell className="text-xs text-right font-semibold">₹{cat.chargesInRupees}</TableCell>}
+                                          </TableRow>
+                                        ));
+                                      })}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              )}
+
+                              {/* Parts Replaced — Service-Call only */}
+                              {hasUsedParts && (
+                                <div>
+                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Parts Replaced</p>
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow className="bg-muted/40">
+                                        <TableHead className="text-xs">Machine (Call)</TableHead>
+                                        <TableHead className="text-xs">Part Code</TableHead>
+                                        <TableHead className="text-xs">Part Name</TableHead>
+                                        <TableHead className="text-xs text-right">Total (₹)</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {c.machines.flatMap((m: any, mi: number) =>
+                                        (m.usedParts || []).map((part: any, pi: number) => (
+                                          <TableRow key={`${mi}-${pi}`}>
+                                            <TableCell className="text-xs">
+                                              <p className="font-medium">{m.machineName}</p>
+                                              <p className="font-mono text-[10px] text-muted-foreground">{m.serialNumber}</p>
+                                            </TableCell>
+                                            <TableCell className="text-xs font-mono">{part.partCode}</TableCell>
+                                            <TableCell className="text-xs">{part.machineName}</TableCell>
+                                            <TableCell className="text-xs text-right font-semibold">₹{part.total}</TableCell>
+                                          </TableRow>
+                                        ))
+                                      )}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              )}
+
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
           <Pagination
             page={pagination.page}
