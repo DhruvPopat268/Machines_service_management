@@ -349,7 +349,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
                   return (
                     <>
-                      <TableRow key={c._id} className="cursor-pointer hover:bg-muted/30" onClick={() => toggleExpand(c._id)}>
+                      <TableRow key={c._id} className="cursor-pointer hover:bg-muted/40" onClick={() => toggleExpand(c._id)}>
                         <TableCell className="w-8">
                           {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                         </TableCell>
@@ -391,8 +391,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                       </TableRow>
 
                       {isExpanded && (
-                        <TableRow key={`${c._id}-expanded`} className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={8} className="p-4">
+                        <TableRow key={`${c._id}-expanded`}>
+                          <TableCell colSpan={8} className="p-4 bg-blue-100 dark:bg-blue-900/30">
                             <div className="space-y-4">
 
                               {/* Machines — all call types */}
