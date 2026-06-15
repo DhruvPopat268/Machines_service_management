@@ -20,7 +20,14 @@ const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface VendorInfo { vendorId: string | null; name: string; companyName: string; phone: string; email: string; gstNumber: string; }
-interface Purchase { _id: string; vendorInfo: VendorInfo; machinesCount: number; grandTotal: number; createdAt: string; }
+interface PurchaseMachine {
+  machineId: string; machineName: string; modelNumber: string; category: string; categoryId: string; division: string;
+  quantity: number; buyingPrice: number; discountedBuyingPrice: number | null;
+  sellingPrice: number | null; discountedSellingPrice: number | null; buyingTotal: number;
+  serialNumbers?: { serialNumber: string; status: string }[];
+  partCodes?: { partCode: string; status: string }[];
+}
+interface Purchase { _id: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotal: number; createdAt: string; }
 interface Stats { totalPurchased: number; totalMachinesPurchased: number; avgPurchaseValue: number; }
 interface Vendor { _id: string; name: string; companyName: string; phone: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
@@ -473,6 +480,7 @@ const PurchaseMachinesPage = () => {
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
+  const [codesPopup, setCodesPopup]           = useState<{ title: string; isParts: boolean; items: { code: string; status: string }[] } | null>(null);
   const [initialVendorId, setInitialVendorId] = useState("");
   const [vendorOptions, setVendorOptions]     = useState<{ label: string; value: string }[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
@@ -561,13 +569,60 @@ const PurchaseMachinesPage = () => {
     } catch { toast.error("Export failed"); }
   };
 
+  const sep = (i: number, total: number) => i < total - 1 ? <hr className="my-1 border-t border-border" /> : null;
+
   const columns: Column<Purchase>[] = [
-    { key: "_id",          label: "No.",            render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
-    { key: "vendorInfo",   label: "Vendor",         render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
-    { key: "machinesCount",label: "Machines",       render: (p) => <span className="font-medium">{p.machinesCount}</span> },
-    { key: "grandTotal",   label: "Total Purchased",render: (p) => <span className="font-medium">₹{p.grandTotal.toLocaleString()}</span> },
-    { key: "createdAt",    label: "Purchased At",   render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
-    { key: "actions",      label: "Actions",        sticky: true, render: (p) => <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/purchase-machines/${p._id}`)}><Eye className="h-3 w-3" /></Button> },
+    { key: "_id",         label: "No.",      render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
+    { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
+    { key: "machineName", label: "Machine",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "category",    label: "Category",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "division",    label: "Division",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "modelNumber", label: "Model No",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "quantity",    label: "Qty",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.quantity}{sep(i, p.machines.length)}</div>)}</div> },
+    {
+      key: "codes", label: "Serial / Part Code",
+      render: (p) => (
+        <div>
+          {p.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const items   = isParts ? (m.partCodes || []).map(e => ({ code: e.partCode, status: e.status })) : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, status: e.status }));
+            return (
+              <div key={i}>
+                {items.map((item, j) => <div key={j} className="font-mono text-xs">{item.code}</div>)}
+                {sep(i, p.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "available", label: "Available",
+      render: (p) => (
+        <div>{p.machines.map((m, i) => {
+          const items = m.partCodes?.length ? m.partCodes : (m.serialNumbers || []);
+          const count = items.filter((e: any) => e.status === "available").length;
+          return <div key={i}><span className="text-green-600 font-medium">{count}</span>{sep(i, p.machines.length)}</div>;
+        })}</div>
+      ),
+    },
+    {
+      key: "sold", label: "Sold",
+      render: (p) => (
+        <div>{p.machines.map((m, i) => {
+          const items = m.partCodes?.length ? m.partCodes : (m.serialNumbers || []);
+          const count = items.filter((e: any) => e.status === "sold").length;
+          return <div key={i}><span className="text-red-500 font-medium">{count}</span>{sep(i, p.machines.length)}</div>;
+        })}</div>
+      ),
+    },
+    { key: "buyingPrice",            label: "Buying Price",       render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPrice.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "discountedBuyingPrice",  label: "Disc. Buying",       render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.discountedBuyingPrice != null ? `₹${m.discountedBuyingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "sellingPrice",           label: "Selling Price",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.sellingPrice != null ? `₹${m.sellingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "discountedSellingPrice", label: "Disc. Selling",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "grandTotal",             label: "Grand Total",        render: (p) => <span className="font-semibold">₹{p.grandTotal.toLocaleString()}</span> },
+    { key: "createdAt",              label: "Purchased At",       render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    // { key: "actions", label: "Actions", sticky: true, render: (p) => <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/purchase-machines/${p._id}`)}><Eye className="h-3 w-3" /></Button> },
   ];
 
   return (
@@ -623,6 +678,33 @@ const PurchaseMachinesPage = () => {
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={pageSize} onPageChange={fetchPurchases} />
         </>
+      )}
+
+      {codesPopup && (
+        <Dialog open onOpenChange={() => setCodesPopup(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>{codesPopup.isParts ? "Part Codes" : "Serial Numbers"} — {codesPopup.title}</DialogTitle></DialogHeader>
+            <div className="max-h-80 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-muted/40 border-b"><th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground w-8">#</th><th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">{codesPopup.isParts ? "Part Code" : "Serial Number"}</th><th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Status</th></tr></thead>
+                <tbody className="divide-y">
+                  {codesPopup.items.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-muted/20">
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{idx + 1}</td>
+                      <td className="px-3 py-2 font-mono font-medium">{item.code}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${item.status === "sold" ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
+                          {item.status === "sold" ? "Sold" : "Available"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <DialogFooter><Button variant="outline" onClick={() => setCodesPopup(null)}>Close</Button></DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       <PurchaseMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialVendorId(""); navigate("/purchase-machines", { replace: true }); }} onSuccess={() => fetchPurchases(1)} initialVendorId={initialVendorId} />

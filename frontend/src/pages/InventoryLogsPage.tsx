@@ -28,11 +28,23 @@ interface CustomerInfo {
   zone: string;
 }
 
+interface LogMachine {
+  machineId: string;
+  machineName: string;
+  modelNumber: string;
+  category: string;
+  division: string;
+  quantity: number;
+  serialNumbers: string[];
+  partCodes: string[];
+}
+
 interface InventoryLog {
   _id: string;
   action: "purchased" | "sold";
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
+  machines: LogMachine[];
   machinesCount: number;
   createdAt: string;
 }
@@ -261,17 +273,19 @@ const InventoryLogsPage = () => {
     }
   };
 
+  const sep = (i: number, total: number) => i < total - 1 ? <hr className="my-1 border-t border-border" /> : null;
+
   const columns: Column<InventoryLog>[] = [
     {
       key: "_id", label: "No.",
       render: (_l, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * pageSize + i + 1}</span>,
     },
     {
-      key: "entity", label: "Entity",
+      key: "action", label: "Action",
       render: (l) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-          l.action === "purchased" ? "bg-purple-100 text-purple-700" : "bg-cyan-100 text-cyan-700"
-        }`}>{l.action === "purchased" ? "Vendor" : "Customer"}</span>
+          l.action === "purchased" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+        }`}>{l.action === "purchased" ? "Purchased" : "Sold"}</span>
       ),
     },
     {
@@ -298,28 +312,49 @@ const InventoryLogsPage = () => {
       },
     },
     {
-      key: "machinesCount", label: "Machines",
-      render: (l) => <span className="font-medium">{l.machinesCount}</span>,
+      key: "machineName", label: "Machine",
+      render: (l) => <div>{l.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, l.machines.length)}</div>)}</div>,
     },
     {
-      key: "action", label: "Action",
+      key: "category", label: "Category",
+      render: (l) => <div>{l.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, l.machines.length)}</div>)}</div>,
+    },
+    {
+      key: "division", label: "Division",
+      render: (l) => <div>{l.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, l.machines.length)}</div>)}</div>,
+    },
+    {
+      key: "quantity", label: "Qty Change",
       render: (l) => (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-          l.action === "purchased" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-        }`}>{l.action === "purchased" ? "Purchased" : "Sold"}</span>
+        <div>{l.machines.map((m, i) => (
+          <div key={i}>
+            <span className={`font-medium ${l.action === "purchased" ? "text-green-600" : "text-blue-600"}`}>
+              {l.action === "purchased" ? "+" : "-"}{m.quantity}
+            </span>
+            {sep(i, l.machines.length)}
+          </div>
+        ))}</div>
       ),
     },
     {
-      key: "createdAt", label: "Purchase / Sale Date",
+      key: "codes", label: "Serial No / Part Code",
+      render: (l) => (
+        <div>{l.machines.map((m, i) => {
+          const codes = m.serialNumbers?.length ? m.serialNumbers : (m.partCodes || []);
+          return (
+            <div key={i}>
+              {codes.length > 0 ? codes.map((c, j) => <div key={j} className="font-mono text-xs">{c}</div>) : <span className="text-muted-foreground">—</span>}
+              {sep(i, l.machines.length)}
+            </div>
+          );
+        })}</div>
+      ),
+    },
+    {
+      key: "createdAt", label: "Date",
       render: (l) => {
         const { date, time } = formatDateTime(l.createdAt);
-        return (
-          <div>
-            <p className="text-xs text-muted-foreground mb-0.5">{l.action === "purchased" ? "Purchase Date" : "Sale Date"}</p>
-            <p className="text-sm">{date}</p>
-            <p className="text-xs text-muted-foreground">{time}</p>
-          </div>
-        );
+        return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
     },
     {

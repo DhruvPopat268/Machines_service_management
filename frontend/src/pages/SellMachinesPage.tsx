@@ -21,7 +21,14 @@ const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface CustomerInfo { customerId: string | null; name: string; phone: string; email: string; address: string; zone: string; gstNumber: string; }
-interface Sale { _id: string; customerInfo: CustomerInfo; machinesCount: number; grandTotal: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; invoiceGrandTotal?: number | null; }
+interface ContractTypeSnapshot { contractTypeId: string; name: string; code: string; freeService: boolean; freeParts: boolean; validFrom: string; validTo: string; }
+interface SaleMachine {
+  machineId: string; machineName: string; modelNumber: string; category: string; categoryId: string; division: string;
+  quantity: number; sellingPrice: number; discountedSellingPrice: number | null; sellingTotal: number;
+  serialNumbers?: { serialNumber: string; contractType: ContractTypeSnapshot | null }[];
+  partCodes?: { partCode: string; contractType: ContractTypeSnapshot | null }[];
+}
+interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotal: number; basicTotal?: number | null; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; invoiceGrandTotal?: number | null; }
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
@@ -924,12 +931,128 @@ const SellMachinesPage = () => {
     } catch { toast.error("Export failed"); }
   };
 
+  const sep = (i: number, total: number) => i < total - 1 ? <hr className="my-1 border-t border-border" /> : null;
+
   const columns: Column<Sale>[] = [
-    { key: "_id",          label: "No.",          render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
-    { key: "customerInfo", label: "Customer",     render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
-    { key: "machinesCount",label: "Machines",     render: (s) => <span className="font-medium">{s.machinesCount}</span> },
-    { key: "grandTotal",   label: "Total Sold",   render: (s) => <span className="font-medium">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
-    { key: "createdAt",    label: "Sold At",      render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    { key: "_id",          label: "No.",        render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
+    { key: "customerInfo", label: "Customer",   render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
+    { key: "machineName",  label: "Machine",    render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "category",     label: "Category",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "division",     label: "Division",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "modelNumber",  label: "Model No",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "quantity",     label: "Qty",        render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.quantity}{sep(i, s.machines.length)}</div>)}</div> },
+    {
+      key: "codes", label: "Serial / Part Code",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const codes   = isParts ? (m.partCodes || []).map(e => e.partCode) : (m.serialNumbers || []).map(e => e.serialNumber);
+            return (
+              <div key={i}>
+                {codes.map((c, j) => <div key={j} className="font-mono text-xs">{c}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "contractType", label: "Contract Type",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const cts     = isParts
+              ? (m.partCodes || []).map(e => e.contractType)
+              : (m.serialNumbers || []).map(e => e.contractType);
+            return (
+              <div key={i}>
+                {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.name || "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "freeService", label: "Free Svc",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            return (
+              <div key={i}>
+                {cts.map((ct, j) => <div key={j}>{ct ? (ct.freeService ? <span className="text-green-600 text-xs">Yes</span> : <span className="text-red-500 text-xs">No</span>) : "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "freeParts", label: "Free Parts",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            return (
+              <div key={i}>
+                {cts.map((ct, j) => <div key={j}>{ct ? (ct.freeParts ? <span className="text-green-600 text-xs">Yes</span> : <span className="text-red-500 text-xs">No</span>) : "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "validFrom", label: "Valid From",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            return (
+              <div key={i}>
+                {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.validFrom ? new Date(ct.validFrom).toLocaleDateString("en-IN") : "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "validTo", label: "Valid To",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            return (
+              <div key={i}>
+                {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.validTo ? new Date(ct.validTo).toLocaleDateString("en-IN") : "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    { key: "sellingPrice",           label: "Selling Price",      render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPrice.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "discountedSellingPrice", label: "Disc. Selling",      render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "basicTotal",             label: "Base Total",         render: (s) => s.basicTotal != null ? <span className="font-medium">₹{s.basicTotal.toLocaleString()}</span> : <span className="text-muted-foreground">—</span> },
+    { key: "cgst",                   label: "CGST",               render: (s) => s.cgst?.amount != null && s.cgst.amount > 0 ? <span className="text-xs">₹{s.cgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.cgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "sgst",                   label: "SGST",               render: (s) => s.sgst?.amount != null && s.sgst.amount > 0 ? <span className="text-xs">₹{s.sgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.sgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "igst",                   label: "IGST",               render: (s) => s.igst?.amount != null && s.igst.amount > 0 ? <span className="text-xs">₹{s.igst.amount.toLocaleString()} <span className="text-muted-foreground">({s.igst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "grandTotal",             label: "Grand Total",        render: (s) => <span className="font-semibold">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
+    { key: "createdAt",              label: "Sold At",            render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     { key: "actions", label: "Actions", sticky: true, render: (s) => (
       <div className="flex items-center gap-1">
         <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button>
