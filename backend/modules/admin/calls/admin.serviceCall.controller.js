@@ -13,7 +13,7 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getCalls = async (req, res) => {
   try {
-    const { status, search, problemTypeId, machineName, customerName, engineerName, category, division, fromDate, toDate, contractTypeId, contractTypeStatus, page = 1, limit = 10 } = req.query;
+    const { status, search, problemTypeId, machineName, partId, customerName, engineerName, category, division, fromDate, toDate, contractTypeId, contractTypeStatus, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
@@ -32,6 +32,7 @@ const getCalls = async (req, res) => {
 
     if (problemTypeId && mongoose.isValidObjectId(problemTypeId)) query["machines.problemTypeIds"] = new mongoose.Types.ObjectId(problemTypeId);
     if (machineName) query["machines.machineName"] = { $regex: escapeRegex(machineName), $options: "i" };
+    if (partId && mongoose.isValidObjectId(partId)) query["machines.usedParts.machineId"] = new mongoose.Types.ObjectId(partId);
     if (req.query.serialNumber) query["machines.serialNumber"] = { $regex: escapeRegex(req.query.serialNumber.trim()), $options: "i" };
     if (customerName) query["customerInfo.name"] = { $regex: escapeRegex(customerName), $options: "i" };
     if (engineerName) query["engineerInfo.name"] = { $regex: escapeRegex(engineerName), $options: "i" };
@@ -72,7 +73,7 @@ const getCalls = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber")
+        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber note")
         .sort({ [sortKey]: -1 })
         .skip(skip)
         .limit(limitNum),

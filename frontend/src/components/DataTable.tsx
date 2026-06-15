@@ -7,7 +7,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface Column<T> {
   key: string;
-  label: string;
+  label: React.ReactNode;
   className?: string;
   sticky?: boolean;
   render?: (item: T, index: number) => React.ReactNode;

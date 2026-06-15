@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { serviceCallsApi, engineersApi, type ServiceCall, type CallStats, type CallsParams } from "@/services/serviceCallsApi";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -11,10 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText, ChevronDown, ChevronRight } from "lucide-react";
+import { DataTable, Column } from "@/components/DataTable";
+import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import api from "@/lib/axiosInterceptor";
 
 interface CallsPageProps {
@@ -34,20 +35,66 @@ const formatDateTime = (iso: string) => {
 
 const LIMIT = 10;
 
+const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+
 const CallsPage = ({ statusFilter, title = "All Service Calls", description = "Manage and track all service calls" }: CallsPageProps) => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getParam = (key: string) => searchParams.get(key) ?? "";
 
   const [data, setData]                     = useState<ServiceCall[]>([]);
   const [stats, setStats]                   = useState<CallStats | undefined>();
   const [pagination, setPagination]         = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading]               = useState(true);
-  const [search, setSearch]                 = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [serialNumber, setSerialNumber]         = useState("");
-  const [debouncedSerialNumber, setDebouncedSerialNumber] = useState("");
-  const [filters, setFilters]               = useState<Record<string, string>>({});
-  const [fromDate, setFromDate]             = useState("");
-  const [toDate, setToDate]                 = useState("");
+  const showStats   = getParam("showStats")   !== "false";
+  const showFilters  = getParam("showFilters")  !== "false";
+
+  const setShowStats   = (v: boolean) => updateParam("showStats",   v ? "" : "false");
+  const setShowFilters = (v: boolean) => updateParam("showFilters", v ? "" : "false");
+
+  const search           = getParam("search");
+  const serialNumber     = getParam("serialNumber");
+  const fromDate         = getParam("fromDate");
+  const toDate           = getParam("toDate");
+
+  const filters: Record<string, string> = {
+    callType:            getParam("callType"),
+    status:              getParam("status"),
+    customerName:        getParam("customerName"),
+    engineerName:        getParam("engineerName"),
+    machineName:         getParam("machineName"),
+    partId:              getParam("partId"),
+    category:            getParam("category"),
+    division:            getParam("division"),
+    problemTypeId:       getParam("problemTypeId"),
+    contractTypeId:      getParam("contractTypeId"),
+    contractTypeStatus:  getParam("contractTypeStatus"),
+  };
+
+  const setSearch       = (v: string) => updateParam("search", v);
+  const setSerialNumber = (v: string) => updateParam("serialNumber", v);
+  const setFromDate     = (v: string) => updateParam("fromDate", v);
+  const setToDate       = (v: string) => updateParam("toDate", v);
+
+  const updateParam = (key: string, value: string) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (value) next.set(key, value); else next.delete(key);
+      return next;
+    }, { replace: true });
+  };
+
+  const setFilters = (updater: (prev: Record<string, string>) => Record<string, string>) => {
+    const updated = updater(filters);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updated).forEach(([k, v]) => {
+        if (v && v !== "all") next.set(k, v); else next.delete(k);
+      });
+      return next;
+    }, { replace: true });
+  };
   const [assignDialog, setAssignDialog]     = useState<ServiceCall | null>(null);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [assigning, setAssigning]           = useState(false);
@@ -56,17 +103,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
   const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
 
-  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
-
-  const toggleExpand = (id: string) => setExpandedCallId(prev => prev === id ? null : id);
-
-  const formatDate = (iso: string) => {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`;
-  };
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
+  const [parts, setParts]                   = useState<DropdownOption[]>([]);
   const [customers, setCustomers]           = useState<DropdownOption[]>([]);
   const [engineers, setEngineers]           = useState<DropdownOption[]>([]);
   const [categories, setCategories]         = useState<DropdownOption[]>([]);
@@ -77,19 +116,15 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const categoryAbortRef  = useRef<AbortController | null>(null);
   const divisionAbortRef  = useRef<AbortController | null>(null);
   const machineAbortRef   = useRef<AbortController | null>(null);
+  const partsAbortRef     = useRef<AbortController | null>(null);
   const ptAbortRef        = useRef<AbortController | null>(null);
   const ctAbortRef        = useRef<AbortController | null>(null);
 
-  // debounce search
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 500);
-    return () => clearTimeout(t);
-  }, [search]);
+  const [debouncedSearch, setDebouncedSearch]             = useState(search);
+  const [debouncedSerialNumber, setDebouncedSerialNumber] = useState(serialNumber);
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500);
-    return () => clearTimeout(t);
-  }, [serialNumber]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500);        return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500); return () => clearTimeout(t); }, [serialNumber]);
 
   // fetch filter dropdown options
   useEffect(() => {
@@ -105,7 +140,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           api.get("/admin/contract-types/active"),
         ]);
         setProblemTypes(ptRes.data.data);
-        setMachines(mRes.data.data);
+        const allMachines = mRes.data.data;
+        setMachines(allMachines.filter((m: any) => m.categoryId?.toString() !== PARTS_CATEGORY_ID && m.category?._id?.toString() !== PARTS_CATEGORY_ID));
+        setParts(allMachines.filter((m: any) => m.categoryId?.toString() === PARTS_CATEGORY_ID || m.category?._id?.toString() === PARTS_CATEGORY_ID));
         setCustomers(cRes.data.data);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
@@ -134,7 +171,17 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     machineAbortRef.current = controller;
     try {
       const res = await api.get("/admin/machines", { params: { limit: 100, search: q }, signal: controller.signal });
-      if (!controller.signal.aborted) setMachines(res.data.data);
+      if (!controller.signal.aborted) setMachines(res.data.data.filter((m: any) => m.categoryId?.toString() !== PARTS_CATEGORY_ID && m.category?._id?.toString() !== PARTS_CATEGORY_ID));
+    } catch {}
+  }, []);
+
+  const fetchPartsOptions = useCallback(async (q: string) => {
+    partsAbortRef.current?.abort();
+    const controller = new AbortController();
+    partsAbortRef.current = controller;
+    try {
+      const res = await api.get("/admin/machines", { params: { limit: 100, search: q, category: PARTS_CATEGORY_ID }, signal: controller.signal });
+      if (!controller.signal.aborted) setParts(res.data.data);
     } catch {}
   }, []);
 
@@ -216,19 +263,20 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     setLoading(true);
     try {
       const params: CallsParams = { page: String(page), limit: String(LIMIT) };
-      if (statusFilter)                                                params.status       = statusFilter;
-      if (debouncedSearch)                                             params.search       = debouncedSearch;
-      if (filters.problemTypeId && filters.problemTypeId !== "all")     params.problemTypeId = filters.problemTypeId;
-      if (filters.machineName  && filters.machineName  !== "all")     params.machineName  = filters.machineName;
-      if (debouncedSerialNumber)                                         params.serialNumber = debouncedSerialNumber;
-      if (filters.customerName && filters.customerName !== "all")     params.customerName = filters.customerName;
-      if (filters.engineerName && filters.engineerName !== "all")     params.engineerName = filters.engineerName;
-      if (filters.category     && filters.category     !== "all")     params.category     = filters.category;
-      if (filters.division     && filters.division     !== "all")     params.division     = filters.division;
-      if (!statusFilter && filters.callType && filters.callType !== "all")  params.callType     = filters.callType;
-      if (!statusFilter && filters.status && filters.status !== "all") params.status      = filters.status;
-      if (filters.contractTypeId   && filters.contractTypeId   !== "all") params.contractTypeId   = filters.contractTypeId;
-      if (filters.contractTypeStatus && filters.contractTypeStatus !== "all") params.contractTypeStatus = filters.contractTypeStatus;
+      if (statusFilter)                                                              params.status             = statusFilter;
+      if (debouncedSearch)                                                           params.search             = debouncedSearch;
+      if (filters.problemTypeId && filters.problemTypeId !== "all")                  params.problemTypeId      = filters.problemTypeId;
+      if (filters.machineName   && filters.machineName   !== "all")                  params.machineName        = filters.machineName;
+      if (filters.partId         && filters.partId         !== "all")                  params.partId             = filters.partId;
+      if (debouncedSerialNumber)                                                     params.serialNumber       = debouncedSerialNumber;
+      if (filters.customerName  && filters.customerName  !== "all")                  params.customerName       = filters.customerName;
+      if (filters.engineerName  && filters.engineerName  !== "all")                  params.engineerName       = filters.engineerName;
+      if (filters.category      && filters.category      !== "all")                  params.category           = filters.category;
+      if (filters.division      && filters.division      !== "all")                  params.division           = filters.division;
+      if (!statusFilter && filters.callType && filters.callType !== "all")           params.callType           = filters.callType;
+      if (!statusFilter && filters.status   && filters.status   !== "all")           params.status             = filters.status;
+      if (filters.contractTypeId     && filters.contractTypeId     !== "all")        params.contractTypeId     = filters.contractTypeId;
+      if (filters.contractTypeStatus && filters.contractTypeStatus !== "all")        params.contractTypeStatus = filters.contractTypeStatus;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -242,19 +290,192 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [statusFilter, debouncedSearch, debouncedSerialNumber, filters, fromDate, toDate]);
+  }, [
+    statusFilter, debouncedSearch, debouncedSerialNumber, fromDate, toDate,
+    filters.callType, filters.status, filters.customerName, filters.engineerName,
+    filters.machineName, filters.partId, filters.category, filters.division, filters.problemTypeId,
+    filters.contractTypeId, filters.contractTypeStatus,
+  ]);
 
   useEffect(() => { fetchCalls(1); }, [fetchCalls]);
+
+  const columns: Column<ServiceCall>[] = [
+    {
+      key: "callId",
+      label: "Call ID",
+      render: (c) => (
+        <button className="text-primary underline underline-offset-2 font-medium" onClick={() => navigate(`/calls/${c._id}`)}>{c.callId}</button>
+      ),
+    },
+    {
+      key: "callType",
+      label: "Call Type",
+      render: (c) => (c as any).callType || "—",
+    },
+    {
+      key: "createdAt",
+      label: "Date / Time",
+      render: (c) => {
+        const { date, time } = formatDateTime(c.createdAt);
+        return <span>{date}<br /><span className="text-xs text-muted-foreground">{time}</span></span>;
+      },
+    },
+    {
+      key: "customerName",
+      label: "Customer",
+      render: (c) => <span>{c.customerInfo.name}<br /><span className="text-xs text-muted-foreground">{c.customerInfo.phone}</span></span>,
+    },
+    {
+      key: "zone",
+      label: "Zone",
+      render: (c) => c.customerInfo.zone || "—",
+    },
+    {
+      key: "modelNumber",
+      label: <span className="whitespace-normal leading-tight">Machine<br />Model</span>,
+      className: "w-[112px] max-w-[112px] whitespace-normal",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i}>{m.modelNumber}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
+    },
+    {
+      key: "serialNumber",
+      label: <span className="whitespace-normal leading-tight">Machine<br />Serial&nbsp;No</span>,
+      className: "w-[170px] max-w-[170px] whitespace-normal",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i} className="whitespace-nowrap">{m.serialNumber}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
+    },
+    {
+      key: "contractType",
+      label: "Contract Type",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => {
+        const isActive = m.contractType?.validTo ? new Date(m.contractType.validTo) >= new Date() : null;
+        return <div key={i} className="flex items-center gap-1.5">{isActive !== null && <span className={`h-2 w-2 rounded-full shrink-0 ${isActive ? "bg-green-500" : "bg-red-500"}`} />}{m.contractType?.name || "—"}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>;
+      }) : "—",
+    },
+    {
+      key: "usedParts",
+      label: "Parts Replaced",
+      className: "w-[154px] max-w-[154px]",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => {
+        const parts = m.usedParts ?? [];
+        return <div key={i}>{parts.length > 0 ? parts.map((p, j) => <div key={j}>{p.machineName} ({p.partCode}){j < parts.length - 1 ? "," : ""}</div>) : "—"}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>;
+      }) : "—",
+    },
+    {
+      key: "problemTypes",
+      label: "Problem Types",
+      className: "w-[140px] max-w-[140px]",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i}>{m.problemTypes.map((p, j) => <div key={j}>{p}{j < m.problemTypes.length - 1 ? "," : ""}</div>)}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
+    },
+    {
+      key: "counterReadings",
+      label: "Counter Readings",
+      render: (c) => {
+        const hasReadings = c.machines.some(m => (m.serviceCallReadings?.length ?? 0) > 0 || (m.counterReadings?.[0]?.categories?.length ?? 0) > 0);
+        if (!hasReadings) return "—";
+        return (
+          <div>
+            {c.machines.map((m, mi) => {
+              const rows = c.callType === "Service-Call"
+                ? (m.serviceCallReadings ?? [])
+                : (m.counterReadings?.[0]?.categories ?? []);
+              if (!rows.length) return mi < c.machines.length - 1 ? <div key={mi}>—<hr className="my-1 border-t border-border" /></div> : <div key={mi}>—</div>;
+              return (
+                <div key={mi}>
+                  <table className="text-xs w-full">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left pr-2 font-normal">Category</th>
+                        <th className="text-right pr-2 font-normal">Last</th>
+                        <th className="text-right pr-2 font-normal">Current</th>
+                        <th className="text-right font-normal">Diff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, ri) => (
+                        <tr key={ri}>
+                          <td className="pr-2">{r.pagesCategory}</td>
+                          <td className="text-right pr-2">{r.lastReading}</td>
+                          <td className="text-right pr-2">{r.currentReading}</td>
+                          <td className="text-right">{r.diff}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {mi < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}
+                </div>
+              );
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      key: "engineer",
+      label: "Engineer",
+      render: (c) => c.engineerInfo ? (
+        <span>{c.engineerInfo.name}<br /><span className="text-xs text-muted-foreground">{c.engineerInfo.phone}</span></span>
+      ) : <span className="text-muted-foreground text-xs">Unassigned</span>,
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (c) => <StatusBadge status={c.status} />,
+    },
+    {
+      key: "note",
+      label: "Note",
+      className: "w-[120px] max-w-[120px]",
+      render: (c) => {
+        if (!(c as any).note) return "—";
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="block truncate w-[110px] cursor-default text-sm">{(c as any).note}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs whitespace-pre-wrap">{(c as any).note}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      sticky: true,
+      render: (c) => (
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="ghost" className="h-8 w-8" title="View" onClick={() => navigate(`/calls/${c._id}`)}
+          ><Eye className="h-4 w-4" /></Button>
+          {c.status === "Open" && (
+            <Button size="icon" variant="ghost" className="h-8 w-8" title="Assign Engineer" onClick={() => openAssignDialog(c)}
+            ><UserCog className="h-4 w-4" /></Button>
+          )}
+          {c.invoiceUrl && (
+            <Button size="icon" variant="ghost" className="h-8 w-8" title="Invoice" onClick={() => window.open(c.invoiceUrl, "_blank")}
+            ><FileText className="h-4 w-4" /></Button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
           <PageHeader title={title} description={description}>
+            {!statusFilter && stats && (
+              <Button variant="outline" className="gap-2" onClick={() => setShowStats(!showStats)}>
+                {showStats ? "Hide Stats" : "Show Stats"}
+              </Button>
+            )}
+            <Button variant="outline" className="gap-2" onClick={() => setShowFilters(!showFilters)}>
+              {showFilters ? "Hide Filters" : "Show Filters"}
+            </Button>
             <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
 
-          {!statusFilter && stats && (
+          {!statusFilter && stats && showStats && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <StatsCard label="Total Calls"  value={stats.total}      icon={PhoneCall}    colorClass="text-primary bg-accent" />
               <StatsCard label="Open"         value={stats.open}       icon={FolderOpen}   colorClass="text-orange-500 bg-orange-50" />
@@ -266,6 +487,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             </div>
           )}
 
+          {showFilters && (
+          <div className="space-y-6">
           {/* Row 1: Search + Date Range + Clear */}
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
@@ -276,7 +499,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
               {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSerialNumber(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
+                <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
               )}
             </div>
           </div>
@@ -304,6 +527,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={filters.partId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-[160px] h-9 text-sm" />
             <Input placeholder="Serial number..." value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
@@ -323,194 +547,10 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             </Select>
           </div>
 
-          {/* Expandable Calls Table */}
-          <div className="rounded-lg border bg-card overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30 hover:bg-muted/30">
-                  <TableHead className="w-8" />
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">No.</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Call ID</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Call Type</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Customer</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Status</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider">Engineer</TableHead>
-                  <TableHead className="font-semibold text-foreground/70 text-xs uppercase tracking-wider sticky right-0 bg-muted shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No data found</TableCell></TableRow>
-                ) : data.map((c, i) => {
-                  const isExpanded = expandedCallId === c._id;
-                  const callType = (c as any).callType;
-                  const hasCounterReadings = (callType === "Counter-Reading" || callType === "Service-Call") && c.machines.some((m: any) => m.counterReadings?.length > 0 || m.serviceCallReadings?.length > 0);
-                  const hasUsedParts = callType === "Service-Call" && c.machines.some((m: any) => m.usedParts?.length > 0);
-
-                  return (
-                    <>
-                      <TableRow key={c._id} className="cursor-pointer hover:bg-muted/40" onClick={() => toggleExpand(c._id)}>
-                        <TableCell className="w-8">
-                          {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                        </TableCell>
-                        <TableCell><span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span></TableCell>
-                        <TableCell><span className="font-medium text-foreground">{c.callId}</span></TableCell>
-                        <TableCell><span className="font-medium">{callType || "—"}</span></TableCell>
-                        <TableCell>
-                          <p className="font-medium">{c.customerInfo.name}</p>
-                          <p className="text-xs text-muted-foreground">{c.customerInfo.phone}</p>
-                        </TableCell>
-                        <TableCell><StatusBadge status={c.status} /></TableCell>
-                        <TableCell><span className={!c.engineerInfo ? "text-muted-foreground italic" : ""}>{c.engineerInfo?.name || "Unassigned"}</span></TableCell>
-                        <TableCell className="sticky right-0 bg-background shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/calls/${c._id}`)}><Eye className="h-4 w-4" /></Button>
-                            {callType === "Service-Call" && c.status === "Completed" && (
-                              (c as any).invoiceUrl
-                                ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={() => window.open((c as any).invoiceUrl, "_blank")}><FileText className="h-4 w-4 text-green-500" /></Button>
-                                : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async () => {
-                                    const tab = window.open("", "_blank");
-                                    try { const res = await serviceCallsApi.getInvoice(c._id); toast.success("Invoice generated"); if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank"); fetchCalls(pagination.page); }
-                                    catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
-                                  }}><FileText className="h-4 w-4 text-muted-foreground" /></Button>
-                            )}
-                            {callType === "Counter-Reading" && c.status === "Completed" && (
-                              (c as any).invoiceUrl
-                                ? <Button variant="ghost" size="icon" className="h-8 w-8" title="View Invoice" onClick={() => window.open((c as any).invoiceUrl, "_blank")}><FileText className="h-4 w-4 text-green-500" /></Button>
-                                : <Button variant="ghost" size="icon" className="h-8 w-8" title="Generate Invoice" onClick={async () => {
-                                    const tab = window.open("", "_blank");
-                                    try { const res = await serviceCallsApi.getCounterReadingInvoice(c._id); toast.success("Invoice generated"); if (tab) tab.location.href = res.invoiceUrl; else window.open(res.invoiceUrl, "_blank"); fetchCalls(pagination.page); }
-                                    catch { toast.error("Failed to generate invoice"); if (tab) tab.close(); }
-                                  }}><FileText className="h-4 w-4 text-muted-foreground" /></Button>
-                            )}
-                            {c.status === "Open" && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openAssignDialog(c)}><UserPlus className="h-4 w-4" /></Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-
-                      {isExpanded && (
-                        <TableRow key={`${c._id}-expanded`}>
-                          <TableCell colSpan={8} className="p-4 bg-blue-100 dark:bg-blue-900/30">
-                            <div className="space-y-4">
-
-                              {/* Machines — all call types */}
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Machines</p>
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow className="bg-muted/40">
-                                      <TableHead className="text-xs">#</TableHead>
-                                      <TableHead className="text-xs">Machine Name</TableHead>
-                                      <TableHead className="text-xs">Serial No.</TableHead>
-                                      <TableHead className="text-xs">Contract Type</TableHead>
-                                      <TableHead className="text-xs">Contract Status</TableHead>
-                                      <TableHead className="text-xs">Problem Types</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {c.machines.map((m: any, mi: number) => {
-                                      const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
-                                      return (
-                                        <TableRow key={mi}>
-                                          <TableCell className="text-xs">{mi + 1}</TableCell>
-                                          <TableCell className="text-xs font-medium">{m.machineName}</TableCell>
-                                          <TableCell className="text-xs font-mono">{m.serialNumber || "—"}</TableCell>
-                                          <TableCell className="text-xs">{m.contractType?.name ? `${m.contractType.name} (${m.contractType.code})` : "—"}</TableCell>
-                                          <TableCell className="text-xs">
-                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"}`}>
-                                              {isExpired ? "Expired" : "Active"}
-                                            </span>
-                                          </TableCell>
-                                          <TableCell className="text-xs">{m.problemTypes?.filter(Boolean).join(", ") || "—"}</TableCell>
-                                        </TableRow>
-                                      );
-                                    })}
-                                  </TableBody>
-                                </Table>
-                              </div>
-
-                              {/* Counter Readings — Service-Call & Counter-Reading */}
-                              {hasCounterReadings && (
-                                <div>
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Counter Readings</p>
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow className="bg-muted/40">
-                                        <TableHead className="text-xs">Machine</TableHead>
-                                        <TableHead className="text-xs">Serial No.</TableHead>
-                                        <TableHead className="text-xs">Pages Category</TableHead>
-                                        <TableHead className="text-xs text-right">Last Reading</TableHead>
-                                        <TableHead className="text-xs text-right">Current Reading</TableHead>
-                                        <TableHead className="text-xs text-right">Diff</TableHead>
-                                        {callType === "Counter-Reading" && <TableHead className="text-xs text-right">Charges (₹)</TableHead>}
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {c.machines.flatMap((m: any, mi: number) => {
-                                        const readings = callType === "Counter-Reading"
-                                          ? (m.counterReadings?.[0]?.categories || []).map((cat: any) => ({ ...cat, sn: m.counterReadings[0].serialNumber }))
-                                          : (m.serviceCallReadings || []);
-                                        return readings.map((cat: any, ci: number) => (
-                                          <TableRow key={`${mi}-${ci}`}>
-                                            <TableCell className="text-xs font-medium">{m.machineName}</TableCell>
-                                            <TableCell className="text-xs font-mono">{m.serialNumber || "—"}</TableCell>
-                                            <TableCell className="text-xs">{cat.pagesCategory}</TableCell>
-                                            <TableCell className="text-xs text-right">{cat.lastReading}</TableCell>
-                                            <TableCell className="text-xs text-right">{cat.currentReading}</TableCell>
-                                            <TableCell className="text-xs text-right">{cat.diff}</TableCell>
-                                            {callType === "Counter-Reading" && <TableCell className="text-xs text-right font-semibold">₹{cat.chargesInRupees}</TableCell>}
-                                          </TableRow>
-                                        ));
-                                      })}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              )}
-
-                              {/* Parts Replaced — Service-Call only */}
-                              {hasUsedParts && (
-                                <div>
-                                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Parts Replaced</p>
-                                  <Table>
-                                    <TableHeader>
-                                      <TableRow className="bg-muted/40">
-                                        <TableHead className="text-xs">Machine (Call)</TableHead>
-                                        <TableHead className="text-xs">Part Code</TableHead>
-                                        <TableHead className="text-xs">Part Name</TableHead>
-                                        <TableHead className="text-xs text-right">Total (₹)</TableHead>
-                                      </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                      {c.machines.flatMap((m: any, mi: number) =>
-                                        (m.usedParts || []).map((part: any, pi: number) => (
-                                          <TableRow key={`${mi}-${pi}`}>
-                                            <TableCell className="text-xs">
-                                              <p className="font-medium">{m.machineName}</p>
-                                              <p className="font-mono text-[10px] text-muted-foreground">{m.serialNumber}</p>
-                                            </TableCell>
-                                            <TableCell className="text-xs font-mono">{part.partCode}</TableCell>
-                                            <TableCell className="text-xs">{part.machineName}</TableCell>
-                                            <TableCell className="text-xs text-right font-semibold">₹{part.total}</TableCell>
-                                          </TableRow>
-                                        ))
-                                      )}
-                                    </TableBody>
-                                  </Table>
-                                </div>
-                              )}
-
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  );
-                })}
-              </TableBody>
-            </Table>
           </div>
+          )}
+
+          <DataTable columns={columns} data={data} pageSize={999} />
 
           <Pagination
             page={pagination.page}

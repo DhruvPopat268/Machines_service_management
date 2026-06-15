@@ -37,6 +37,9 @@ export interface ServiceCall {
     problemTypeIds: string[];
     problemTypes: string[];
     images: string[];
+    usedParts?: { partCode: string; machineId: string; machineName: string; modelNumber: string; hsnCode: string; categoryId: string; category: string; sellingPrice: number; discountedSellingPrice: number; total: number; }[];
+    serviceCallReadings?: { pagesCategoryId: string; pagesCategory: string; lastReading: number; currentReading: number; diff: number; lastReadingDate?: string; }[];
+    counterReadings?: { serialNumber: string; categories: { pagesCategoryId: string; pagesCategory: string; lastReading: number; currentReading: number; diff: number; lastReadingDate?: string; costPerPage?: number; chargesInRupees?: number; }[]; minCopies?: any; }[];
     serviceCharge?: number;
     partsCharge?: number;
   }>;
@@ -83,6 +86,7 @@ export interface CallsParams {
   problemTypeId?: string;
   serialNumber?: string;
   machineName?: string;
+  partId?: string;
   customerName?: string;
   engineerName?: string;
   category?: string;
