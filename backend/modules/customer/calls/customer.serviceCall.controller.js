@@ -122,6 +122,15 @@ const raiseServiceCall = async (req, res) => {
       if (!foundEntry.contractType?.freeService)
         return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a free service contract. Please contact support.` });
 
+      const effectiveCallType = callType || "Service-Call";
+      if (effectiveCallType === "Counter-Reading") {
+        const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
+        if (!TSS_CONTRACT_TYPE_ID)
+          return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
+        if (foundEntry.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID)
+          return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a TSS contract type. Counter-Reading is only allowed for TSS contract machines.` });
+      }
+
       const ptIds = Array.isArray(sc.problemTypeIds) ? sc.problemTypeIds : [];
       for (const ptId of ptIds) {
         if (!problemTypeMap.has(ptId))

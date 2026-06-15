@@ -547,6 +547,14 @@ const raiseServiceCall = async (req, res) => {
       const notFreeService = !foundEntry.contractType?.freeService;
       const requiresCharge = isExpired || notFreeService;
 
+      if (callType === "Counter-Reading") {
+        const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
+        if (!TSS_CONTRACT_TYPE_ID)
+          return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
+        if (foundEntry.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID)
+          return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a TSS contract type. Counter-Reading is only allowed for TSS contract machines.` });
+      }
+
       if (requiresCharge && (serviceCharge === undefined || serviceCharge === null))
         return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${sn}" (${isExpired ? "expired contract" : "non-free service"})` });
       if (serviceCharge !== undefined && serviceCharge !== null && (typeof serviceCharge !== "number" || serviceCharge < 0))
