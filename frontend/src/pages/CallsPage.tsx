@@ -33,8 +33,6 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-const LIMIT = 10;
-
 const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
 
 const CallsPage = ({ statusFilter, title = "All Service Calls", description = "Manage and track all service calls" }: CallsPageProps) => {
@@ -47,6 +45,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [stats, setStats]                   = useState<CallStats | undefined>();
   const [pagination, setPagination]         = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading]               = useState(true);
+  const limit       = Number(getParam("limit")) || 10;
   const showStats   = getParam("showStats")   !== "false";
   const showFilters  = getParam("showFilters")  !== "false";
 
@@ -262,7 +261,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
     setLoading(true);
     try {
-      const params: CallsParams = { page: String(page), limit: String(LIMIT) };
+      const params: CallsParams = { page: String(page), limit: String(limit) };
       if (statusFilter)                                                              params.status             = statusFilter;
       if (debouncedSearch)                                                           params.search             = debouncedSearch;
       if (filters.problemTypeId && filters.problemTypeId !== "all")                  params.problemTypeId      = filters.problemTypeId;
@@ -291,7 +290,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (!controller.signal.aborted) setLoading(false);
     }
   }, [
-    statusFilter, debouncedSearch, debouncedSerialNumber, fromDate, toDate,
+    statusFilter, debouncedSearch, debouncedSerialNumber, fromDate, toDate, limit,
     filters.callType, filters.status, filters.customerName, filters.engineerName,
     filters.machineName, filters.partId, filters.category, filters.division, filters.problemTypeId,
     filters.contractTypeId, filters.contractTypeStatus,
@@ -504,11 +503,11 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             </div>
           </div>
 
-          {/* Row 2: Filters */}
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          {/* Rows 2–3: 12 filters in a 6-col grid */}
+          <div className="grid grid-cols-6 gap-3">
             {!statusFilter && (
               <Select value={filters.callType || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, callType: v }))}>
-                <SelectTrigger className="w-[160px]"><SelectValue placeholder="Call Type" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Call Type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
                   {["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
@@ -517,32 +516,39 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             )}
             {!statusFilter && (
               <Select value={filters.status || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}>
-                <SelectTrigger className="w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
                   {["Open","Assigned","Travel Started","Reached Location","In Progress","On Hold","Completed","Cancelled"].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}
-            <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={filters.partId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-[160px] h-9 text-sm" />
-            <Input placeholder="Serial number..." value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-[160px] h-9 text-sm" />
-          </div>
-
-          {/* Row 3: Contract Type filters */}
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <SearchableSelect options={contractTypes.map(c => ({ label: c.name, value: c._id }))} value={filters.contractTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))} onSearchChange={fetchContractTypeOptions} placeholder="Contract Type" searchPlaceholder="Search contract types..." className="w-[180px] h-9 text-sm" />
+            <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={filters.partId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-full h-9 text-sm" />
+            <Input placeholder="Serial number..." value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-full h-9 text-sm" />
+            <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={contractTypes.map(c => ({ label: c.name, value: c._id }))} value={filters.contractTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))} onSearchChange={fetchContractTypeOptions} placeholder="Contract Type" searchPlaceholder="Search contract types..." className="w-full h-9 text-sm" />
             <Select value={filters.contractTypeStatus || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, contractTypeStatus: v }))}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="Contract Status" /></SelectTrigger>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Contract Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Contract Status</SelectItem>
                 <SelectItem value="Active">Active Contracts</SelectItem>
                 <SelectItem value="Expired">Expired Contracts</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Records per page */}
+          <div className="flex items-center justify-end gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+            <Select value={String(limit)} onValueChange={(v) => updateParam("limit", v === "10" ? "" : v)}>
+              <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -556,7 +562,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={LIMIT}
+            pageSize={limit}
             onPageChange={fetchCalls}
           />
 
