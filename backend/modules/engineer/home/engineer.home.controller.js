@@ -11,26 +11,45 @@ const getHome = async (req, res) => {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [rawActiveCalls, engineer, assignedToday, onHoldToday, completedToday] = await Promise.all([
+    const [rawActiveCalls, engineer, assignedToday, onHoldToday, completedToday, totalCallsCompleted] = await Promise.all([
       ServiceCall.find({
         "engineerInfo._id": engineerId,
         status: { $in: ["Travel Started", "Reached Location", "In Progress"] },
       })
         .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
         .sort({ updatedAt: -1 }),
-      AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline"),
+      AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline createdAt"),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.assigned":  { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.onHold":    { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed": { $gte: todayStart, $lte: todayEnd } }),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status: "Completed" }),
     ]);
 
     const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
     const enrichedActiveCalls = await buildServiceCallReadingInfo(activeCalls);
 
+    const experienceYears = engineer?.createdAt
+      ? parseFloat(((Date.now() - new Date(engineer.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1))
+      : 0;
+
+    const dateOfJoined = engineer?.createdAt
+      ? (() => {
+          const d = new Date(engineer.createdAt);
+          const dd  = String(d.getDate()).padStart(2, "0");
+          const mm  = String(d.getMonth() + 1).padStart(2, "0");
+          const yy  = String(d.getFullYear()).slice(2);
+          let   hrs = d.getHours();
+          const min = String(d.getMinutes()).padStart(2, "0");
+          const ampm = hrs >= 12 ? "PM" : "AM";
+          hrs = hrs % 12 || 12;
+          return `${dd}/${mm}/${yy} ${hrs}:${min} ${ampm}`;
+        })()
+      : "";
+
     return res.status(200).json({
       success: true,
       data: {
-        engineer,
+        engineer: { ...engineer.toObject(), totalCallsCompleted, experienceYears, dateOfJoined },
         activeCalls: enrichedActiveCalls,
         todaySummary: {
           assignedCalls:  assignedToday,

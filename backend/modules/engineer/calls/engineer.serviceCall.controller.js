@@ -15,6 +15,29 @@ const { sendServiceCallInvoiceEmail } = require("../../../utils/emailService");
 
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
+// ── Reusable: compute lifetime copies for a serial number ─────────────────
+const getLifetimeCopies = async (serialNumber) => {
+  const completedCalls = await ServiceCall.find(
+    { "machines.serialNumber": serialNumber, status: "Completed" },
+    { "machines.$": 1 }
+  ).lean();
+
+  let total = 0;
+  for (const call of completedCalls) {
+    const machine = call.machines?.find(m => m.serialNumber === serialNumber);
+    if (!machine) continue;
+
+    for (const cat of (machine.serviceCallReadings ?? []))
+      total += cat.diff ?? 0;
+
+    for (const cr of (machine.counterReadings ?? []))
+      for (const cat of (cr.categories ?? []))
+        total += cat.diff ?? 0;
+  }
+
+  return total;
+};
+
 // ── Reusable: inject lastReading for Service-Call machines ─────────────────
 const buildServiceCallReadingInfo = async (calls) => {
   const pagesCategories = await PagesCategory.find({ status: "Active" }).select("_id name").lean();
@@ -47,7 +70,9 @@ const buildServiceCallReadingInfo = async (calls) => {
         };
       });
 
-      return { ...m, serviceCallReadingCategories };
+      const lifetimeCopies = m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0;
+
+      return { ...m, serviceCallReadingCategories, lifetimeCopies };
     }));
 
     return { ...callObj, machines };
@@ -124,10 +149,11 @@ const buildCounterReadingInfo = async (calls) => {
     }
 
     // Merge categories into each matching machine
-    const machines = callObj.machines.map(m => {
-      if (!snCategoriesMap.has(m.serialNumber)) return m;
-      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber), counterReadingMinCopies: snMinCopiesMap.get(m.serialNumber) ?? 0 };
-    });
+    const machines = await Promise.all(callObj.machines.map(async (m) => {
+      const lifetimeCopies = m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0;
+      if (!snCategoriesMap.has(m.serialNumber)) return { ...m, lifetimeCopies };
+      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber), counterReadingMinCopies: snMinCopiesMap.get(m.serialNumber) ?? 0, lifetimeCopies };
+    }));
 
     return { ...callObj, machines };
   }));
@@ -212,7 +238,16 @@ const getHistoryCalls = async (req, res) => {
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
-    return res.status(200).json({ success: true, data: calls });
+    const data = await Promise.all(calls.map(async (call) => {
+      const callObj = call.toObject ? call.toObject() : call;
+      const machines = await Promise.all(callObj.machines.map(async (m) => ({
+        ...m,
+        lifetimeCopies: m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0,
+      })));
+      return { ...callObj, machines };
+    }));
+
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -1565,10 +1600,19 @@ const getCounterReadingHistoryCalls = async (req, res) => {
       .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
-    return res.status(200).json({ success: true, data: calls });
+    const data = await Promise.all(calls.map(async (call) => {
+      const callObj = call.toObject ? call.toObject() : call;
+      const machines = await Promise.all(callObj.machines.map(async (m) => ({
+        ...m,
+        lifetimeCopies: m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0,
+      })));
+      return { ...callObj, machines };
+    }));
+
+    return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo, buildServiceCallReadingInfo };
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo, buildServiceCallReadingInfo, getLifetimeCopies };
