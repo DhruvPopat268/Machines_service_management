@@ -379,8 +379,9 @@ const sendServiceCallInvoiceEmail = async (data) => {
       .replace(/{{callType}}/g,              data.callType)
       .replace(/{{completedDate}}/g,         data.completedDate)
       .replace(/{{engineerName}}/g,          data.engineerName)
-      .replace(/{{totalServiceCharges}}/g,   fmt(data.totalServiceCharges))
-      .replace(/{{totalPartsCharges}}/g,     fmt(data.totalPartsCharges))
+      .replace(/{{totalServiceCharges}}/g,          fmt(data.totalServiceCharges))
+      .replace(/{{totalPartsCharges}}/g,             fmt(data.totalPartsCharges))
+      .replace(/{{totalCounterReadingCharges}}/g,    fmt(data.totalCounterReadingCharges ?? 0))
       .replace(/{{basicTotal}}/g,            fmt(data.basicTotal))
       .replace(/{{cgstPercent}}/g,           data.cgstPercent)
       .replace(/{{cgstAmount}}/g,            fmt(data.cgstAmount))
@@ -413,11 +414,22 @@ const sendServiceCallInvoiceEmail = async (data) => {
     html = data.sgstPercent > 0 ? html.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
     html = data.igstPercent > 0 ? html.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
 
+    // Call type conditional blocks
+    html = data.isCounterReading ? html.replace(/{{#if isCounterReading}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if isCounterReading}}[\.\s\S]*?{{\/if}}/g, "");
+    html = data.isServiceCall    ? html.replace(/{{#if isServiceCall}}([\.\s\S]*?){{\/if}}/g,    "$1") : html.replace(/{{#if isServiceCall}}[\.\s\S]*?{{\/if}}/g,    "");
+
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
       to: data.customerEmail,
       subject: `Service Call Invoice — ${data.invoiceNumber} (${data.callId})`,
       html,
+      attachments: [
+        {
+          filename: data.invoiceFileName,
+          path:     data.invoiceFilePath,
+          contentType: "application/pdf",
+        },
+      ],
     };
 
     await transporter.sendMail(mailOptions);

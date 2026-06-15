@@ -39,7 +39,7 @@
               </p>
 
               <p style="margin:16px 0 0; font-size:15px; color:#6b7280; line-height:26px;">
-                Thank you for choosing our service. Please find below the invoice summary for your completed service call <strong style="color:#111827;">{{callId}}</strong>.
+                Thank you for choosing our service. Please find below the invoice summary for your completed service call <strong style="color:#111827;">{{callId}}</strong>. The invoice PDF is also attached to this email.
               </p>
 
               <!-- Call Info -->
@@ -93,6 +93,13 @@
                     <p style="margin:0 0 14px; font-size:13px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Charges Summary</p>
 
                     <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      {{#if isCounterReading}}
+                      <tr>
+                        <td style="padding:5px 0; font-size:14px; color:#6b7280;">Counter Reading Charges</td>
+                        <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600;">₹{{totalCounterReadingCharges}}</td>
+                      </tr>
+                      {{/if}}
+                      {{#if isServiceCall}}
                       <tr>
                         <td style="padding:5px 0; font-size:14px; color:#6b7280;">Service Charges</td>
                         <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600;">₹{{totalServiceCharges}}</td>
@@ -101,6 +108,7 @@
                         <td style="padding:5px 0; font-size:14px; color:#6b7280;">Parts Charges</td>
                         <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600;">₹{{totalPartsCharges}}</td>
                       </tr>
+                      {{/if}}
                       <tr>
                         <td style="padding:5px 0; font-size:14px; color:#6b7280; border-top:1px solid #e2e8f0;">Basic Total</td>
                         <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600; border-top:1px solid #e2e8f0;">₹{{basicTotal}}</td>

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit, FileText, ExternalLink } from "lucide-react";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit, FileText, ExternalLink, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -81,7 +81,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [entries, setEntries]             = useState<MachineEntry[]>([]);
   const [submitting, setSubmitting]       = useState(false);
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
-  const [customerForm, setCustomerForm]   = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
+  const [customerForm, setCustomerForm]   = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null as File | null });
+  const [zones, setZones]                 = useState<{ label: string; value: string }[]>([]);
+  const photoRef                          = useRef<HTMLInputElement>(null);
   const [codesDialog, setCodesDialog]         = useState<CodesDialogState | null>(null);
   const [pagesCatConfig, setPagesCatConfig]   = useState<PagesCategoryConfigState | null>(null);
   const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
@@ -116,7 +118,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   }, []);
 
   useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
-  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); }, [open]);
+  const fetchZones = async () => {
+    try {
+      const r = await api.get("/admin/zones", { params: { status: "Active", limit: 100 } });
+      setZones(r.data.data.map((z: any) => ({ label: `${z.name} (${z.code})`, value: z._id })));
+    } catch {}
+  };
+
+  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); }, [open]);
 
   const fetchActivePagesCats = async () => {
     try {
@@ -266,10 +275,27 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     if (!customerForm.name || !customerForm.phone || !customerForm.email) { toast.error("Name, phone and email are required"); return; }
     setSubmitting(true);
     try {
-      await api.post("/admin/customers", { ...customerForm, status: "Active" });
+      let payload: any;
+      if (customerForm.profilePhoto) {
+        const fd = new FormData();
+        fd.append("name", customerForm.name);
+        fd.append("phone", customerForm.phone);
+        fd.append("email", customerForm.email);
+        if (customerForm.address) fd.append("userLocation", JSON.stringify({ address: customerForm.address }));
+        if (customerForm.zone) fd.append("zone", customerForm.zone);
+        if (customerForm.gstNumber) fd.append("gstNumber", customerForm.gstNumber.toUpperCase());
+        fd.append("status", "Active");
+        fd.append("profilePhoto", customerForm.profilePhoto);
+        payload = fd;
+      } else {
+        payload = { name: customerForm.name, phone: customerForm.phone, email: customerForm.email, address: customerForm.address, zone: customerForm.zone || undefined, gstNumber: customerForm.gstNumber || undefined, status: "Active" };
+      }
+      const res = await api.post("/admin/customers", payload);
       toast.success("Customer created successfully");
-      await fetchCustomers(); setCreateCustomerDialog(false);
-      setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" });
+      await fetchCustomers();
+      setCustomerId(res.data.data._id);
+      setCreateCustomerDialog(false);
+      setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null });
     } catch (err: any) { toast.error(err.response?.data?.message || "Failed to create customer"); }
     finally { setSubmitting(false); }
   };
@@ -723,19 +749,40 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       )}
 
       {/* Create Customer Dialog */}
-      <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); } }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null }); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create New Customer</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Profile Photo</Label>
+              <div className="flex items-center gap-3">
+                {customerForm.profilePhoto
+                  ? <img src={URL.createObjectURL(customerForm.profilePhoto)} alt="preview" className="h-12 w-12 rounded-full object-cover shrink-0" />
+                  : <UserCircle className="h-12 w-12 text-muted-foreground shrink-0" />
+                }
+                <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={(e) => setCustomerForm((p) => ({ ...p, profilePhoto: e.target.files?.[0] ?? null }))} />
+                <Button type="button" variant="outline" size="sm" onClick={() => photoRef.current?.click()}>
+                  {customerForm.profilePhoto ? "Change Photo" : "Upload Photo"}
+                </Button>
+                {customerForm.profilePhoto && (
+                  <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setCustomerForm((p) => ({ ...p, profilePhoto: null })); if (photoRef.current) photoRef.current.value = ""; }}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Customer name" value={customerForm.name} onChange={(e) => setCustomerForm((p) => ({ ...p, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Phone <span className="text-destructive">*</span></Label><Input placeholder="e.g. 9800000000" value={customerForm.phone} onChange={(e) => setCustomerForm((p) => ({ ...p, phone: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" placeholder="customer@example.com" value={customerForm.email} onChange={(e) => setCustomerForm((p) => ({ ...p, email: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Address</Label><Input placeholder="Full address" value={customerForm.address} onChange={(e) => setCustomerForm((p) => ({ ...p, address: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Zone</Label><Input placeholder="Zone/Area" value={customerForm.zone} onChange={(e) => setCustomerForm((p) => ({ ...p, zone: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>GST Number</Label><Input placeholder="e.g. 27AABCG1234A1Z5" value={customerForm.gstNumber} onChange={(e) => setCustomerForm((p) => ({ ...p, gstNumber: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Zone</Label>
+              <SearchableSelect options={zones} value={customerForm.zone} onChange={(v) => setCustomerForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
+            </div>
+            <div className="space-y-2"><Label>GST Number</Label><Input placeholder="e.g. 27AABCG1234A1Z5" value={customerForm.gstNumber} onChange={(e) => setCustomerForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "" }); }} disabled={submitting}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null }); }} disabled={submitting}>Cancel</Button>
             <Button onClick={handleCreateCustomer} disabled={submitting}>{submitting ? "Creating..." : "Create Customer"}</Button>
           </DialogFooter>
         </DialogContent>
