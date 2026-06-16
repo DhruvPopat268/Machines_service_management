@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
 const connectDB = require("./database/connection");
+const morgan = require('morgan');
 
 const app = express();
 
@@ -92,6 +93,9 @@ app.use((err, _req, res, _next) => {
 app.use("/api", require("./routes/index"));
 
 app.get("/", (req, res) => res.send("Server is running"));
+
+if (process.env.DEBUG === "true") app.use(morgan('dev'));
+  
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -135,6 +135,7 @@ interface SystemUser {
   isOnline?: boolean;
   lastLoginAt: string | null;
   lastActivityAt: string | null;
+  dateOfJoining?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -446,7 +447,9 @@ const UsersPage = () => {
     {
       key: "actions", label: "Actions", sticky: true, render: (u) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status, engineerLocation: u.engineerLocation ? { address: u.engineerLocation.address, latitude: u.engineerLocation.latitude, longitude: u.engineerLocation.longitude } : null, profilePhoto: null }); setResetPopup(false); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => { setEditDialog(u); setEditForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, status: u.status, dateOfJoining: u.dateOfJoining
+    ? u.dateOfJoining.split("T")[0]
+    : "",engineerLocation: u.engineerLocation ? { address: u.engineerLocation.address, latitude: u.engineerLocation.latitude, longitude: u.engineerLocation.longitude } : null, profilePhoto: null }); setResetPopup(false); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" title="Delete" onClick={() => setDeleteDialog(u)}>
