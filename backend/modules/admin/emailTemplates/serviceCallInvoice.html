@@ -109,6 +109,12 @@
                         <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600;">₹{{totalPartsCharges}}</td>
                       </tr>
                       {{/if}}
+                      {{#if isInstallation}}
+                      <tr>
+                        <td style="padding:5px 0; font-size:14px; color:#6b7280;">{{callType}} Charges</td>
+                        <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600;">₹{{totalInstallationCharges}}</td>
+                      </tr>
+                      {{/if}}
                       <tr>
                         <td style="padding:5px 0; font-size:14px; color:#6b7280; border-top:1px solid #e2e8f0;">Basic Total</td>
                         <td align="right" style="padding:5px 0; font-size:14px; color:#111827; font-weight:600; border-top:1px solid #e2e8f0;">₹{{basicTotal}}</td>

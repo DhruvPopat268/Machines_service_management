@@ -382,6 +382,7 @@ const sendServiceCallInvoiceEmail = async (data) => {
       .replace(/{{totalServiceCharges}}/g,          fmt(data.totalServiceCharges))
       .replace(/{{totalPartsCharges}}/g,             fmt(data.totalPartsCharges))
       .replace(/{{totalCounterReadingCharges}}/g,    fmt(data.totalCounterReadingCharges ?? 0))
+      .replace(/{{totalInstallationCharges}}/g,      fmt(data.totalInstallationCharges ?? 0))
       .replace(/{{basicTotal}}/g,            fmt(data.basicTotal))
       .replace(/{{cgstPercent}}/g,           data.cgstPercent)
       .replace(/{{cgstAmount}}/g,            fmt(data.cgstAmount))
@@ -417,6 +418,7 @@ const sendServiceCallInvoiceEmail = async (data) => {
     // Call type conditional blocks
     html = data.isCounterReading ? html.replace(/{{#if isCounterReading}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if isCounterReading}}[\.\s\S]*?{{\/if}}/g, "");
     html = data.isServiceCall    ? html.replace(/{{#if isServiceCall}}([\.\s\S]*?){{\/if}}/g,    "$1") : html.replace(/{{#if isServiceCall}}[\.\s\S]*?{{\/if}}/g,    "");
+    html = data.isInstallation   ? html.replace(/{{#if isInstallation}}([\.\s\S]*?){{\/if}}/g,   "$1") : html.replace(/{{#if isInstallation}}[\.\s\S]*?{{\/if}}/g,   "");
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,

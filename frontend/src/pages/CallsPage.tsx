@@ -436,7 +436,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     },
     {
       key: "note",
-      label: "Remarks",
+      label: "Admin Remarks",
       className: "w-[120px] max-w-[120px]",
       render: (c) => {
         if (!(c as any).note) return "—";
@@ -447,6 +447,24 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <span className="block truncate w-[110px] cursor-default text-sm">{(c as any).note}</span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs whitespace-pre-wrap">{(c as any).note}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+    },
+    {
+      key: "engineerCompleteRemarks",
+      label: "Engineer Remarks",
+      className: "w-[120px] max-w-[120px]",
+      render: (c) => {
+        if (!(c as any).engineerCompleteRemarks) return "—";
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="block truncate w-[110px] cursor-default text-sm">{(c as any).engineerCompleteRemarks}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs whitespace-pre-wrap">{(c as any).engineerCompleteRemarks}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         );
@@ -525,7 +543,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <SelectTrigger className="w-full"><SelectValue placeholder="Call Type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  {["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {["Service-Call", "Installation", "Dis-Installation", "Counter-Reading", "Others"].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             )}

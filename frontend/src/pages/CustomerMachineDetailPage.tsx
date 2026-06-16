@@ -37,7 +37,7 @@ interface MachineEntry {
   serviceCharge?: number;
 }
 
-const CALL_TYPES = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"] as const;
+const CALL_TYPES = ["Service-Call", "Installation", "Dis-Installation", "Counter-Reading", "Others"] as const;
 
 interface LocationSuggestion { placeId: string; description: string; }
 
@@ -206,6 +206,9 @@ const CustomerMachineDetailPage = () => {
   const [serviceChargeDialog, setServiceChargeDialog] = useState(false);
   const [serviceCharges, setServiceCharges]           = useState<Record<number, string>>({});
 
+  const [installationChargeDialog, setInstallationChargeDialog] = useState(false);
+  const [installationCharges, setInstallationCharges]           = useState<Record<number, string>>();
+
   // Renew contract state
   const [contractTypes, setContractTypes]             = useState<{ _id: string; name: string }[]>([]);
   const [renewDialog, setRenewDialog]                 = useState<MachineEntry | null>(null);
@@ -294,9 +297,12 @@ const CustomerMachineDetailPage = () => {
     }));
   };
 
+  const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
+
   const chargeRequiredIndices = machines
     .map((m, i) => ({ i, machine: m.detail.machine }))
     .filter(({ machine }) => {
+      if (isInstallationType) return false;
       const isExpired = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
       return isExpired || !machine.contractType?.freeService;
     })
@@ -310,6 +316,15 @@ const CustomerMachineDetailPage = () => {
         return;
       }
     }
+
+    if (isInstallationType) {
+      const initial: Record<number, string> = {};
+      machines.forEach((m, i) => { initial[i] = m.serviceCharge !== undefined ? String(m.serviceCharge) : ""; });
+      setInstallationCharges(initial);
+      setInstallationChargeDialog(true);
+      return;
+    }
+
     if (chargeRequiredIndices.length > 0) {
       const unsaved = chargeRequiredIndices.filter(i => machines[i].serviceCharge === undefined);
       if (unsaved.length > 0) {
@@ -370,6 +385,25 @@ const CustomerMachineDetailPage = () => {
       chargeRequiredIndices.includes(i) ? { ...m, serviceCharge: Number(serviceCharges[i]) } : m
     ));
     setServiceChargeDialog(false);
+  };
+
+  const confirmInstallationCharges = () => {
+    const charges = installationCharges ?? {};
+    for (let i = 0; i < machines.length; i++) {
+      const val = charges[i];
+      if (val === "" || val === undefined) {
+        toast.error(`${callType} charge is required for S/N: ${machines[i].detail.machine.serialNumber}`);
+        return;
+      }
+      const num = Number(val);
+      if (isNaN(num) || num < 0) {
+        toast.error(`${callType} charge must be a non-negative number for S/N: ${machines[i].detail.machine.serialNumber}`);
+        return;
+      }
+    }
+    setMachines(prev => prev.map((m, i) => ({ ...m, serviceCharge: Number(charges[i]) })));
+    setInstallationChargeDialog(false);
+    setTimeout(() => handleSubmit(), 0);
   };
 
   return (
@@ -726,6 +760,36 @@ const CustomerMachineDetailPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setServiceChargeDialog(false)}>Cancel</Button>
             <Button onClick={confirmServiceCharges}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Installation / Dis-Installation Charge Dialog */}
+      <Dialog open={installationChargeDialog} onOpenChange={setInstallationChargeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set {callType} Charges</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Enter the {callType.toLowerCase()} charge for each machine before raising the call.</p>
+          <div className="space-y-4 py-2">
+            {machines.map((m, i) => (
+              <div key={i} className="space-y-1.5">
+                <Label className="text-sm">
+                  {m.detail.machine.machineName} — <span className="font-mono text-xs">{m.detail.machine.serialNumber}</span>
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder={`Enter ${callType.toLowerCase()} charge (₹)`}
+                  value={installationCharges?.[i] ?? ""}
+                  onChange={e => setInstallationCharges(prev => ({ ...(prev ?? {}), [i]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInstallationChargeDialog(false)}>Cancel</Button>
+            <Button onClick={confirmInstallationCharges}>Confirm &amp; Raise Call</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

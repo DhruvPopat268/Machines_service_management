@@ -73,7 +73,7 @@ const getCalls = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber note")
+        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber note engineerCompleteRemarks")
         .sort({ [sortKey]: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -458,7 +458,7 @@ const raiseServiceCall = async (req, res) => {
   try {
     const { customerId, callType = "Service-Call", machines: machinesRaw, customerLocation: customerLocationRaw } = req.body;
 
-    const validCallTypes = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"];
+    const validCallTypes = ["Service-Call", "Installation", "Dis-Installation", "Counter-Reading", "Others"];
     if (!validCallTypes.includes(callType))
       return res.status(400).json({ success: false, message: "Invalid callType" });
     if (!mongoose.isValidObjectId(customerId))
@@ -546,7 +546,8 @@ const raiseServiceCall = async (req, res) => {
 
       const isExpired = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
       const notFreeService = !foundEntry.contractType?.freeService;
-      const requiresCharge = isExpired || notFreeService;
+      const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
+      const requiresCharge = isInstallationType || isExpired || notFreeService;
 
       if (callType === "Counter-Reading") {
         const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
@@ -556,8 +557,10 @@ const raiseServiceCall = async (req, res) => {
           return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a TSS contract type. Counter-Reading is only allowed for TSS contract machines.` });
       }
 
-      if (requiresCharge && (serviceCharge === undefined || serviceCharge === null))
-        return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${sn}" (${isExpired ? "expired contract" : "non-free service"})` });
+      if (requiresCharge && (serviceCharge === undefined || serviceCharge === null)) {
+        const reason = isInstallationType ? `${callType} charges are required` : (isExpired ? "expired contract" : "non-free service");
+        return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${sn}" (${reason})` });
+      }
       if (serviceCharge !== undefined && serviceCharge !== null && (typeof serviceCharge !== "number" || serviceCharge < 0))
         return res.status(400).json({ success: false, message: `serviceCharge must be a non-negative number at index ${i}` });
 

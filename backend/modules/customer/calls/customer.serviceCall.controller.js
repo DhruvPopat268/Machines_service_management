@@ -29,9 +29,13 @@ const raiseServiceCall = async (req, res) => {
     const customerId = req.customer.id;
     const { serviceCalls, customerLocation, callType } = req.body;
 
-    const validCallTypes = ["Service-Call", "Installation", "Deinstallation", "Counter-Reading", "Others"];
+    const validCallTypes = ["Service-Call", "Installation", "Dis-Installation", "Counter-Reading", "Others"];
     if (callType && !validCallTypes.includes(callType))
       return res.status(400).json({ success: false, message: "Invalid callType" });
+
+    const selfServiceCallTypes = ["Service-Call", "Counter-Reading"];
+    if (callType && !selfServiceCallTypes.includes(callType))
+      return res.status(400).json({ success: false, message: `You cannot raise a "${callType}" call yourself. Please contact our support team for assistance.` });
 
     let parsedServiceCalls;
     try {
