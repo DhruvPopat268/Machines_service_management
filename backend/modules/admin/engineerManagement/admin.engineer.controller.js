@@ -30,7 +30,7 @@ const getEngineers = async (req, res) => {
 
     const [engineers, total] = await Promise.all([
       AdminUser.find(query)
-        .select("_id name email phone engineerId profilePhoto engineerLocation isOnline status lastLoginAt createdAt updatedAt")
+        .select("_id name email phone engineerId profilePhoto engineerLocation isOnline status lastLoginAt createdAt updatedAt dateOfJoining")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),

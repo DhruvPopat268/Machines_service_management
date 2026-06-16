@@ -5,7 +5,7 @@ const sharp = require("sharp");
 const bcrypt = require("bcrypt");
 const AdminUser = require("../../admin/auth/admin.user.model");
 const EngineerSession = require("./engineer.session.model");
-const { validateLogin, validateUpdateProfile, validatePassword } = require("./engineer.validator");
+const { validateUpdateProfile, validatePassword } = require("./engineer.validator");
 const { sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess } = require("../../../utils/emailService");
 
 const IMAGES_DIR = process.env.NODE_ENV === "production"
@@ -32,12 +32,16 @@ const deleteProfilePhoto = async (url) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, phone, password } = req.body;
 
-    const error = validateLogin({ email, password });
-    if (error) return res.status(400).json({ success: false, message: error });
+    if ((!email && !phone) || !password)
+      return res.status(400).json({ success: false, message: "Email or phone and password are required" });
 
-    const engineer = await AdminUser.findOne({ email: email.trim().toLowerCase() });
+    const query = email
+      ? { email: email.trim().toLowerCase() }
+      : { phone: phone.trim() };
+
+    const engineer = await AdminUser.findOne(query);
     if (!engineer || !(await engineer.comparePassword(password)))
       return res.status(401).json({ success: false, message: "Invalid credentials" });
 

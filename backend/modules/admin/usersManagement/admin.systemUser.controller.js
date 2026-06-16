@@ -104,9 +104,15 @@ const getSystemUserById = async (req, res) => {
   }
 };
 
+const computeExperienceYears = (dateOfJoining) => {
+  if (!dateOfJoining) return null;
+  const ms = Date.now() - new Date(dateOfJoining).getTime();
+  return parseFloat((ms / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1));
+};
+
 const createSystemUser = async (req, res) => {
   try {
-    const { name, email, phone, password, role, status } = req.body;
+    const { name, email, phone, password, role, status, dateOfJoining } = req.body;
 
     let engineerLocation;
     if (req.body.engineerLocation) {
@@ -119,6 +125,9 @@ const createSystemUser = async (req, res) => {
 
     const error = validateCreateSystemUser({ name, email, phone, password, role, status });
     if (error) return res.status(400).json({ success: false, message: error });
+
+    if (role === "Engineer" && !dateOfJoining)
+      return res.status(400).json({ success: false, message: "Date of joining is required for Engineers" });
 
     if (role === "Admin") {
       const adminExists = await AdminUser.exists({ role: "Admin" });
@@ -164,6 +173,7 @@ const createSystemUser = async (req, res) => {
         ...(engineerLocation         && { engineerLocation }),
         ...(profilePhoto             && { profilePhoto }),
         ...(engineerId               && { engineerId }),
+        ...(role === "Engineer" && dateOfJoining && { dateOfJoining: new Date(dateOfJoining) }),
       });
     } catch (dbErr) {
       if (profilePhoto) await deleteProfilePhoto(profilePhoto);
@@ -191,7 +201,7 @@ const updateSystemUser = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid user ID" });
 
-    const { name, email, phone, role, status } = req.body;
+    const { name, email, phone, role, status, dateOfJoining } = req.body;
 
     let engineerLocation;
     let officeLocation;
@@ -222,6 +232,9 @@ const updateSystemUser = async (req, res) => {
     if (status  !== undefined) update.status  = status;
     if (engineerLocation !== undefined) update.engineerLocation = engineerLocation;
     if (officeLocation   !== undefined) update.officeLocation   = officeLocation;
+    if (dateOfJoining    !== undefined) {
+      update.dateOfJoining   = new Date(dateOfJoining);
+    }
 
     if (req.file) {
       try {
@@ -254,6 +267,9 @@ const updateSystemUser = async (req, res) => {
     }
 
     const effectiveRole = update.role || existing.role;
+    if (effectiveRole === "Engineer" && !existing.dateOfJoining && !update.dateOfJoining)
+      return res.status(400).json({ success: false, message: "Date of joining is required for Engineers" });
+
     if (!req.file && effectiveRole === "Engineer" && !existing.profilePhoto && !update.profilePhoto) {
       try { update.profilePhoto = await generateAvatar((update.name || existing.name).trim()); } catch (_) {}
     }

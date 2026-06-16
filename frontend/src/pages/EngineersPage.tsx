@@ -20,6 +20,7 @@ interface Engineer {
   engineerLocation?: { address: string; latitude?: number; longitude?: number };
   isOnline?: boolean;
   status: "Active" | "Inactive";
+  dateOfJoining?: string | null;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -109,6 +110,12 @@ const EngineersPage = () => {
     { key: "createdAt", label: "Created At", render: (u) => {
       const { date, time } = formatDateTime(u.createdAt);
       return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
+    }},
+    { key: "dateOfJoining", label: "Joining At", render: (u) => {
+      if (!u.dateOfJoining) return <span className="text-muted-foreground text-sm">—</span>;
+      const d = new Date(u.dateOfJoining);
+      const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`;
+      return <p className="text-sm">{date}</p>;
     }},
   ];
 

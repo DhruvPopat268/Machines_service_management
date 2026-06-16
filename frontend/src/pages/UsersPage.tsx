@@ -263,7 +263,7 @@ const UsersPage = () => {
   const addPhotoRef                           = useRef<HTMLInputElement>(null);
 
   const [editDialog, setEditDialog]           = useState<SystemUser | null>(null);
-  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null });
+  const [editForm, setEditForm]               = useState({ name: "", email: "", phone: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], dateOfJoining: "", engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null });
   const [resetPopup, setResetPopup]           = useState(false);
   const editPhotoRef                          = useRef<HTMLInputElement>(null);
 
@@ -428,14 +428,6 @@ const UsersPage = () => {
       ),
     },
     {
-      key: "isOnline", label: "Online", render: (u) => u.role === "Engineer"
-        ? <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${(u as any).isOnline ? "text-green-600" : "text-muted-foreground"}`}>
-            <span className={`h-2 w-2 rounded-full ${(u as any).isOnline ? "bg-green-500" : "bg-gray-300"}`} />
-            {(u as any).isOnline ? "Online" : "Offline"}
-          </span>
-        : <span className="text-muted-foreground text-sm">—</span>,
-    },
-    {
       key: "lastLoginAt", label: "Last Login", render: (u) => u.lastLoginAt
         ? (() => { const { date, time } = formatDateTime(u.lastLoginAt!); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; })()
         : <span className="text-muted-foreground text-sm">Never</span>,
@@ -545,6 +537,10 @@ const UsersPage = () => {
             {addForm.role === "Engineer" && (
               <>
                 <div className="space-y-2">
+                  <Label>Date of Joining <span className="text-destructive">*</span></Label>
+                  <Input type="date" value={addForm.dateOfJoining} onChange={(e) => setAddForm(p => ({ ...p, dateOfJoining: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
                   <Label>Location</Label>
                   <LocationField
                     value={addForm.engineerLocation?.address ?? ""}
@@ -627,6 +623,10 @@ const UsersPage = () => {
             </div>
             {editForm.role === "Engineer" && (
               <>
+                <div className="space-y-2">
+                  <Label>Date of Joining <span className="text-destructive">*</span></Label>
+                  <Input type="date" value={editForm.dateOfJoining} onChange={(e) => setEditForm(p => ({ ...p, dateOfJoining: e.target.value }))} />
+                </div>
                 <div className="space-y-2">
                   <Label>Location</Label>
                   <LocationField

@@ -18,7 +18,7 @@ const getHome = async (req, res) => {
       })
         .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
         .sort({ updatedAt: -1 }),
-      AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline createdAt"),
+      AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline createdAt dateOfJoining"),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.assigned":  { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.onHold":    { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed": { $gte: todayStart, $lte: todayEnd } }),
@@ -28,21 +28,17 @@ const getHome = async (req, res) => {
     const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
     const enrichedActiveCalls = await buildServiceCallReadingInfo(activeCalls);
 
-    const experienceYears = engineer?.createdAt
-      ? parseFloat(((Date.now() - new Date(engineer.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1))
-      : 0;
+    const experienceYears = engineer?.dateOfJoining
+      ? parseFloat(((Date.now() - new Date(engineer.dateOfJoining).getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1))
+      : null;
 
-    const dateOfJoined = engineer?.createdAt
+    const dateOfJoined = engineer?.dateOfJoining
       ? (() => {
-          const d = new Date(engineer.createdAt);
-          const dd  = String(d.getDate()).padStart(2, "0");
-          const mm  = String(d.getMonth() + 1).padStart(2, "0");
-          const yy  = String(d.getFullYear()).slice(2);
-          let   hrs = d.getHours();
-          const min = String(d.getMinutes()).padStart(2, "0");
-          const ampm = hrs >= 12 ? "PM" : "AM";
-          hrs = hrs % 12 || 12;
-          return `${dd}/${mm}/${yy} ${hrs}:${min} ${ampm}`;
+          const d = new Date(engineer.dateOfJoining);
+          const dd = String(d.getDate()).padStart(2, "0");
+          const mm = String(d.getMonth() + 1).padStart(2, "0");
+          const yy = String(d.getFullYear()).slice(2);
+          return `${dd}/${mm}/${yy}`;
         })()
       : "";
 
