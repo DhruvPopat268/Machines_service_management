@@ -296,6 +296,21 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     filters.contractTypeId, filters.contractTypeStatus,
   ]);
 
+  const highlightText = (text: string, search: string) => {
+  if (!search) return text;
+
+  const regex = new RegExp(`(${search})`, "gi");
+  return text.split(regex).map((part, idx) =>
+    part.toLowerCase() === search.toLowerCase() ? (
+      <mark key={idx} className="bg-yellow-200 rounded px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+};
+
   useEffect(() => { fetchCalls(1); }, [fetchCalls]);
 
   const columns: Column<ServiceCall>[] = [
@@ -339,7 +354,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       key: "serialNumber",
       label: <span className="whitespace-normal leading-tight">Machine<br />Serial&nbsp;No</span>,
       className: "w-[170px] max-w-[170px] whitespace-normal",
-      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i} className="whitespace-nowrap">{m.serialNumber}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i} className="whitespace-nowrap">{highlightText(m.serialNumber, serialNumber)}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
     },
     {
       key: "contractType",
