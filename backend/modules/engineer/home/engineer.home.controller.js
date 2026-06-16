@@ -19,8 +19,8 @@ const getHome = async (req, res) => {
         .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
         .sort({ updatedAt: -1 }),
       AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline createdAt dateOfJoining"),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.assigned":  { $gte: todayStart, $lte: todayEnd } }),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.onHold":    { $gte: todayStart, $lte: todayEnd } }),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status:"Assigned" }),
+      ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status:"On Hold" }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed": { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status: "Completed" }),
     ]);
