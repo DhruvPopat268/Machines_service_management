@@ -401,9 +401,36 @@ const CustomerMachineDetailPage = () => {
         return;
       }
     }
-    setMachines(prev => prev.map((m, i) => ({ ...m, serviceCharge: Number(charges[i]) })));
     setInstallationChargeDialog(false);
-    setTimeout(() => handleSubmit(), 0);
+    // Build payload directly from charges map to avoid stale state
+    submitWithCharges(charges);
+  };
+
+  const submitWithCharges = async (charges: Record<number, string>) => {
+    setSubmitting(true);
+    const fd = new FormData();
+    fd.append("customerId", customerInfo!.customerId);
+    fd.append("callType", callType);
+    if (customerLocation) fd.append("customerLocation", JSON.stringify(customerLocation));
+
+    const machinesPayload = machines.map((m, i) => ({
+      serialNumber:     m.detail.machine.serialNumber,
+      issueDescription: m.issueDescription.trim(),
+      problemTypeIds:   m.problemTypeIds,
+      serviceCharge:    Number(charges[i]),
+    }));
+    fd.append("machines", JSON.stringify(machinesPayload));
+    machines.forEach((m, i) => m.images.forEach(file => fd.append(`images_${i}`, file)));
+
+    try {
+      await api.post("/admin/service-calls/raise", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Service call raised successfully");
+      navigate("/calls");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to raise service call");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

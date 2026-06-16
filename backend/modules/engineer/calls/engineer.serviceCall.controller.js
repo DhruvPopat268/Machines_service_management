@@ -575,7 +575,7 @@ const getChargesSummary = async (req, res) => {
       }
     }
 
-    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines");
+    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines cgst sgst igst ");
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
@@ -584,8 +584,17 @@ const getChargesSummary = async (req, res) => {
 
     const serviceCharges = call.totalServiceCharges ?? 0;
 
-    if (!hasUsedParts)
-      return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges } });
+    const cgstPercent = call.cgst?.percent ?? 0;
+    const sgstPercent = call.sgst?.percent ?? 0;
+    const igstPercent = call.igst?.percent ?? 0;
+
+    if (!hasUsedParts) {
+      const cgstAmount = parseFloat(((serviceCharges * cgstPercent) / 100).toFixed(2));
+      const sgstAmount = parseFloat(((serviceCharges * sgstPercent) / 100).toFixed(2));
+      const igstAmount = parseFloat(((serviceCharges * igstPercent) / 100).toFixed(2));
+      const grandTotal = parseFloat((serviceCharges + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+      return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, grandTotal } });
+    }
 
     // Build contractType map: serialNumber -> contractType
     const contractMap = new Map();
@@ -643,7 +652,12 @@ const getChargesSummary = async (req, res) => {
 
     const totalCharges = Math.round((serviceCharges + partsCharges) * 100) / 100;
 
-    return res.status(200).json({ success: true, data: { serviceCharges, partsCharges, totalCharges } });
+    const cgstAmount = parseFloat(((totalCharges * cgstPercent) / 100).toFixed(2));
+    const sgstAmount = parseFloat(((totalCharges * sgstPercent) / 100).toFixed(2));
+    const igstAmount = parseFloat(((totalCharges * igstPercent) / 100).toFixed(2));
+    const grandTotal = parseFloat((totalCharges + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+    return res.status(200).json({ success: true, data: { serviceCharges, partsCharges, totalCharges, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, grandTotal } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
