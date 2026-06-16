@@ -29,14 +29,14 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div>
-      <div className="rounded-lg border bg-card overflow-x-auto">
+      <div className="rounded-lg border bg-card overflow-x-auto overflow-y-auto max-h-[70vh]">
         <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30 hover:bg-muted/30 relative">
+          <TableHeader className="sticky top-0 z-30 bg-muted">
+            <TableRow className="bg-muted hover:bg-muted relative">
               {columns.map((col) => (
                 <TableHead
                   key={col.key}
-                  className={`font-semibold text-foreground/70 text-xs uppercase tracking-wider whitespace-nowrap ${
+                  className={`font-semibold text-foreground/70 text-xs uppercase tracking-wider whitespace-nowrap bg-muted ${
                     col.sticky ? "sticky right-0 z-20 bg-muted shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]" : ""
                   } ${col.className ?? ""}`}
                 >
