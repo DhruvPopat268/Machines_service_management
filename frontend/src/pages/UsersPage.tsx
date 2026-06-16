@@ -499,9 +499,9 @@ const UsersPage = () => {
 
       {/* Add Dialog */}
       <Dialog open={addDialog} onOpenChange={setAddDialog}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Add System User</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
+        <DialogContent className="flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0"><DialogTitle>Add System User</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-1">
             <div className="space-y-2">
               <Label>Name <span className="text-destructive">*</span></Label>
               <Input placeholder="Full name" value={addForm.name} onChange={(e) => setAddForm(p => ({ ...p, name: e.target.value }))} />
@@ -578,7 +578,7 @@ const UsersPage = () => {
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setAddDialog(false)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={submitting}>{submitting ? "Adding..." : "Add User"}</Button>
           </DialogFooter>
@@ -587,9 +587,9 @@ const UsersPage = () => {
 
       {/* Edit Dialog */}
       <Dialog open={!!editDialog} onOpenChange={(open) => { if (!open) { setEditDialog(null); setResetPopup(false); } }}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-4">
+        <DialogContent className="flex flex-col max-h-[90vh]">
+          <DialogHeader className="shrink-0"><DialogTitle>Edit User</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4 overflow-y-auto flex-1 pr-1">
             <div className="space-y-2">
               <Label>Name</Label>
               <Input value={editForm.name} onChange={(e) => setEditForm(p => ({ ...p, name: e.target.value }))} />
@@ -668,7 +668,7 @@ const UsersPage = () => {
               </Select>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => { setEditDialog(null); setResetPopup(false); }}>Cancel</Button>
             <Button onClick={handleEdit} disabled={submitting}>{submitting ? "Saving..." : "Save"}</Button>
           </DialogFooter>
