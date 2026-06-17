@@ -31,6 +31,7 @@ const adminUserSchema = new mongoose.Schema(
     status:    { type: String, enum: ["Active", "Inactive"], default: "Active" },
     changePasswordOtp:        { type: String },
     changePasswordOtpExpires: { type: Date },
+    onesignalPlayerId:        { type: String, trim: true },
   },
   { timestamps: true }
 );

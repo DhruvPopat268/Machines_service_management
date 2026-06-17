@@ -32,7 +32,7 @@ const deleteProfilePhoto = async (url) => {
 
 const login = async (req, res) => {
   try {
-    const { email, phone, password } = req.body;
+    const { email, phone, password, onesignalPlayerId } = req.body;
 
     if ((!email && !phone) || !password)
       return res.status(400).json({ success: false, message: "Email or phone and password are required" });
@@ -63,7 +63,10 @@ const login = async (req, res) => {
     });
 
     await EngineerSession.create({ engineerId: engineer._id, token });
-    await AdminUser.findByIdAndUpdate(engineer._id, { lastLoginAt: new Date() });
+    await AdminUser.findByIdAndUpdate(engineer._id, {
+      lastLoginAt: new Date(),
+      ...(onesignalPlayerId?.trim() && { onesignalPlayerId: onesignalPlayerId.trim() }),
+    });
 
     res.status(200).json({ success: true, message: "Login successful", token });
   } catch (err) {
