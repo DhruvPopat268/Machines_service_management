@@ -10,7 +10,8 @@ const sendCallAssignedNotification = async (callId) => {
 
     const engineer = await AdminUser.findById(call.engineerInfo._id).select("onesignalPlayerId phone").lean();
 
-    const header  = `New Call Assigned — ${call.callId}`;
+    const callLabel = call.callType === "Service-Call" ? "" : " Call";
+    const header  = `New ${call.callType}${callLabel} Assigned — ${call.callId}`;
     const message = `You have a new call at ${call.customerInfo.address}. Customer: ${call.customerInfo.name} (${call.customerInfo.phone})`;
 
     await EngineerNotification.create({
@@ -48,7 +49,8 @@ const sendCallCancelledNotification = async (callId) => {
 
     const engineer = await AdminUser.findById(call.engineerInfo._id).select("onesignalPlayerId phone").lean();
 
-    const header  = `Call Cancelled — ${call.callId}`;
+    const callLabel = call.callType === "Service-Call" ? "" : " Call";
+    const header  = `${call.callType}${callLabel} Cancelled — ${call.callId}`;
     const message = `Call ${call.callId} assigned to you has been cancelled by admin.`;
 
     await EngineerNotification.create({
