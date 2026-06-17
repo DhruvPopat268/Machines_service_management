@@ -1,5 +1,6 @@
 const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const AdminUser   = require("../../admin/auth/admin.user.model");
+const EngineerNotification = require("../notifications/engineer.notification.model");
 const { buildCounterReadingInfo, buildServiceCallReadingInfo } = require("../calls/engineer.serviceCall.controller");
 
 const getHome = async (req, res) => {
@@ -11,7 +12,7 @@ const getHome = async (req, res) => {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [rawActiveCalls, engineer, assignedToday, onHoldToday, completedToday, totalCallsCompleted] = await Promise.all([
+    const [rawActiveCalls, engineer, assignedToday, onHoldToday, completedToday, totalCallsCompleted, unreadNotificationsCount] = await Promise.all([
       ServiceCall.find({
         "engineerInfo._id": engineerId,
         status: { $in: ["Travel Started", "Reached Location", "In Progress"] },
@@ -23,6 +24,7 @@ const getHome = async (req, res) => {
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status:"On Hold" }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, "dates.completed": { $gte: todayStart, $lte: todayEnd } }),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status: "Completed" }),
+      EngineerNotification.countDocuments({ engineerId, status: "Unread" }),
     ]);
 
     const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
@@ -46,7 +48,7 @@ const getHome = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: {
-        engineer: { ...engineer.toObject(), totalCallsCompleted, experienceYears, dateOfJoined },
+        engineer: { ...engineer.toObject(), totalCallsCompleted, experienceYears, dateOfJoined, unreadNotificationsCount },
         activeCalls: enrichedActiveCalls,
         todaySummary: {
           assignedCalls:  assignedToday,
