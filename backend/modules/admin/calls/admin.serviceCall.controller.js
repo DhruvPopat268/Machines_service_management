@@ -311,6 +311,7 @@ const getCustomerMachines = async (req, res) => {
           images: machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
           serialNumber: entry.serialNumber,
           contractType: entry.contractType,
+          disInstalled: entry.disInstalled ?? false,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
         }))
@@ -325,6 +326,8 @@ const getCustomerMachines = async (req, res) => {
       allData = allData.filter(m => m.categoryId?.toString() === category);
     if (division && mongoose.isValidObjectId(division))
       allData = allData.filter(m => m.divisionId?.toString() === division);
+    if (req.query.disInstalled === "true")  allData = allData.filter(m => m.disInstalled === true);
+    if (req.query.disInstalled === "false") allData = allData.filter(m => m.disInstalled === false);
 
     const total = allData.length;
     const pageNum = Math.max(1, parseInt(page));
@@ -544,6 +547,9 @@ const raiseServiceCall = async (req, res) => {
       if (!foundMachine)
         return res.status(404).json({ success: false, message: `Serial number "${sn}" not found for this customer` });
 
+      if (foundEntry.disInstalled)
+        return res.status(400).json({ success: false, message: `Serial number "${sn}" has already been dis-installed and cannot be used for a new call` });
+
       const isExpired = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
       const notFreeService = !foundEntry.contractType?.freeService;
       const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
@@ -555,6 +561,14 @@ const raiseServiceCall = async (req, res) => {
           return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
         if (foundEntry.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID)
           return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a TSS contract type. Counter-Reading is only allowed for TSS contract machines.` });
+      }
+
+      if (callType === "Dis-Installation") {
+        const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
+        if (!TSS_CONTRACT_TYPE_ID)
+          return res.status(500).json({ success: false, message: "TSS_CONTRACT_TYPE_ID is not configured" });
+        if (foundEntry.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID)
+          return res.status(400).json({ success: false, message: `Serial number "${sn}" does not have a TSS contract type. Dis-Installation is only allowed for TSS contract machines.` });
       }
 
       if (requiresCharge && (serviceCharge === undefined || serviceCharge === null)) {

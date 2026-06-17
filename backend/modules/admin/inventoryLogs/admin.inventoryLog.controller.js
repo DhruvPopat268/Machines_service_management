@@ -26,7 +26,7 @@ const getAll = async (req, res) => {
 
     const query = {};
 
-    if (action && ["purchased", "sold"].includes(action)) query.action = action;
+    if (action && ["purchased", "sold", "dis-installed"].includes(action)) query.action = action;
 
     // Filter by vendor
     if (vendorId) {
@@ -201,7 +201,7 @@ const exportInventoryLogs = async (req, res) => {
     const { action, search, vendorId, customerId, category, division, machineId, fromDate, toDate } = req.query;
     const query = {};
 
-    if (action && ["purchased", "sold"].includes(action)) query.action = action;
+    if (action && ["purchased", "sold", "dis-installed"].includes(action)) query.action = action;
 
     // Filter by vendor
     if (vendorId) {
@@ -330,12 +330,12 @@ const exportInventoryLogs = async (req, res) => {
             "Model Number":    machine.modelNumber || "",
             "Category":        machine.category || "",
             "Division":        machine.division || "",
-            "Action":          isPurchased ? "Purchased" : "Sold",
+            "Action":          log.action === "purchased" ? "Purchased" : log.action === "sold" ? "Sold" : "Dis-Installed",
             "Quantity":        machine.quantity,
             "Serial Numbers":  (machine.serialNumbers || []).join(", "),
             "Part Codes":      (machine.partCodes || []).join(", "),
-            [isPurchased ? "Purchase Date" : "Sale Date"]: created.date,
-            [isPurchased ? "Purchase Time" : "Sale Time"]: created.time,
+            [isPurchased ? "Purchase Date" : log.action === "dis-installed" ? "Dis-Installation Date" : "Sale Date"]: created.date,
+            [isPurchased ? "Purchase Time" : log.action === "dis-installed" ? "Dis-Installation Time" : "Sale Time"]: created.time,
           });
       });
     });

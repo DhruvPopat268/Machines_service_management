@@ -223,7 +223,7 @@ const CallDetailsPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-sm mt-6">
+          {/* <Card className="border-0 shadow-sm mt-6">
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><StickyNote className="h-5 w-5" /> Admin Remarks</CardTitle></CardHeader>
             <CardContent>
               {call.note ? (
@@ -232,7 +232,7 @@ const CallDetailsPage = () => {
                 <p className="text-sm text-muted-foreground italic">No remarks added yet.</p>
               )}
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
 
         <div className="lg:col-span-1">

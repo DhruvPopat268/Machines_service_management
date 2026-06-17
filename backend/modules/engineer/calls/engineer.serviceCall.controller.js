@@ -1698,6 +1698,77 @@ const completeCall = async (req, res) => {
             "igst.amount": igstAmount,
           });
 
+          // ── Dis-Installation: restore inventory ──
+          if (updatedCall.callType === "Dis-Installation") {
+            for (const machine of updatedCall.machines) {
+              const sn = machine.serialNumber;
+              if (!sn) continue;
+
+              // 1. Mark serial number as dis-installed in SoldMachine
+              await SoldMachine.updateOne(
+                { "machines.serialNumbers.serialNumber": sn },
+                { $set: { "machines.$[outer].serialNumbers.$[inner].disInstalled": true } },
+                { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
+              );
+
+              // 2. Mark serial number back to available in PurchasedMachine
+              await PurchasedMachine.updateOne(
+                { "machines.serialNumbers.serialNumber": sn },
+                { $set: { "machines.$[outer].serialNumbers.$[inner].status": "available" } },
+                { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
+              );
+
+              // 3. Increment currentStock on Machine doc and refresh stockStatus
+              if (machine.machineId) {
+                const updatedMachine = await Machine.findByIdAndUpdate(
+                  machine.machineId,
+                  { $inc: { currentStock: 1 } },
+                  { new: true }
+                );
+                if (updatedMachine) {
+                  const newStatus = updatedMachine.currentStock === 0
+                    ? "Out of Stock"
+                    : updatedMachine.lowStockThreshold === -1 || updatedMachine.lowStockThreshold < updatedMachine.currentStock
+                      ? "In Stock"
+                      : "Low Stock";
+                  await Machine.updateOne({ _id: machine.machineId }, { $set: { stockStatus: newStatus } });
+                }
+              }
+            }
+
+            // 4. Single InventoryLog entry for all dis-installed machines
+            const logMachines = updatedCall.machines
+              .filter(m => m.machineId)
+              .map(m => ({
+                machineId:     m.machineId,
+                machineName:   m.machineName,
+                modelNumber:   m.modelNumber || "",
+                categoryId:    m.categoryId,
+                category:      m.category || "",
+                divisionId:    m.divisionId,
+                division:      m.division || "",
+                quantity:      1,
+                serialNumbers: [m.serialNumber],
+                partCodes:     [],
+              }));
+
+            if (logMachines.length > 0) {
+              await InventoryLog.create({
+                action: "dis-installed",
+                customerInfo: {
+                  customerId: updatedCall.customerInfo.customerId,
+                  name:       updatedCall.customerInfo.name,
+                  phone:      updatedCall.customerInfo.phone,
+                  email:      updatedCall.customerInfo.email,
+                  address:    updatedCall.customerInfo.address,
+                  zone:       updatedCall.customerInfo.zone || "",
+                  gstNumber:  updatedCall.customerInfo.gstNumber || "",
+                },
+                machines: logMachines,
+              });
+            }
+          }
+
           if (doSendEmail) {
             await sendServiceCallInvoiceEmail({
               invoiceNumber,

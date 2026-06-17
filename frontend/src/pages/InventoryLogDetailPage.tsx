@@ -39,7 +39,7 @@ interface CustomerInfo {
 
 interface InventoryLogDetail {
   _id: string;
-  action: "purchased" | "sold";
+  action: "purchased" | "sold" | "dis-installed";
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
   machines: LogMachine[];
@@ -84,7 +84,8 @@ const InventoryLogDetailPage = () => {
   if (loading) return <Spinner />;
   if (!log) return <div className="text-center py-12 text-muted-foreground">Log not found</div>;
 
-  const isPurchased = log.action === "purchased";
+  const isPurchased   = log.action === "purchased";
+  const isDisInstalled = log.action === "dis-installed";
 
   return (
     <div className="space-y-6">
@@ -101,7 +102,11 @@ const InventoryLogDetailPage = () => {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: "Action",   value: <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${isPurchased ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>{isPurchased ? "Purchased" : "Sold"}</span> },
+          { label: "Action",   value: <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+            isPurchased    ? "bg-green-100 text-green-700"
+            : isDisInstalled ? "bg-orange-100 text-orange-700"
+                             : "bg-blue-100 text-blue-700"
+          }`}>{isPurchased ? "Purchased" : isDisInstalled ? "Dis-Installed" : "Sold"}</span> },
           { label: "Machines", value: log.machinesCount },
           { label: "Date",     value: formatDateTime(log.createdAt) },
         ].map((s) => (
@@ -179,7 +184,11 @@ const InventoryLogDetailPage = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                   {machine.category && <div><p className="text-muted-foreground text-xs">Category</p><p className="font-medium">{machine.category}</p></div>}
                   {machine.division && <div><p className="text-muted-foreground text-xs">Division</p><p className="font-medium">{machine.division}</p></div>}
-                  <div><p className="text-muted-foreground text-xs">Qty Change</p><p className="font-bold text-sm">{isPurchased ? <span className="text-green-600">+{machine.quantity}</span> : <span className="text-red-600">-{machine.quantity}</span>}</p></div>
+                  <div><p className="text-muted-foreground text-xs">Qty Change</p><p className="font-bold text-sm">{
+                    log.action === "sold"
+                      ? <span className="text-red-600">-{machine.quantity}</span>
+                      : <span className="text-green-600">+{machine.quantity}</span>
+                  }</p></div>
                   {codes.length > 0 && (
                     <div>
                       <p className="text-muted-foreground text-xs">{isPartCodes ? "Part Codes" : "Serial Numbers"}</p>

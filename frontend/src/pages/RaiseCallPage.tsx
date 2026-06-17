@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
 import { X, Search, Eye, PhoneCall, RefreshCw } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/lib/axiosInterceptor";
 
 interface DropdownOption { _id: string; name: string; }
@@ -29,6 +30,7 @@ interface CustomerMachine {
   images: string[];
   serialNumber: string;
   contractType: { name: string; validFrom: string; validTo: string };
+  disInstalled: boolean;
 }
 
 const LIMIT = 10;
@@ -47,6 +49,7 @@ const RaiseCallPage = () => {
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("");
+  const [selectedDisInstalled, setSelectedDisInstalled] = useState("");
   const [serialSearch, setSerialSearch]         = useState("");
   const [debouncedSerial, setDebouncedSerial]   = useState("");
 
@@ -124,6 +127,7 @@ const RaiseCallPage = () => {
       if (debouncedSerial)  params.serialNumber = debouncedSerial;
       if (selectedCategory) params.category = selectedCategory;
       if (selectedDivision) params.division = selectedDivision;
+      if (selectedDisInstalled) params.disInstalled = selectedDisInstalled;
 
       const res = await api.get("/admin/service-calls/customer-machines", { params, signal: ctrl.signal });
       if (!ctrl.signal.aborted) {
@@ -136,16 +140,17 @@ const RaiseCallPage = () => {
     } finally {
       if (!ctrl.signal.aborted) setLoading(false);
     }
-  }, [selectedCustomer, debouncedSerial, selectedCategory, selectedDivision]);
+  }, [selectedCustomer, debouncedSerial, selectedCategory, selectedDivision, selectedDisInstalled]);
 
   useEffect(() => { fetchMachines(1); }, [fetchMachines]);
 
-  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || serialSearch;
+  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedDisInstalled || serialSearch;
 
   const clearFilters = () => {
     setSelectedCustomer("");
     setSelectedCategory("");
     setSelectedDivision("");
+    setSelectedDisInstalled("");
     setSerialSearch("");
   };
 
@@ -226,6 +231,12 @@ const RaiseCallPage = () => {
       },
     },
     {
+      key: "disInstalled", label: "Dis-Installed",
+      render: (m) => m.disInstalled
+        ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">Yes</span>
+        : <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">No</span>,
+    },
+    {
       key: "actions", label: "Actions",
       render: (m) => {
         const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
@@ -234,14 +245,16 @@ const RaiseCallPage = () => {
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
               <Eye className="h-4 w-4" /> View
             </Button>
-            {isExpired && (
+            {!m.disInstalled && isExpired && (
               <Button size="sm" variant="destructive" className="h-8 gap-1.5" onClick={() => openRenewDialog(m)}>
                 <RefreshCw className="h-3.5 w-3.5" /> Renew Contract
               </Button>
             )}
-            <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
-              <PhoneCall className="h-3.5 w-3.5" /> Raise Call
-            </Button>
+            {!m.disInstalled && (
+              <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
+                <PhoneCall className="h-3.5 w-3.5" /> Raise Call
+              </Button>
+            )}
           </div>
         );
       },
@@ -290,6 +303,13 @@ const RaiseCallPage = () => {
             searchPlaceholder="Search divisions..."
             className="w-[160px] h-9 text-sm"
           />
+          <Select value={selectedDisInstalled} onValueChange={setSelectedDisInstalled}>
+            <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Dis-Installed" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="false">No</SelectItem>
+              <SelectItem value="true">Yes</SelectItem>
+            </SelectContent>
+          </Select>
           {hasFilters && (
             <Button variant="outline" size="sm" onClick={clearFilters} className="h-9">
               <X className="h-4 w-4 mr-1" /> Clear

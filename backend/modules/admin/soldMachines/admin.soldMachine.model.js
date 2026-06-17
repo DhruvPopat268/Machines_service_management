@@ -28,6 +28,7 @@ const serialNumberEntrySchema = new mongoose.Schema(
     minCopies:       { type: Number, default: 0 },
     contractType:    { type: contractTypeSnapshotSchema, default: null },
     pagesCategories: { type: [pagesCategoryEntrySchema], default: [] },
+    disInstalled:    { type: Boolean, default: false },
   },
   { _id: false }
 );

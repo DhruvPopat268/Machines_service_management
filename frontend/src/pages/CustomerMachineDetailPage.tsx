@@ -335,6 +335,8 @@ const CustomerMachineDetailPage = () => {
         return;
       }
     }
+
+    if (isInstallationType) return;
     handleSubmit();
   };
 
@@ -816,7 +818,7 @@ const CustomerMachineDetailPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setInstallationChargeDialog(false)}>Cancel</Button>
-            <Button onClick={confirmInstallationCharges}>Confirm &amp; Raise Call</Button>
+            <Button onClick={confirmInstallationCharges} disabled={submitting}>Confirm &amp; Raise Call</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

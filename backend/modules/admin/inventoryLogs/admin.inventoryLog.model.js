@@ -18,7 +18,7 @@ const machineEntrySchema = new mongoose.Schema(
 
 const inventoryLogSchema = new mongoose.Schema(
   {
-    action: { type: String, enum: ["purchased", "sold"], required: true },
+    action: { type: String, enum: ["purchased", "sold", "dis-installed"], required: true },
 
     vendorInfo: {
       vendorId:    { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },

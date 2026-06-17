@@ -41,7 +41,7 @@ interface LogMachine {
 
 interface InventoryLog {
   _id: string;
-  action: "purchased" | "sold";
+  action: "purchased" | "sold" | "dis-installed";
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
   machines: LogMachine[];
@@ -284,8 +284,12 @@ const InventoryLogsPage = () => {
       key: "action", label: "Action",
       render: (l) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-          l.action === "purchased" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-        }`}>{l.action === "purchased" ? "Purchased" : "Sold"}</span>
+          l.action === "purchased" ? "bg-green-100 text-green-700"
+          : l.action === "sold"    ? "bg-blue-100 text-blue-700"
+                                   : "bg-orange-100 text-orange-700"
+        }`}>
+          {l.action === "purchased" ? "Purchased" : l.action === "sold" ? "Sold" : "Dis-Installed"}
+        </span>
       ),
     },
     {
@@ -300,7 +304,7 @@ const InventoryLogsPage = () => {
             </div>
           );
         }
-        if (l.action === "sold" && l.customerInfo) {
+        if ((l.action === "sold" || l.action === "dis-installed") && l.customerInfo) {
           return (
             <div>
               <p className="font-medium text-sm">{l.customerInfo.name}</p>
@@ -328,8 +332,10 @@ const InventoryLogsPage = () => {
       render: (l) => (
         <div>{l.machines.map((m, i) => (
           <div key={i}>
-            <span className={`font-medium ${l.action === "purchased" ? "text-green-600" : "text-blue-600"}`}>
-              {l.action === "purchased" ? "+" : "-"}{m.quantity}
+            <span className={`font-medium ${
+              l.action === "sold" ? "text-red-600" : "text-green-600"
+            }`}>
+              {l.action === "sold" ? "-" : "+"}{m.quantity}
             </span>
             {sep(i, l.machines.length)}
           </div>
@@ -412,6 +418,7 @@ const InventoryLogsPage = () => {
               <SelectContent>
                 <SelectItem value="purchased">Purchased</SelectItem>
                 <SelectItem value="sold">Sold</SelectItem>
+                <SelectItem value="dis-installed">Dis-Installed</SelectItem>
               </SelectContent>
             </Select>
             <SearchableSelect
