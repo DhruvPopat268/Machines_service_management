@@ -209,6 +209,9 @@ const CustomerMachineDetailPage = () => {
   const [installationChargeDialog, setInstallationChargeDialog] = useState(false);
   const [installationCharges, setInstallationCharges]           = useState<Record<number, string>>();
 
+  const [othersChargeDialog, setOthersChargeDialog] = useState(false);
+  const [othersCharges, setOthersCharges]           = useState<Record<number, string>>();
+
   // Renew contract state
   const [contractTypes, setContractTypes]             = useState<{ _id: string; name: string }[]>([]);
   const [renewDialog, setRenewDialog]                 = useState<MachineEntry | null>(null);
@@ -298,6 +301,7 @@ const CustomerMachineDetailPage = () => {
   };
 
   const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
+  const isOthersType = callType === "Others";
 
   const chargeRequiredIndices = machines
     .map((m, i) => ({ i, machine: m.detail.machine }))
@@ -322,6 +326,14 @@ const CustomerMachineDetailPage = () => {
       machines.forEach((m, i) => { initial[i] = m.serviceCharge !== undefined ? String(m.serviceCharge) : ""; });
       setInstallationCharges(initial);
       setInstallationChargeDialog(true);
+      return;
+    }
+
+    if (isOthersType) {
+      const initial: Record<number, string> = {};
+      machines.forEach((m, i) => { initial[i] = m.serviceCharge !== undefined ? String(m.serviceCharge) : ""; });
+      setOthersCharges(initial);
+      setOthersChargeDialog(true);
       return;
     }
 
@@ -387,6 +399,24 @@ const CustomerMachineDetailPage = () => {
       chargeRequiredIndices.includes(i) ? { ...m, serviceCharge: Number(serviceCharges[i]) } : m
     ));
     setServiceChargeDialog(false);
+  };
+
+  const confirmOthersCharges = () => {
+    const charges = othersCharges ?? {};
+    for (let i = 0; i < machines.length; i++) {
+      const val = charges[i];
+      if (val === "" || val === undefined) {
+        toast.error(`Others charge is required for S/N: ${machines[i].detail.machine.serialNumber}`);
+        return;
+      }
+      const num = Number(val);
+      if (isNaN(num) || num < 0) {
+        toast.error(`Others charge must be a non-negative number for S/N: ${machines[i].detail.machine.serialNumber}`);
+        return;
+      }
+    }
+    setOthersChargeDialog(false);
+    submitWithCharges(charges);
   };
 
   const confirmInstallationCharges = () => {
@@ -601,7 +631,7 @@ const CustomerMachineDetailPage = () => {
                   </PopoverTrigger>
                   <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }} align="start">
                     <Command>
-                      <CommandInput placeholder="Search problem types..." />
+                      <CommandInput placeholder="Search types..." />
                       <CommandList>
                         <CommandEmpty>No types found.</CommandEmpty>
                         <CommandGroup>
@@ -819,6 +849,36 @@ const CustomerMachineDetailPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setInstallationChargeDialog(false)}>Cancel</Button>
             <Button onClick={confirmInstallationCharges} disabled={submitting}>Confirm &amp; Raise Call</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Others Charge Dialog */}
+      <Dialog open={othersChargeDialog} onOpenChange={setOthersChargeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set Others Charges</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Enter the others charge for each machine before raising the call.</p>
+          <div className="space-y-4 py-2">
+            {machines.map((m, i) => (
+              <div key={i} className="space-y-1.5">
+                <Label className="text-sm">
+                  {m.detail.machine.machineName} — <span className="font-mono text-xs">{m.detail.machine.serialNumber}</span>
+                </Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Enter others charge (₹)"
+                  value={othersCharges?.[i] ?? ""}
+                  onChange={e => setOthersCharges(prev => ({ ...(prev ?? {}), [i]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOthersChargeDialog(false)}>Cancel</Button>
+            <Button onClick={confirmOthersCharges} disabled={submitting}>Confirm &amp; Raise Call</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

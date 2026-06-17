@@ -216,10 +216,10 @@ const getOnHoldCalls = async (req, res) => {
       status: "On Hold",
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason note cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
-    const data = await buildServiceCallReadingInfo(calls);
+    const data = (await buildServiceCallReadingInfo(calls)).map(c => ({ ...c, ...(c.note?.trim() && { adminRemarks: c.note }), note: undefined }));
     return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -235,7 +235,7 @@ const getHistoryCalls = async (req, res) => {
       status: { $in: ["Completed", "Cancelled"] },
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges cgst.percent sgst.percent igst.percent")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalServiceCharges totalPartsCharges totalCharges note cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     const data = await Promise.all(calls.map(async (call) => {
@@ -244,7 +244,7 @@ const getHistoryCalls = async (req, res) => {
         ...m,
         lifetimeCopies: m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0,
       })));
-      return { ...callObj, machines };
+      return { ...callObj, ...(callObj.note?.trim() && { adminRemarks: callObj.note }), note: undefined, machines };
     }));
 
     return res.status(200).json({ success: true, data });
@@ -262,10 +262,10 @@ const getAssignedCalls = async (req, res) => {
       status: "Assigned",
       callType: { $ne: "Counter-Reading" },
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType cgst.percent sgst.percent igst.percent")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType note cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
-    const data = await buildServiceCallReadingInfo(calls);
+    const data = (await buildServiceCallReadingInfo(calls)).map(c => ({ ...c, ...(c.note?.trim() && { adminRemarks: c.note }), note: undefined }));
     return res.status(200).json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -1571,6 +1571,170 @@ const completeCall = async (req, res) => {
       });
     }
 
+    if (call.callType === "Others") {
+      setImmediate(async () => {
+        try {
+          const updatedCall = await ServiceCall.findById(callId);
+          if (!updatedCall) return;
+
+          const Company = require("../../admin/companyManagement/admin.company.model");
+          const Counter = require("../../admin/auth/counter.model");
+          const companyId = updatedCall.companyInfo?.companyId;
+          const company   = companyId ? await Company.findById(companyId) : null;
+
+          const counter = await Counter.findByIdAndUpdate(
+            "othersInvoice",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const invoiceNumber = `OTH-INV-${counter.seq}`;
+
+          const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+          const totalOthersCharges = Math.round(updatedCall.machines.reduce((sum, m) => sum + (m.serviceCharge ?? 0), 0) * 100) / 100;
+          const basicTotal  = totalOthersCharges;
+          const cgstPercent = updatedCall.cgst?.percent ?? 0;
+          const sgstPercent = updatedCall.sgst?.percent ?? 0;
+          const igstPercent = updatedCall.igst?.percent ?? 0;
+          const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
+          const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
+          const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
+          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+          const invoiceDate   = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+          const completedDate = updatedCall.dates?.completed
+            ? new Date(updatedCall.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+            : invoiceDate;
+
+          const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+          const templatePath = path.join(__dirname, "../../../invoicesExamples/others-invoice.html");
+          let html = await fs.readFile(templatePath, "utf-8");
+
+          html = html
+            .replace(/{{invoiceNumber}}/g,    invoiceNumber)
+            .replace(/{{invoiceDate}}/g,       invoiceDate)
+            .replace(/{{companyName}}/g,       company?.name        || updatedCall.companyInfo?.name    || "")
+            .replace(/{{companyTagline}}/g,    company?.tagline     || "")
+            .replace(/{{companyAddress}}/g,    company?.address     || updatedCall.companyInfo?.address || "")
+            .replace(/{{companyPhone}}/g,      company?.phone       || updatedCall.companyInfo?.phone   || "")
+            .replace(/{{companyEmail}}/g,      company?.email       || updatedCall.companyInfo?.email   || "")
+            .replace(/{{companyGst}}/g,        company?.gstNumber   || updatedCall.companyInfo?.gstNumber || "")
+            .replace(/{{bankAccountNumber}}/g, company?.bankAccountNumber || "")
+            .replace(/{{bankName}}/g,          company?.bankName    || "")
+            .replace(/{{ifscCode}}/g,          company?.ifscCode    || "")
+            .replace(/{{bankBranch}}/g,        company?.bankBranch  || "")
+            .replace(/{{qrCode}}/g,            company?.qrCode      || "")
+            .replace(/{{invoiceLogoUrl}}/g,    invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g,   invoiceLogoText)
+            .replace(/{{customerName}}/g,      updatedCall.customerInfo?.name    || "")
+            .replace(/{{customerAddress}}/g,   updatedCall.customerInfo?.address || "")
+            .replace(/{{customerUniqueId}}/g,  updatedCall.customerInfo?.customerUniqueId || "")
+            .replace(/{{customerGst}}/g,       updatedCall.customerInfo?.gstNumber || "")
+            .replace(/{{basicTotal}}/g,        fmt(basicTotal))
+            .replace(/{{cgstPercent}}/g,       cgstPercent)
+            .replace(/{{cgstAmount}}/g,        fmt(cgstAmount))
+            .replace(/{{sgstPercent}}/g,       sgstPercent)
+            .replace(/{{sgstAmount}}/g,        fmt(sgstAmount))
+            .replace(/{{igstPercent}}/g,       igstPercent)
+            .replace(/{{igstAmount}}/g,        fmt(igstAmount))
+            .replace(/{{grandTotal}}/g,        fmt(grandTotal));
+
+          html = cgstPercent > 0 ? html.replace(/{{#if cgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\s\S]*?{{\/if}}/g, "");
+          html = sgstPercent > 0 ? html.replace(/{{#if sgst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if sgst}}[\s\S]*?{{\/if}}/g, "");
+          html = igstPercent > 0 ? html.replace(/{{#if igst}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if igst}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.tagline  ? html.replace(/{{#if companyTagline}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if companyTagline}}[\s\S]*?{{\/if}}/g, "");
+          html = company?.qrCode   ? html.replace(/{{#if qrCode}}([\s\S]*?){{\/if}}/g, "$1")        : html.replace(/{{#if qrCode}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl    ? html.replace(/{{#if invoiceLogoUrl}}([\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if invoiceLogoUrl}}[\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText   ? html.replace(/{{#if invoiceLogoText}}([\s\S]*?){{\/if}}/g, "$1"): html.replace(/{{#if invoiceLogoText}}[\s\S]*?{{\/if}}/g, "");
+
+          const rows = [];
+          updatedCall.machines.forEach((machine, idx) => {
+            const charge = machine.serviceCharge ?? 0;
+            rows.push(`<tr>
+              <td>${idx + 1}</td>
+              <td><div class="item-name">Others Charges</div>${machine.modelNumber ? `<div class="item-model">Model: ${machine.modelNumber}</div>` : ""}</td>
+              <td style="font-size:11px;">${machine.serialNumber || "-"}</td>
+              <td>${machine.hsnCode || "-"}</td>
+              <td class="right">&#8377;${fmt(charge)}</td>
+            </tr>`);
+          });
+          html = html.replace("{{tableRows}}", rows.join(""));
+
+          const DOCS_DIR = process.env.NODE_ENV === "production"
+            ? "/app/cloud/documents"
+            : path.join(__dirname, "../../../cloud/documents");
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const filename = `others_invoice_${invoiceNumber}_${Date.now()}.pdf`;
+          const filepath = path.join(DOCS_DIR, filename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: "networkidle0" });
+          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${filename}`;
+          await ServiceCall.findByIdAndUpdate(callId, {
+            invoiceUrl,
+            invoiceNumber,
+            invoiceGrandTotal: grandTotal,
+            "cgst.amount": cgstAmount,
+            "sgst.amount": sgstAmount,
+            "igst.amount": igstAmount,
+          });
+
+          if (doSendEmail) {
+            await sendServiceCallInvoiceEmail({
+              invoiceNumber,
+              invoiceDate,
+              customerName:             updatedCall.customerInfo?.name  || "",
+              customerEmail:            updatedCall.customerInfo?.email || "",
+              callId:                   updatedCall.callId,
+              callType:                 updatedCall.callType,
+              completedDate,
+              engineerName:             updatedCall.engineerInfo?.name  || "",
+              machines:                 updatedCall.machines.map(m => ({ machineName: m.machineName, serialNumber: m.serialNumber })),
+              totalServiceCharges:      0,
+              totalPartsCharges:        0,
+              totalCounterReadingCharges: 0,
+              totalOthersCharges,
+              isCounterReading:         false,
+              isServiceCall:            false,
+              isInstallation:           false,
+              isOthers:                 true,
+              basicTotal,
+              cgstPercent, cgstAmount,
+              sgstPercent, sgstAmount,
+              igstPercent, igstAmount,
+              grandTotal,
+              invoiceUrl,
+              invoiceFilePath: filepath,
+              invoiceFileName: filename,
+              companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
+              companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
+              companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",
+              companyGst:     company?.gstNumber || updatedCall.companyInfo?.gstNumber || "",
+              companyEmail:   company?.email     || updatedCall.companyInfo?.email   || "",
+            });
+          }
+        } catch (err) {
+          console.error("Others invoice generation error:", err.message);
+        }
+      });
+    }
+
     if (call.callType === "Installation" || call.callType === "Dis-Installation") {
       setImmediate(async () => {
         try {
@@ -1829,10 +1993,10 @@ const getCounterReadingAssignedCalls = async (req, res) => {
       status: { $in: ["Assigned"] },
       callType: "Counter-Reading",
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason note cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
-    const data = await buildCounterReadingInfo(calls);
+    const data = (await buildCounterReadingInfo(calls)).map(c => ({ ...c, ...(c.note?.trim() && { adminRemarks: c.note }), note: undefined }));
 
     return res.status(200).json({ success: true, data });
   } catch (err) {
@@ -1849,7 +2013,7 @@ const getCounterReadingHistoryCalls = async (req, res) => {
       status: { $in: ["Completed", "Cancelled"] },
       callType: "Counter-Reading",
     })
-      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges cgst.percent sgst.percent igst.percent")
+      .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType totalCounterReadingCharges totalCharges note cgst.percent sgst.percent igst.percent")
       .sort({ updatedAt: -1 });
 
     const data = await Promise.all(calls.map(async (call) => {
@@ -1858,7 +2022,7 @@ const getCounterReadingHistoryCalls = async (req, res) => {
         ...m,
         lifetimeCopies: m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0,
       })));
-      return { ...callObj, machines };
+      return { ...callObj, ...(callObj.note?.trim() && { adminRemarks: callObj.note }), note: undefined, machines };
     }));
 
     return res.status(200).json({ success: true, data });

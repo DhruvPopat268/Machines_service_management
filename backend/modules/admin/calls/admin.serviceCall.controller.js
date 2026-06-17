@@ -553,7 +553,7 @@ const raiseServiceCall = async (req, res) => {
       const isExpired = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
       const notFreeService = !foundEntry.contractType?.freeService;
       const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
-      const requiresCharge = isInstallationType || isExpired || notFreeService;
+      const requiresCharge = isInstallationType || callType === "Others" || isExpired || notFreeService;
 
       if (callType === "Counter-Reading") {
         const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
@@ -572,7 +572,7 @@ const raiseServiceCall = async (req, res) => {
       }
 
       if (requiresCharge && (serviceCharge === undefined || serviceCharge === null)) {
-        const reason = isInstallationType ? `${callType} charges are required` : (isExpired ? "expired contract" : "non-free service");
+        const reason = isInstallationType ? `${callType} charges are required` : callType === "Others" ? "Others charges are required" : (isExpired ? "expired contract" : "non-free service");
         return res.status(400).json({ success: false, message: `serviceCharge is required for serial number "${sn}" (${reason})` });
       }
       if (serviceCharge !== undefined && serviceCharge !== null && (typeof serviceCharge !== "number" || serviceCharge < 0))

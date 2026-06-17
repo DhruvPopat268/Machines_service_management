@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Others Invoice - {{invoiceNumber}}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #111; background: #fff; padding: 24px; }
+
+    .invoice-wrapper { max-width: 850px; margin: 0 auto; border: 1px solid #ccc; }
+
+    /* Header */
+    .header { display: flex; align-items: flex-start; justify-content: space-between; padding: 16px 20px; border-bottom: 2px solid #111; }
+    .company-info h1 { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .company-info .tagline { font-size: 11px; color: #444; margin-top: 3px; }
+    .company-info .details { font-size: 11px; color: #333; margin-top: 6px; line-height: 1.7; }
+    .header-logo { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+    .header-logo img { width: 120px; height: auto; object-fit: contain; display: block; }
+    .header-logo .logo-text { font-size: 10px; color: #444; text-align: right; max-width: 130px; line-height: 1.5; font-style: italic; }
+
+    /* Invoice meta */
+    .invoice-meta { display: flex; justify-content: space-between; align-items: center; padding: 8px 20px; border-bottom: 1px solid #ccc; background: #f9f9f9; }
+    .invoice-meta .inv-no { font-weight: 700; font-size: 13px; }
+    .invoice-meta .inv-date { font-size: 12px; }
+    .invoice-meta .inv-type { font-size: 11px; font-weight: 600; color: #555; padding: 2px 8px; }
+
+    /* Buyer section */
+    .buyer-section { display: flex; padding: 12px 20px; border-bottom: 1px solid #ccc; gap: 20px; }
+    .buyer-left { flex: 1; }
+    .buyer-right { width: 260px; }
+    .buyer-left .label, .buyer-right .label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #666; margin-bottom: 2px; }
+    .buyer-left h3 { font-size: 13px; font-weight: 700; }
+    .buyer-left .address { font-size: 11px; color: #333; margin-top: 3px; line-height: 1.6; }
+    .buyer-right table { width: 100%; font-size: 11px; }
+    .buyer-right table td { padding: 6px 4px; vertical-align: top; }
+    .buyer-right table td:first-child { color: #555; white-space: nowrap; width: 120px; }
+    .buyer-right table td:last-child { font-weight: 600; }
+
+    /* Items table */
+    .items-table { width: 100%; border-collapse: collapse; }
+    .items-table th { background: #111; color: #fff; padding: 7px 10px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+    .items-table th.right, .items-table td.right { text-align: right; }
+    .items-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+    .items-table tbody tr:last-child td { border-bottom: none; }
+    .items-table tbody tr:nth-child(even) td { background: #fafafa; }
+    .item-name { font-weight: 600; }
+    .item-model { font-size: 10px; color: #555; margin-top: 2px; }
+    .item-serial { font-size: 10px; color: #444; margin-top: 3px; }
+
+    /* Footer section */
+    .footer-section { display: flex; border-top: 2px solid #111; align-items: stretch; }
+    .footer-left { flex: 1; padding: 12px 20px; border-right: 1px solid #ccc; font-size: 11px; line-height: 2; }
+    .footer-left .section-title { font-weight: 700; font-size: 11px; text-transform: uppercase; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 3px; margin-bottom: 6px; }
+    .footer-left-inner { display: flex; align-items: stretch; gap: 16px; }
+    .bank-details { flex: 1; }
+    .footer-right { width: 280px; padding: 12px 20px; display: flex; flex-direction: column; justify-content: center; }
+    .totals-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #eee; }
+    .totals-row.grand { font-weight: 700; font-size: 14px; border-top: 2px solid #111; border-bottom: none; margin-top: 4px; padding-top: 6px; color: #111; }
+    .totals-row span:last-child { font-weight: 600; }
+
+    /* QR block */
+    .qr-block { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .qr-block img { width: 100px; height: 100px; object-fit: contain; border: 1px solid #ddd; padding: 3px; image-rendering: pixelated; }
+    .qr-label { font-size: 10px; color: #555; text-align: center; }
+
+    /* Bottom signature */
+    .bottom-section { display: flex; justify-content: space-between; align-items: flex-end; padding: 16px 20px; border-top: 1px solid #ccc; }
+    .signature-block { text-align: right; font-size: 11px; }
+    .signature-block .for-company { font-weight: 700; font-size: 12px; margin-bottom: 50px; }
+    .signature-block .sig-line { border-top: 1px solid #111; padding-top: 4px; font-size: 11px; color: #333; width: 180px; }
+    .jurisdiction-text { display: none; }
+    .receiver-block { font-size: 11px; }
+    .receiver-block .rec-title { font-weight: 700; font-size: 12px; margin-bottom: 40px; }
+    .receiver-block p { margin-top: 10px; }
+
+    /* Note */
+    .note { padding: 8px 20px; font-size: 10px; color: #555; border-top: 1px solid #eee; font-style: italic; }
+    .authorized-text { padding: 6px 20px 8px; font-size: 11px; font-weight: 900; border-top: 2px solid #111; text-align: center; letter-spacing: 0.5px; }
+    .authorized-text .canon-auth { color: #cc0000; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="invoice-wrapper">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="company-info">
+        <h1>{{companyName}}</h1>
+        {{#if companyTagline}}<div class="tagline">{{companyTagline}}</div>{{/if}}
+        <div class="details">
+          {{companyAddress}}<br/>
+          Phone: {{companyPhone}}<br/>
+          E-mail: {{companyEmail}}
+        </div>
+      </div>
+      {{#if invoiceLogoUrl}}
+      <div class="header-logo">
+        <img src="{{invoiceLogoUrl}}" alt="Logo" />
+        {{#if invoiceLogoText}}<div class="logo-text">{{invoiceLogoText}}</div>{{/if}}
+      </div>
+      {{/if}}
+    </div>
+
+    <!-- Invoice Meta -->
+    <div class="invoice-meta">
+      <span class="inv-no">GST INV NO: {{invoiceNumber}}</span>
+      <span class="inv-type">Others Invoice</span>
+      <span class="inv-date">DATE: {{invoiceDate}}</span>
+    </div>
+
+    <!-- Buyer Details -->
+    <div class="buyer-section">
+      <div class="buyer-left">
+        <div class="label">Buyer Details:</div>
+        <h3>{{customerName}}</h3>
+        <div class="address">{{customerAddress}}</div>
+      </div>
+      <div class="buyer-right">
+        <table>
+          <tr><td>Customer ID.</td><td>{{customerUniqueId}}</td></tr>
+          <tr><td>Customer PO/Ref</td><td></td></tr>
+          <tr><td>Customer GST No.</td><td>{{customerGst}}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Items Table -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">Sr.No.</th>
+          <th>Description</th>
+          <th style="width:120px;">Serial No.</th>
+          <th style="width:100px;">HSN Code</th>
+          <th style="width:110px;" class="right">Amount (&#8377;)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{tableRows}}
+      </tbody>
+    </table>
+
+    <!-- Footer -->
+    <div class="footer-section">
+      <div class="footer-left">
+        <div class="section-title">Supplier Details</div>
+        <div class="footer-left-inner">
+          <div class="bank-details">
+            <div>GST No: <strong>{{companyGst}}</strong></div>
+            <div>A/C No: <strong>{{bankAccountNumber}}</strong></div>
+            <div>Bank: <strong>{{bankName}}</strong></div>
+            <div>IFSC Code: <strong>{{ifscCode}}</strong></div>
+            <div>Branch: <strong>{{bankBranch}}</strong></div>
+          </div>
+          {{#if qrCode}}
+          <div class="qr-block">
+            <img src="{{qrCode}}" alt="QR Code" />
+            <div class="qr-label">Scan to Pay</div>
+          </div>
+          {{/if}}
+        </div>
+      </div>
+      <div class="footer-right">
+        <div class="totals-row"><span>Basic Total</span><span>&#8377;{{basicTotal}}</span></div>
+        {{#if cgst}}<div class="totals-row"><span>CGST @ {{cgstPercent}}%</span><span>&#8377;{{cgstAmount}}</span></div>{{/if}}
+        {{#if sgst}}<div class="totals-row"><span>SGST @ {{sgstPercent}}%</span><span>&#8377;{{sgstAmount}}</span></div>{{/if}}
+        {{#if igst}}<div class="totals-row"><span>IGST @ {{igstPercent}}%</span><span>&#8377;{{igstAmount}}</span></div>{{/if}}
+        <div class="totals-row grand"><span>Grand Total</span><span>&#8377;{{grandTotal}}</span></div>
+      </div>
+    </div>
+
+    <!-- Receiver + Signature -->
+    <div class="bottom-section">
+      <div class="receiver-block">
+        <div class="rec-title">Receiver Sign &amp; Seal</div>
+        <p>Name :</p>
+        <p>Contact Number :</p>
+      </div>
+      <div class="signature-block">
+        <div class="for-company">For {{companyName}}</div>
+        <div class="sig-line">Authorized Signatory</div>
+        <div class="jurisdiction-text">Subject to Jalgaon jurisdiction</div>
+      </div>
+    </div>
+
+    <!-- Note -->
+    <div class="note">Please ask for Stamp Receipt for any Payment Transactions Subject to Jalgaon jurisdiction</div>
+    <div class="authorized-text">
+      <span class="canon-auth">Authorized Channel Partner for Canon India Pvt Ltd</span>
+    </div>
+
+  </div>
+</body>
+</html>

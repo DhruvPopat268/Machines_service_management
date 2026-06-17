@@ -16,7 +16,7 @@ const getHome = async (req, res) => {
         "engineerInfo._id": engineerId,
         status: { $in: ["Travel Started", "Reached Location", "In Progress"] },
       })
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason cgst.percent sgst.percent igst.percent")
+        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType onHoldReason note cgst.percent sgst.percent igst.percent")
         .sort({ updatedAt: -1 }),
       AdminUser.findById(engineerId).select("name phone email engineerId profilePhoto isOnline createdAt dateOfJoining"),
       ServiceCall.countDocuments({ "engineerInfo._id": engineerId, status:"Assigned" }),
@@ -26,7 +26,8 @@ const getHome = async (req, res) => {
     ]);
 
     const activeCalls = await buildCounterReadingInfo(rawActiveCalls);
-    const enrichedActiveCalls = await buildServiceCallReadingInfo(activeCalls);
+    const enrichedActiveCallsRaw = await buildServiceCallReadingInfo(activeCalls);
+    const enrichedActiveCalls = enrichedActiveCallsRaw.map(c => ({ ...c, ...(c.note?.trim() && { adminRemarks: c.note }), note: undefined }));
 
     const experienceYears = engineer?.dateOfJoining
       ? parseFloat(((Date.now() - new Date(engineer.dateOfJoining).getTime()) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1))
