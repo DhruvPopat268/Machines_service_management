@@ -9,6 +9,8 @@ const path = require("path");
 const fs = require("fs/promises");
 const sharp = require("sharp");
 
+const { sendCallAssignedNotification, sendCallCancelledNotification } = require("../../../onesignal/notifications");
+
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getCalls = async (req, res) => {
@@ -190,7 +192,9 @@ const assignEngineer = async (req, res) => {
       invoiceGrandTotal,
     });
 
-    return res.status(200).json({ success: true, data: await ServiceCall.findById(id) });
+    const assignedCall = await ServiceCall.findById(id);
+    setImmediate(() => sendCallAssignedNotification(id));
+    return res.status(200).json({ success: true, data: assignedCall });
   } catch (error) {
     console.error("Error assigning engineer:", error);
     return res.status(500).json({ success: false, message: "Failed to assign engineer" });
@@ -255,6 +259,7 @@ const updateCall = async (req, res) => {
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
     const updated = await ServiceCall.findByIdAndUpdate(id, update, { new: true });
+    if (update.status === "Cancelled") setImmediate(() => sendCallCancelledNotification(id));
     return res.status(200).json({ success: true, data: updated });
   } catch (err) {
     console.error("Error updating call:", err);
