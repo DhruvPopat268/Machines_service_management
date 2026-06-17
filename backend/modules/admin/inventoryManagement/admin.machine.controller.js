@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 const Machine  = require("./admin.machine.model");
 const MachineCategory = require("../machineCategoryManagement/admin.machineCategory.model");
 const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
+const AdminUser = require("../auth/admin.user.model");
 const { validateCreateMachine, validateUpdateMachine, validateImageFile, MAX_IMAGES } = require("./admin.machine.validator");
 
 const createdDirs = new Set();
@@ -515,4 +516,93 @@ const exportMachines = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getOne, create, update, remove, downloadSample, importMachines, exportMachines };
+const buildMachineRow = (machine, borderColor) => {
+  const image = machine.images?.[0]
+    ? `<img src="${machine.images[0]}" width="52" height="52" style="border-radius:8px; object-fit:cover; border:1px solid #e5e7eb; display:block;" />`
+    : `<div style="width:52px; height:52px; border-radius:8px; background:#e5e7eb; font-size:10px; color:#9ca3af; text-align:center; line-height:52px;">No img</div>`;
+
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid ${borderColor};">
+      <tr>
+        <td style="width:56px; vertical-align:top; padding-right:14px;">${image}</td>
+        <td style="vertical-align:top;">
+          <p style="margin:0; font-size:14px; font-weight:700; color:#111827;">${machine.name}</p>
+          <p style="margin:3px 0 0; font-size:12px; color:#6b7280;">Model: ${machine.modelNumber || "—"} &nbsp;|&nbsp; HSN: ${machine.hsnCode || "—"}</p>
+          <p style="margin:3px 0 0; font-size:12px; color:#6b7280;">${machine.category?.name || "—"} &nbsp;|&nbsp; ${machine.division?.name || "—"}</p>
+          <p style="margin:3px 0 0; font-size:12px; font-weight:600; color:${machine.stockStatus === "Out of Stock" ? "#dc2626" : "#d97706"};">Stock: ${machine.currentStock}</p>
+        </td>
+      </tr>
+    </table>`;
+};
+
+const sendInventoryAlert = async (req, res) => {
+  try {
+    const cronKey = req.headers["x-cron-key"];
+
+    if (!cronKey || cronKey !== process.env.CRON_JOB_KEY) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+    const [outOfStock, lowStock, adminUsers] = await Promise.all([
+      Machine.find({ stockStatus: "Out of Stock", status: "Active" }).populate("category", "name").populate("division", "name").lean(),
+      Machine.find({ stockStatus: "Low Stock",    status: "Active" }).populate("category", "name").populate("division", "name").lean(),
+      AdminUser.find({ role: "Admin", status: "Active" }).select("email name").lean(),
+    ]);
+
+    if (!outOfStock.length && !lowStock.length)
+      return res.status(200).json({ success: true, message: "No stock alerts to send" });
+
+    if (!adminUsers.length)
+      return res.status(200).json({ success: true, message: "No active admin users found" });
+
+    const templatePath = path.join(__dirname, "../../admin/emailTemplates/inventoryAlert.html");
+    let html = await fs.readFile(templatePath, "utf-8");
+
+    const alertDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+
+    const outOfStockRows = outOfStock.map(m => buildMachineRow(m, "#fecaca")).join("");
+    const lowStockRows   = lowStock.map(m => buildMachineRow(m, "#fde68a")).join("");
+
+    html = html
+      .replace(/{{alertDate}}/g,      alertDate)
+      .replace(/{{outOfStockCount}}/g, outOfStock.length)
+      .replace(/{{lowStockCount}}/g,   lowStock.length)
+      .replace(/{{outOfStockRows}}/g,  outOfStockRows)
+      .replace(/{{lowStockRows}}/g,    lowStockRows);
+
+    html = outOfStock.length
+      ? html.replace(/{{#if hasOutOfStock}}([\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if hasOutOfStock}}[\s\S]*?{{\/if}}/g, "");
+
+    html = lowStock.length
+      ? html.replace(/{{#if hasLowStock}}([\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if hasLowStock}}[\s\S]*?{{\/if}}/g, "");
+
+    const { sendMail } = require("../../../utils/emailService");
+
+    const results = await Promise.allSettled(
+      adminUsers.map(admin =>
+        sendMail({
+          to:      admin.email,
+          subject: `Inventory Alert — ${outOfStock.length} Out of Stock, ${lowStock.length} Low Stock`,
+          html,
+        })
+      )
+    );
+
+    const sent   = results.filter(r => r.status === "fulfilled").length;
+    const failed = results.filter(r => r.status === "rejected").length;
+
+    return res.status(200).json({
+      success: true,
+      message: `Alert sent to ${sent} admin(s)${failed ? `, ${failed} failed` : ""}`,
+      data: { outOfStockCount: outOfStock.length, lowStockCount: lowStock.length, emailsSent: sent },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getOne, create, update, remove, downloadSample, importMachines, exportMachines, sendInventoryAlert };

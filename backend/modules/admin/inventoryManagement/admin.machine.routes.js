@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const multer = require("multer");
-const { getAll, getOne, create, update, remove, downloadSample, importMachines, exportMachines } = require("./admin.machine.controller");
+const { getAll, getOne, create, update, remove, downloadSample, importMachines, exportMachines, sendInventoryAlert } = require("./admin.machine.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 const { MAX_IMAGES, ALLOWED_EXTENSIONS } = require("./admin.machine.validator");
 
@@ -20,6 +20,7 @@ const uploadXlsx = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+router.post("/inventory-alert", sendInventoryAlert);
 
 router.use(adminAuthMiddleware);
 
