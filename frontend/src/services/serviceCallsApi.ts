@@ -124,7 +124,7 @@ export const serviceCallsApi = {
     return res.data.data;
   },
 
-  updateCall: async (id: string, payload: { note?: string; priority?: string; status?: string; companyId?: string | null }): Promise<ServiceCall> => {
+  updateCall: async (id: string, payload: { note?: string; priority?: string; status?: string }): Promise<ServiceCall> => {
     const res = await api.patch(`/admin/service-calls/${id}`, payload);
     return res.data.data;
   },

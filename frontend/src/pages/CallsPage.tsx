@@ -102,6 +102,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
   const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
 
+  const [cancelTarget, setCancelTarget] = useState<ServiceCall | null>(null);
+  const [cancelling, setCancelling]     = useState(false);
+
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
   const [parts, setParts]                   = useState<DropdownOption[]>([]);
@@ -486,6 +489,10 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <Button size="icon" variant="ghost" className="h-8 w-8" title="Invoice" onClick={() => window.open(c.invoiceUrl, "_blank")}
             ><FileText className="h-4 w-4" /></Button>
           )}
+          {c.status !== "Completed" && c.status !== "Cancelled" && (
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600" title="Cancel Call" onClick={() => setCancelTarget(c)}
+            ><XCircle className="h-4 w-4" /></Button>
+          )}
         </div>
       ),
     },
@@ -684,6 +691,38 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   }}
                 >
                   {assigning ? "Assigning..." : "Assign"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!cancelTarget} onOpenChange={() => setCancelTarget(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Cancel Call — {cancelTarget?.callId}</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground py-2">Are you sure you want to mark this call as cancelled? This action cannot be undone.</p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setCancelTarget(null)}>No, Go Back</Button>
+                <Button
+                  variant="destructive"
+                  disabled={cancelling}
+                  onClick={async () => {
+                    if (!cancelTarget) return;
+                    setCancelling(true);
+                    try {
+                      await serviceCallsApi.updateCall(cancelTarget._id, { status: "Cancelled" });
+                      toast.success(`Call ${cancelTarget.callId} marked as cancelled`);
+                      setCancelTarget(null);
+                      fetchCalls(pagination.page);
+                    } catch (err: any) {
+                      toast.error(err?.response?.data?.message || "Failed to cancel call");
+                    } finally {
+                      setCancelling(false);
+                    }
+                  }}
+                >
+                  {cancelling ? "Cancelling..." : "Yes, Cancel Call"}
                 </Button>
               </DialogFooter>
             </DialogContent>

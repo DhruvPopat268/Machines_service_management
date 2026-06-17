@@ -221,7 +221,7 @@ const STATUS_DATE_MAP = {
 const updateCall = async (req, res) => {
   try {
     const { id } = req.params;
-    const { note, priority, status, companyId } = req.body;
+    const { note, priority, status } = req.body;
 
     const call = await ServiceCall.findById(id);
     if (!call)
@@ -242,33 +242,13 @@ const updateCall = async (req, res) => {
     }
 
     if (status !== undefined) {
+      if (status !== "Cancelled")
+        return res.status(400).json({ success: false, message: "Only Cancelled status is allowed via this endpoint" });
       const allowed = STATUS_TRANSITIONS[call.status] ?? [];
-      if (!allowed.includes(status))
-        return res.status(400).json({ success: false, message: `Cannot transition from ${call.status} to ${status}` });
-      update.status = status;
-      const dateField = STATUS_DATE_MAP[status];
-      if (dateField) update[dateField] = new Date();
-    }
-
-    if (companyId !== undefined) {
-      if (companyId === null) {
-        update.companyInfo = null;
-      } else {
-        if (!mongoose.isValidObjectId(companyId))
-          return res.status(400).json({ success: false, message: "Invalid companyId" });
-        const Company = require("../companyManagement/admin.company.model");
-        const company = await Company.findById(companyId);
-        if (!company)
-          return res.status(404).json({ success: false, message: "Company not found" });
-        update.companyInfo = {
-          companyId: company._id,
-          name: company.name,
-          address: company.address,
-          phone: company.phone,
-          email: company.email,
-          gstNumber: company.gstNumber || "",
-        };
-      }
+      if (!allowed.includes("Cancelled"))
+        return res.status(400).json({ success: false, message: `Cannot cancel a call in ${call.status} status` });
+      update.status = "Cancelled";
+      update[STATUS_DATE_MAP["Cancelled"]] = new Date();
     }
 
     if (!Object.keys(update).length)

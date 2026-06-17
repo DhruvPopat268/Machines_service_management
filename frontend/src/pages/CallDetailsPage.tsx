@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText } from "lucide-react";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText, X } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import Spinner from "@/components/Spinner";
@@ -45,7 +45,7 @@ const CallDetailsPage = () => {
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
-  const [generatingInvoice, setGeneratingInvoice] = useState(false);
+  const [cancelDialog, setCancelDialog] = useState(false);
 
   const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [companies, setCompanies] = useState<{ _id: string; name: string; gstNumber?: string }[]>([]);
@@ -136,12 +136,21 @@ const CallDetailsPage = () => {
             {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
           </Button>
           )}
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setNote(call.note || ""); setNoteDialog(true); }}>
-            <StickyNote className="h-4 w-4" /> Add Note
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedPriority(call.priority || ""); setPriorityDialog(true); }}>
-            <Flag className="h-4 w-4" /> Set Priority
-          </Button>
+          {call.status !== "Completed" && call.status !== "Cancelled" && (
+            <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50" onClick={() => setCancelDialog(true)}>
+              <X className="h-4 w-4" /> Mark As Cancelled
+            </Button>
+          )}
+          {call.status !== "Completed" && call.status !== "Cancelled" && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => { setNote(call.note || ""); setNoteDialog(true); }}>
+              <StickyNote className="h-4 w-4" /> Add Admin Remarks
+            </Button>
+          )}
+          {call.status !== "Completed" && call.status !== "Cancelled" && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => { setSelectedPriority(call.priority || ""); setPriorityDialog(true); }}>
+              <Flag className="h-4 w-4" /> Set Priority
+            </Button>
+          )}
         </div>
       </div>
 
@@ -891,6 +900,39 @@ const CallDetailsPage = () => {
               }}
             >
               {saving ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Confirmation Dialog */}
+      <Dialog open={cancelDialog} onOpenChange={setCancelDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel Call — {call.callId}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">Are you sure you want to mark this call as cancelled? This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialog(false)}>No, Go Back</Button>
+            <Button
+              variant="destructive"
+              disabled={saving}
+              onClick={async () => {
+                if (!id) return;
+                setSaving(true);
+                try {
+                  await serviceCallsApi.updateCall(id, { status: "Cancelled" });
+                  toast.success(`Call ${call.callId} marked as cancelled`);
+                  queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
+                  setCancelDialog(false);
+                } catch (err: any) {
+                  toast.error(err?.response?.data?.message || "Failed to cancel call");
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {saving ? "Cancelling..." : "Yes, Cancel Call"}
             </Button>
           </DialogFooter>
         </DialogContent>
