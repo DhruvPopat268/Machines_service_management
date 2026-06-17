@@ -37,36 +37,7 @@ const AdminLayout = () => {
             </div>
             <div className="flex items-center gap-1">
              
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative h-9 w-9">
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-72">
-                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <div>
-                      <p className="text-sm font-medium">New call SC-1001</p>
-                      <p className="text-xs text-muted-foreground">Acme Corp - Spindle motor issue</p>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <div>
-                      <p className="text-sm font-medium">Low inventory alert</p>
-                      <p className="text-xs text-muted-foreground">Laser Lens is out of stock</p>
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <div>
-                      <p className="text-sm font-medium">Call assigned</p>
-                      <p className="text-xs text-muted-foreground">SC-1002 assigned to Raj Kumar</p>
-                    </div>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+           
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9">
