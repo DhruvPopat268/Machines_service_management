@@ -11,7 +11,7 @@ const sendCallAssignedNotification = async (callId) => {
     const engineer = await AdminUser.findById(call.engineerInfo._id).select("onesignalPlayerId phone").lean();
 
     const callLabel = call.callType === "Service-Call" ? "" : " Call";
-    const header  = `New ${call.callType}${callLabel} Assigned — ${call.callId}`;
+    const header  = `${call.callType}${callLabel} Assigned — ${call.callId}`;
     const message = `You have a new call at ${call.customerInfo.address}. Customer: ${call.customerInfo.name} (${call.customerInfo.phone})`;
 
     await EngineerNotification.create({
