@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Wrench, Eye, EyeOff } from "lucide-react";
 import api from "@/lib/axiosInterceptor";
+import { getFirstAllowedRoute } from "@/lib/permissionRoutes";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -22,7 +23,9 @@ const Login = () => {
     setLoading(true);
     try {
       await api.post("/admin/users/login", { email, password });
-      navigate("/dashboard");
+      const me = await api.get("/admin/system-users/me");
+      const { role, permissions = [] } = me.data.data;
+      navigate(getFirstAllowedRoute(permissions, role));
     } catch (err: any) {
       const msg = err.response?.data?.errors
         ? Object.values(err.response.data.errors).join(", ")

@@ -24,7 +24,7 @@ const adminUserSchema = new mongoose.Schema(
       longitude: { type: Number },
     },
     engineerId:      { type: String, trim: true, unique: true, sparse: true },
-    dateOfJoining:   { type: Date, required: true },
+    dateOfJoining:   { type: Date, required: function() { return this.role === "Engineer"; } },
     lastLoginAt:     { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },
     isOnline:       { type: Boolean, default: false },

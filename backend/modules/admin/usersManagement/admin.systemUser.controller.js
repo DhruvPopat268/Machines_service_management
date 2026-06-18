@@ -98,7 +98,20 @@ const getSystemUserById = async (req, res) => {
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    res.status(200).json({ success: true, data: user });
+    // Admin gets all permissions; others get their role's permissions
+    let permissions = [];
+    if (user.role === "Admin") {
+      const Permission = require("../permissions/admin.permission.model");
+      const allPerms = await Permission.find({ status: "Active" }).select("name");
+      permissions = allPerms.map((p) => p.name);
+    } else {
+      const Role = require("../rolesManagement/admin.role.model");
+      const role = await Role.findOne({ name: user.role, status: "Active" })
+        .populate({ path: "permissions", match: { status: "Active" }, select: "name" });
+      if (role) permissions = role.permissions.map((p) => p.name);
+    }
+
+    res.status(200).json({ success: true, data: { ...user.toObject(), permissions } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

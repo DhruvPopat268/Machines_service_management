@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog,
+  LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog, ShieldCheck, ShieldHalf,
   ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
@@ -11,39 +11,35 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useProfile } from "@/context/ProfileContext";
 
 const linkClass = "flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors";
 const activeClass = "bg-sidebar-accent text-sidebar-primary font-semibold";
+const labelClass = "flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md";
 
-interface NavItem {
-  title: string;
-  url: string;
-  icon: any;
+function SidebarLink({ to, icon: Icon, label, collapsed }: { to: string; icon: any; label: string; collapsed: boolean }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        {collapsed ? (
+          <NavLink to={to} end className={linkClass} activeClassName={activeClass}>
+            <Icon className="h-4 w-4 shrink-0" />
+          </NavLink>
+        ) : (
+          <NavLink to={to} end className={labelClass} activeClassName="text-sidebar-primary font-semibold">
+            <span className="flex items-center gap-2">
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {label}
+            </span>
+          </NavLink>
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
 }
 
-interface NavGroup {
-  label: string;
-  icon: any;
-  items: NavItem[];
-}
-
-const singleItems: NavItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-];
-
-const zonesItem: NavItem = { title: "Zones", url: "/zones", icon: MapPin };
-
-const contractTypesItem: NavItem = { title: "Contract Types", url: "/contract-types", icon: FileSignature };
-
-const pagesCategoryItem: NavItem = { title: "Pages Categories", url: "/pages-categories", icon: LayoutList };
-
-const usersItem: NavItem = { title: "System Users", url: "/users", icon: UserCog };
-const userRolesItem: NavItem = { title: "User Roles", url: "/user-roles", icon: Users };
-const engineersItem: NavItem      = { title: "Engineers",           url: "/engineers",             icon: HardHat };
-const engineerPerfItem: NavItem   = { title: "Performance Reports",  url: "/engineers/performance", icon: BarChart2 };
-
-function NestedCollapsible({ label, icon: Icon, urls, items, collapsed, depth = 8 }: {
-  label: string; icon: any; urls: string[]; items: NavItem[]; collapsed: boolean; depth?: number;
+function NestedCollapsible({ label, icon: Icon, urls, items, collapsed }: {
+  label: string; icon: any; urls: string[]; items: { title: string; url: string; icon: any }[]; collapsed: boolean;
 }) {
   const location = useLocation();
   const isActive = urls.some((u) => location.pathname === u || location.pathname.startsWith(u + "/"));
@@ -90,124 +86,34 @@ function NestedCollapsible({ label, icon: Icon, urls, items, collapsed, depth = 
   );
 }
 
-function InventorySection({ collapsed }: { collapsed: boolean }) {
-  const location = useLocation();
-
-  if (collapsed) return (
-    <SidebarMenu>
-      {[
-        { url: "/machine-divisions", icon: Layers }, { url: "/machine-categories", icon: Tag },
-        { url: "/machines", icon: HardDrive }, { url: "/machines/add", icon: HardDrive },
-        { url: "/inventory-logs", icon: FileText },
-      ].map((item) => (
-        <SidebarMenuItem key={item.url}>
-          <SidebarMenuButton asChild>
-            <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-              <item.icon className="h-4 w-4 shrink-0" />
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      ))}
-    </SidebarMenu>
-  );
-
-  return (
-    <div className="space-y-0.5">
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <NavLink to="/machine-divisions" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-              <span className="flex items-center gap-2">
-                <Layers className="h-3.5 w-3.5 shrink-0" />
-                <span>Machine Divisions</span>
-              </span>
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <NavLink to="/machine-categories" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-              <span className="flex items-center gap-2">
-                <Tag className="h-3.5 w-3.5 shrink-0" />
-                <span>Machine Categories</span>
-              </span>
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-      <NestedCollapsible
-        label="Machines" icon={HardDrive}
-        urls={["/machines", "/machines/add"]}
-        items={[{ title: "Add Machine", url: "/machines/add", icon: HardDrive }, { title: "Machine List", url: "/machines", icon: HardDrive }]}
-        collapsed={false} depth={3}
-      />
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <NavLink to="/inventory-logs" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-              <span className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
-                <span>Inventory Logs</span>
-              </span>
-            </NavLink>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </div>
-  );
-}
-
-function CollapsibleNavGroup({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
-  const location = useLocation();
-  const isActive = group.items.some((item) => location.pathname === item.url || location.pathname.startsWith(item.url + "/"));
-  const [open, setOpen] = useState(isActive);
-
-  if (collapsed) {
-    return (
-      <SidebarMenu>
-        {group.items.map((item) => (
-          <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild>
-              <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                <item.icon className="h-4 w-4 shrink-0" />
-              </NavLink>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarMenu>
-    );
-  }
-
-  return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors">
-        <span className="flex items-center gap-2">
-          <group.icon className="h-3.5 w-3.5" />
-          {group.label}
-        </span>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <SidebarMenu>
-          {group.items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              <SidebarMenuButton asChild>
-                <NavLink to={item.url} end className={cn(linkClass, "pl-8")} activeClassName={activeClass}>
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.title}</span>
-                </NavLink>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { hasPermission } = useProfile();
+
+  // Inventory machine items filtered by permission
+  const machineItems = [
+    ...(hasPermission("machines-add")  ? [{ title: "Add Machine",   url: "/machines/add", icon: HardDrive }] : []),
+    ...(hasPermission("machines-list") ? [{ title: "Machine List",  url: "/machines",     icon: HardDrive }] : []),
+  ];
+
+  const showInventorySection =
+    hasPermission("machine-divisions") ||
+    hasPermission("machine-categories") ||
+    machineItems.length > 0 ||
+    hasPermission("inventory-logs");
+
+  const showSystemUsersSection =
+    hasPermission("permissions") || hasPermission("roles") || hasPermission("system-users");
+
+  const showEngineersSection =
+    hasPermission("engineers") || hasPermission("engineer-performance");
+
+  const showCustomersSection =
+    hasPermission("problem-types") || hasPermission("customers");
+
+  const showCallsSection =
+    hasPermission("calls") || hasPermission("calls-raise");
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -222,342 +128,240 @@ export function AppSidebar() {
           </div>
         )}
       </div>
+
       <SidebarContent className="pt-2 overflow-y-auto scrollbar-none" style={{ overflowY: "auto" }}>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {singleItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+
+        {/* Dashboard */}
+        {hasPermission("dashboard") && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
                   <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.title}</span>}
+                    <NavLink to="/dashboard" end className={linkClass} activeClassName={activeClass}>
+                      <LayoutDashboard className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span>Dashboard</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Company Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to="/companies" end className={linkClass} activeClassName={activeClass}>
-                      <Building2 className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to="/companies" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <Building2 className="h-3.5 w-3.5 shrink-0" />
-                        Companies
-                      </span>
-                    </NavLink>
+        {/* Company Management */}
+        {hasPermission("companies") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Company Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/companies" icon={Building2} label="Companies" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Zone Management */}
+        {hasPermission("zones") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Zone Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/zones" icon={MapPin} label="Zones" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Contracts Management */}
+        {hasPermission("contract-types") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Contracts Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/contract-types" icon={FileSignature} label="Contract Types" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Pages Category */}
+        {hasPermission("pages-categories") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Pages Category Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/pages-categories" icon={LayoutList} label="Pages Categories" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Vendor Management */}
+        {hasPermission("vendors") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Vendor Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/vendors" icon={Truck} label="Vendors" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Inventory Management */}
+        {showInventorySection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Inventory Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <div className="space-y-0.5">
+                <SidebarMenu>
+                  {hasPermission("machine-divisions") && (
+                    <SidebarLink to="/machine-divisions" icon={Layers} label="Machine Divisions" collapsed={collapsed} />
                   )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Zone Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={zonesItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <zonesItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to={zonesItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <zonesItem.icon className="h-3.5 w-3.5 shrink-0" />
-                        {zonesItem.title}
-                      </span>
-                    </NavLink>
+                  {hasPermission("machine-categories") && (
+                    <SidebarLink to="/machine-categories" icon={Tag} label="Machine Categories" collapsed={collapsed} />
                   )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Contracts Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={contractTypesItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <contractTypesItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
+                </SidebarMenu>
+                {machineItems.length > 0 && (
+                  collapsed ? (
+                    <SidebarMenu>
+                      {machineItems.map((item) => (
+                        <SidebarMenuItem key={item.title}>
+                          <SidebarMenuButton asChild>
+                            <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
+                              <item.icon className="h-4 w-4 shrink-0" />
+                            </NavLink>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
                   ) : (
-                    <NavLink to={contractTypesItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <contractTypesItem.icon className="h-3.5 w-3.5 shrink-0" />
-                        {contractTypesItem.title}
-                      </span>
-                    </NavLink>
+                    <NestedCollapsible
+                      label="Machines" icon={HardDrive}
+                      urls={["/machines", "/machines/add"]}
+                      items={machineItems}
+                      collapsed={false}
+                    />
+                  )
+                )}
+                <SidebarMenu>
+                  {hasPermission("inventory-logs") && (
+                    <SidebarLink to="/inventory-logs" icon={FileText} label="Inventory Logs" collapsed={collapsed} />
                   )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                </SidebarMenu>
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Pages Category Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={pagesCategoryItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <pagesCategoryItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to={pagesCategoryItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <pagesCategoryItem.icon className="h-3.5 w-3.5 shrink-0" />
-                        {pagesCategoryItem.title}
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Purchase Management */}
+        {hasPermission("purchase-machines") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/purchase-machines" icon={ShoppingBag} label="Purchase Machines" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Vendor Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to="/vendors" end className={linkClass} activeClassName={activeClass}>
-                      <Truck className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to="/vendors" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <Truck className="h-3.5 w-3.5 shrink-0" />
-                        Vendors
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Sells Management */}
+        {hasPermission("sell-machines") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Sells Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/sell-machines" icon={ShoppingCart} label="Sell Machines" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Inventory Management</SidebarGroupLabel>}
-          <InventorySection collapsed={collapsed} />
-        </SidebarGroup>
+        {/* Call Management */}
+        {showCallsSection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {hasPermission("calls") && (
+                  <SidebarLink to="/calls" icon={PhoneCall} label="Calls" collapsed={collapsed} />
+                )}
+                {hasPermission("calls-raise") && (
+                  <SidebarLink to="/calls/raise" icon={PhoneOutgoing} label="Raise a Call" collapsed={collapsed} />
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to="/purchase-machines" end className={linkClass} activeClassName={activeClass}>
-                      <ShoppingBag className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to="/purchase-machines" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <ShoppingBag className="h-3.5 w-3.5 shrink-0" />
-                        Purchase Machines
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Travel Reimbursements */}
+        {hasPermission("reimbursements") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Travel Reimbursements</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/reimbursements" icon={Receipt} label="Travel Reimbursements" collapsed={collapsed} />
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Sells Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to="/sell-machines" end className={linkClass} activeClassName={activeClass}>
-                      <ShoppingCart className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to="/sell-machines" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <ShoppingCart className="h-3.5 w-3.5 shrink-0" />
-                        Sell Machines
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Customers Management */}
+        {showCustomersSection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Customers Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {hasPermission("problem-types") && (
+                  <SidebarLink to="/problem-types" icon={FileText} label="Problem Types" collapsed={collapsed} />
+                )}
+                {hasPermission("customers") && (
+                  <SidebarLink to="/customers" icon={Users} label="Customers" collapsed={collapsed} />
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {[
-                { title: "Calls", url: "/calls", icon: PhoneCall },
-                { title: "Raise a Call", url: "/calls/raise", icon: PhoneOutgoing },
-              ].map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    {collapsed ? (
-                      <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                        <item.icon className="h-4 w-4 shrink-0" />
-                      </NavLink>
-                    ) : (
-                      <NavLink to={item.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                        <span className="flex items-center gap-2">
-                          <item.icon className="h-3.5 w-3.5 shrink-0" />
-                          {item.title}
-                        </span>
-                      </NavLink>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* System Users Management */}
+        {showSystemUsersSection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">System Users Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {hasPermission("permissions") && (
+                  <SidebarLink to="/permissions" icon={ShieldCheck} label="System Users Permissions" collapsed={collapsed} />
+                )}
+                {hasPermission("roles") && (
+                  <SidebarLink to="/roles" icon={ShieldHalf} label="System Users Roles" collapsed={collapsed} />
+                )}
+                {hasPermission("system-users") && (
+                  <SidebarLink to="/users" icon={UserCog} label="System Users" collapsed={collapsed} />
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Travel Reimbursements</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to="/reimbursements" end className={linkClass} activeClassName={activeClass}>
-                      <Receipt className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to="/reimbursements" end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <Receipt className="h-3.5 w-3.5 shrink-0" />
-                        Travel Reimbursements
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/* Engineers Management */}
+        {showEngineersSection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Engineers Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {hasPermission("engineers") && (
+                  <SidebarLink to="/engineers" icon={HardHat} label="Engineers" collapsed={collapsed} />
+                )}
+                {hasPermission("engineer-performance") && (
+                  <SidebarLink to="/engineers/performance" icon={BarChart2} label="Performance Reports" collapsed={collapsed} />
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Customers Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {[
-                { title: "Problem Types", url: "/problem-types", icon: FileText },
-                { title: "Customers", url: "/customers", icon: Users },
-              ].map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    {collapsed ? (
-                      <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                        <item.icon className="h-4 w-4 shrink-0" />
-                      </NavLink>
-                    ) : (
-                      <NavLink to={item.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                        <span className="flex items-center gap-2">
-                          <item.icon className="h-3.5 w-3.5 shrink-0" />
-                          {item.title}
-                        </span>
-                      </NavLink>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">System Users Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {[usersItem].map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    {collapsed ? (
-                      <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                        <item.icon className="h-4 w-4 shrink-0" />
-                      </NavLink>
-                    ) : (
-                      <NavLink to={item.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                        <span className="flex items-center gap-2">
-                          <item.icon className="h-3.5 w-3.5 shrink-0" />
-                          {item.title}
-                        </span>
-                      </NavLink>
-                    )}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Engineers Management</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={engineersItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <engineersItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to={engineersItem.url} end className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md" activeClassName="text-sidebar-primary font-semibold">
-                      <span className="flex items-center gap-2">
-                        <engineersItem.icon className="h-3.5 w-3.5 shrink-0" />
-                        {engineersItem.title}
-                      </span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  {collapsed ? (
-                    <NavLink to={engineerPerfItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <engineerPerfItem.icon className="h-4 w-4 shrink-0" />
-                    </NavLink>
-                  ) : (
-                    <NavLink to={engineerPerfItem.url} end className={linkClass} activeClassName={activeClass}>
-                      <engineerPerfItem.icon className="h-4 w-4 shrink-0" />
-                      <span>{engineerPerfItem.title}</span>
-                    </NavLink>
-                  )}
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
     </Sidebar>
   );

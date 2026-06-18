@@ -15,6 +15,8 @@ router.use("/sales", require("./soldMachines/admin.soldMachine.routes"));
 router.use("/inventory-logs", require("./inventoryLogs/admin.inventoryLog.routes"));
 router.use("/service-calls", require("./calls/admin.serviceCall.routes"));
 router.use("/system-users",  require("./usersManagement/admin.systemUser.routes"));
+router.use("/permissions",   require("./permissions/admin.permission.routes"));
+router.use("/roles",         require("./rolesManagement/admin.role.routes"));
 router.use("/engineers",     require("./engineerManagement/admin.engineer.routes"));
 router.use("/reimbursements", require("./reimbursement/admin.reimbursement.routes"));
 router.use("/pages-categories", require("./pagesCategoryManagement/admin.pagesCategory.routes"));
