@@ -1,13 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
 import { StatusBadge } from "@/components/StatusBadge";
-import { PhoneCall, AlertCircle, UserCog, Package, IndianRupee, Users } from "lucide-react";
+import { PhoneCall, AlertCircle, UserCog, Package, IndianRupee, ChevronLeft, ChevronRight } from "lucide-react";
 import { serviceCalls, users, customers, machines } from "@/data/dummyData";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
-import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
+import api from "@/lib/axiosInterceptor";
+
+interface ExpiryItem { machineName: string; modelNumber: string; serialNumber: string; contractType: string; validFrom: string; validTo: string; }
+interface ExpiryCustomer { customerId: string | null; name: string; email: string; phone: string; expired: ExpiryItem[]; expiringSoon: ExpiryItem[]; }
+
 
 const allMonthlyData = [
   { month: "Jan", calls: 18, completed: 15, profit: 320000 },
@@ -23,10 +29,24 @@ const Dashboard = () => {
   const [toDate, setToDate] = useState("");
   const [viewMode, setViewMode] = useState<"both" | "service" | "account">("both");
 
+  const [expiryData, setExpiryData]       = useState<ExpiryCustomer[]>([]);
+  const [expiryPage, setExpiryPage]       = useState(0);
+  const [expiryOpen, setExpiryOpen]       = useState(false);
+  const [expiryLoading, setExpiryLoading] = useState(true);
+
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    api.get("/admin/sales/contract-expiry-status")
+      .then(r => { setExpiryData(r.data.data); if (r.data.data.length > 0) setExpiryOpen(true); })
+      .catch(() => {})
+      .finally(() => setExpiryLoading(false));
+  }, []);
+
+
 
   const filteredCalls = dateMode === "custom" && fromDate && toDate
     ? serviceCalls.filter((c) => c.createdDate >= fromDate && c.createdDate <= toDate)
@@ -66,6 +86,9 @@ const Dashboard = () => {
     { label: "Cancelled", value: filteredCalls.filter((c) => c.status === "Cancelled").length, icon: AlertCircle, colorClass: "text-destructive bg-destructive/10" },
   ];
 
+  const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const currentExpiry = expiryData[expiryPage];
+
   const recentCalls = filteredCalls.slice(0, 5);
 
   const usersData = [
@@ -83,6 +106,107 @@ const Dashboard = () => {
     <div className="space-y-6">
       {loading && <Spinner />}
       {!loading && <>
+        {/* Contract Expiry Dialog */}
+        <Dialog open={expiryOpen} onOpenChange={setExpiryOpen}>
+          <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+            <DialogHeader>
+              <div className="flex items-center justify-between pr-6">
+                <div>
+                  <DialogTitle>Contract Expiry Alerts</DialogTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">{expiryData.length} customer{expiryData.length > 1 ? "s" : ""} with expiring contracts</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button disabled={expiryPage === 0} onClick={() => setExpiryPage(p => p - 1)}
+                    className="h-7 w-7 rounded-md border flex items-center justify-center disabled:opacity-40 hover:bg-muted">
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs text-muted-foreground">{expiryPage + 1} / {expiryData.length}</span>
+                  <button disabled={expiryPage === expiryData.length - 1} onClick={() => setExpiryPage(p => p + 1)}
+                    className="h-7 w-7 rounded-md border flex items-center justify-center disabled:opacity-40 hover:bg-muted">
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {/* Customer info */}
+              <div className="flex items-center gap-3 rounded-lg bg-muted/40 px-4 py-3">
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">{currentExpiry.name}</p>
+                  <p className="text-xs text-muted-foreground">{currentExpiry.email} · {currentExpiry.phone}</p>
+                </div>
+                <div className="flex gap-2">
+                  {currentExpiry.expired.length > 0 && <span className="text-[11px] font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{currentExpiry.expired.length} Expired</span>}
+                  {currentExpiry.expiringSoon.length > 0 && <span className="text-[11px] font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{currentExpiry.expiringSoon.length} Expiring Soon</span>}
+                </div>
+              </div>
+
+              {/* Expired */}
+              {currentExpiry.expired.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 overflow-hidden">
+                  <p className="px-4 py-2 text-xs font-bold text-red-700 uppercase tracking-wide border-b border-red-200">🔴 Expired</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-red-100 text-red-800">
+                        <th className="text-left px-4 py-2 font-semibold">Machine</th>
+                        <th className="text-left px-4 py-2 font-semibold">Serial No.</th>
+                        <th className="text-left px-4 py-2 font-semibold">Contract Type</th>
+                        <th className="text-left px-4 py-2 font-semibold">Valid From</th>
+                        <th className="text-left px-4 py-2 font-semibold">Valid To</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-red-100">
+                      {currentExpiry.expired.map((item, i) => (
+                        <tr key={i} className="bg-white">
+                          <td className="px-4 py-2">{item.machineName}</td>
+                          <td className="px-4 py-2 font-mono">{item.serialNumber}</td>
+                          <td className="px-4 py-2">{item.contractType}</td>
+                          <td className="px-4 py-2">{fmtDate(item.validFrom)}</td>
+                          <td className="px-4 py-2 text-red-600 font-medium">{fmtDate(item.validTo)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Expiring Soon */}
+              {currentExpiry.expiringSoon.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+                  <p className="px-4 py-2 text-xs font-bold text-amber-700 uppercase tracking-wide border-b border-amber-200">🟡 Expiring Soon</p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-amber-100 text-amber-800">
+                        <th className="text-left px-4 py-2 font-semibold">Machine</th>
+                        <th className="text-left px-4 py-2 font-semibold">Serial No.</th>
+                        <th className="text-left px-4 py-2 font-semibold">Contract Type</th>
+                        <th className="text-left px-4 py-2 font-semibold">Valid From</th>
+                        <th className="text-left px-4 py-2 font-semibold">Valid To</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-amber-100">
+                      {currentExpiry.expiringSoon.map((item, i) => (
+                        <tr key={i} className="bg-white">
+                          <td className="px-4 py-2">{item.machineName}</td>
+                          <td className="px-4 py-2 font-mono">{item.serialNumber}</td>
+                          <td className="px-4 py-2">{item.contractType}</td>
+                          <td className="px-4 py-2">{fmtDate(item.validFrom)}</td>
+                          <td className="px-4 py-2 text-amber-600 font-medium">{fmtDate(item.validTo)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t">
+              <Button variant="outline" onClick={() => setExpiryOpen(false)}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <div className="flex flex-col gap-3">
           <div className="flex items-center bg-muted rounded-lg p-1 w-fit">
             {(["both", "service", "account"] as const).map((mode) => (

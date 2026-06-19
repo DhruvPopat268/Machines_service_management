@@ -784,6 +784,48 @@ const generateInvoice = async (req, res) => {
   }
 };
 
+const getContractExpiryStatus = async (req, res) => {
+  try {
+    const now   = new Date();
+    const days  = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
+    const inNDays = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const sales = await SoldMachine.find({
+      "machines.serialNumbers.contractType.validTo": { $lte: inNDays },
+    }).lean();
+
+    const customerMap = {};
+    for (const sale of sales) {
+      const { customerId, name, email, phone } = sale.customerInfo;
+      const key = customerId?.toString() || email;
+      if (!customerMap[key]) customerMap[key] = { customerId: customerId || null, name, email, phone, expired: [], expiringSoon: [] };
+
+      for (const machine of sale.machines) {
+        for (const sn of (machine.serialNumbers || [])) {
+          const ct = sn.contractType;
+          if (!ct?.validTo) continue;
+          const validTo = new Date(ct.validTo);
+          const item = {
+            machineName:  machine.machineName,
+            modelNumber:  machine.modelNumber,
+            serialNumber: sn.serialNumber,
+            contractType: ct.name,
+            validFrom:    ct.validFrom,
+            validTo:      ct.validTo,
+          };
+          if (validTo < now)       customerMap[key].expired.push(item);
+          else if (validTo <= inNDays) customerMap[key].expiringSoon.push(item);
+        }
+      }
+    }
+
+    const customers = Object.values(customerMap).filter(c => c.expired.length || c.expiringSoon.length);
+    return res.status(200).json({ success: true, data: customers });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const sendContractExpiryAlerts = async (req, res) => {
   try {
     const cronKey = req.headers["x-cron-key"];
@@ -849,4 +891,4 @@ const sendContractExpiryAlerts = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice, sendContractExpiryAlerts };
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus };
