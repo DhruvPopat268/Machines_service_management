@@ -130,6 +130,7 @@ const Dashboard = () => {
             </DialogHeader>
 
             <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {currentExpiry && <>
               {/* Customer info */}
               <div className="flex items-center gap-3 rounded-lg bg-muted/40 px-4 py-3">
                 <div className="flex-1">
@@ -199,6 +200,7 @@ const Dashboard = () => {
                   </table>
                 </div>
               )}
+              </>}
             </div>
 
             <div className="flex justify-end pt-2 border-t">
