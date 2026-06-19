@@ -15,7 +15,7 @@ import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
-const PARTS_CATEGORY_ID    = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -69,34 +69,34 @@ interface PagesCategoryConfigState {
 const formatDateTime = (iso: string) => {
   const d = new Date(iso);
   return {
-    date: `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`,
-    time: d.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true}),
+    date: `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getFullYear()).slice(2)}`,
+    time: d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }),
   };
 };
-const toISTDateParam = (h: string) => { const [y,m,d] = h.split("-"); return `${d}/${m}/${String(y).slice(2)}`; };
+const toISTDateParam = (h: string) => { const [y, m, d] = h.split("-"); return `${d}/${m}/${String(y).slice(2)}`; };
 
 // ─── Sell Dialog ──────────────────────────────────────────────────────────────
 
 const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialCustomerId?: string }) => {
-  const [customers, setCustomers]         = useState<Customer[]>([]);
-  const [customerId, setCustomerId]       = useState(initialCustomerId);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerId, setCustomerId] = useState(initialCustomerId);
   const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
   const [machineSearch, setMachineSearch] = useState("");
   const [machineResults, setMachineResults] = useState<Machine[]>([]);
-  const [searching, setSearching]         = useState(false);
-  const [dropdownOpen, setDropdownOpen]   = useState(false);
-  const [entries, setEntries]             = useState<MachineEntry[]>([]);
-  const [submitting, setSubmitting]       = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [entries, setEntries] = useState<MachineEntry[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
-  const [customerForm, setCustomerForm]   = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null as File | null });
-  const [zones, setZones]                 = useState<{ label: string; value: string }[]>([]);
-  const photoRef                          = useRef<HTMLInputElement>(null);
-  const [codesDialog, setCodesDialog]         = useState<CodesDialogState | null>(null);
-  const [pagesCatConfig, setPagesCatConfig]   = useState<PagesCategoryConfigState | null>(null);
+  const [customerForm, setCustomerForm] = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null as File | null });
+  const [zones, setZones] = useState<{ label: string; value: string }[]>([]);
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [codesDialog, setCodesDialog] = useState<CodesDialogState | null>(null);
+  const [pagesCatConfig, setPagesCatConfig] = useState<PagesCategoryConfigState | null>(null);
   const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
-  const ctAbortRef    = useRef<AbortController | null>(null);
-  const searchRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wrapperRef    = useRef<HTMLDivElement>(null);
+  const ctAbortRef = useRef<AbortController | null>(null);
+  const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const machineInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMachines = async (search = "") => {
@@ -121,7 +121,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       const p: any = { status: "Active", limit: "100" }; if (q) p.search = q;
       const r = await api.get("/admin/contract-types", { params: p, signal: ctrl.signal });
       if (!ctrl.signal.aborted) setContractTypes(r.data.data);
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => { setCustomerId(initialCustomerId); }, [initialCustomerId]);
@@ -129,7 +129,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     try {
       const r = await api.get("/admin/zones", { params: { status: "Active", limit: 100 } });
       setZones(r.data.data.map((z: any) => ({ label: `${z.name} (${z.code})`, value: z._id })));
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); }, [open]);
@@ -153,13 +153,13 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   };
 
   const removeMachine = (id: string) => setEntries((prev) => prev.filter((e) => e.machine._id !== id));
-  const updateEntry   = (mi: number, field: keyof MachineEntry, value: any) =>
+  const updateEntry = (mi: number, field: keyof MachineEntry, value: any) =>
     setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, [field]: value }));
 
   const openCodesDialog = async (mi: number) => {
-    const e       = entries[mi];
+    const e = entries[mi];
     const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
-    const qty     = Number(e.quantity) || 0;
+    const qty = Number(e.quantity) || 0;
 
     // First fetch available codes to check max allowed
     let available: string[] = [];
@@ -196,8 +196,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       if (!codes[i]?.value?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is not selected`); return; }
       if (!isParts) {
         if (!codes[i].contractTypeId) { toast.error(`Select contract type for serial number ${i + 1}`); return; }
-        if (!codes[i].validFrom)      { toast.error(`Enter valid from date for serial number ${i + 1}`); return; }
-        if (!codes[i].validTo)        { toast.error(`Enter valid to date for serial number ${i + 1}`); return; }
+        if (!codes[i].validFrom) { toast.error(`Enter valid from date for serial number ${i + 1}`); return; }
+        if (!codes[i].validTo) { toast.error(`Enter valid to date for serial number ${i + 1}`); return; }
         if (codes[i].validTo <= codes[i].validFrom) { toast.error(`Valid To must be after Valid From for serial number ${i + 1}`); return; }
       }
     }
@@ -238,12 +238,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   };
 
   const handleSubmit = async () => {
-    if (!customerId)          { toast.error("Please select a customer"); return; }
+    if (!customerId) { toast.error("Please select a customer"); return; }
     if (entries.length === 0) { toast.error("Please add at least one machine"); return; }
 
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
-      if (!e.sellingPrice)                         { toast.error(`Enter selling price for ${e.machine.name}`); return; }
+      if (!e.sellingPrice) { toast.error(`Enter selling price for ${e.machine.name}`); return; }
       const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
       if (isParts) {
         if (e.partCodes.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} part codes for ${e.machine.name}`); return; }
@@ -257,10 +257,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
         return {
-          machineId:              e.machine._id,
-          categoryId:             e.machine.category?._id,
-          quantity:               Number(e.quantity),
-          sellingPrice:           Number(e.sellingPrice),
+          machineId: e.machine._id,
+          categoryId: e.machine.category?._id,
+          quantity: Number(e.quantity),
+          sellingPrice: Number(e.sellingPrice),
           discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
           ...(isParts
             ? { partCodes: e.partCodes }
@@ -375,13 +375,13 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                         : machineResults.length === 0
                           ? <p className="text-xs text-muted-foreground px-3 py-2.5">No machines found</p>
                           : machineResults.map((m) => (
-                              <button key={m._id} type="button"
-                                className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
-                                onClick={() => addMachine(m)} onMouseDown={(e) => e.preventDefault()}>
-                                <span className="text-sm font-medium">{m.name}</span>
-                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
-                              </button>
-                            ))}
+                            <button key={m._id} type="button"
+                              className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
+                              onClick={() => addMachine(m)} onMouseDown={(e) => e.preventDefault()}>
+                              <span className="text-sm font-medium">{m.name}</span>
+                              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
+                            </button>
+                          ))}
                     </div>
                   )}
                 </div>
@@ -426,10 +426,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             ) : (
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {entries.map((entry, mi) => {
-                  const isParts    = entry.machine.category?._id === PARTS_CATEGORY_ID;
-                  const qty        = Number(entry.quantity) || 0;
-                  const codes      = isParts ? entry.partCodes : entry.serialNumbers;
-                  const codesOk    = codes.length === qty && qty > 0;
+                  const isParts = entry.machine.category?._id === PARTS_CATEGORY_ID;
+                  const qty = Number(entry.quantity) || 0;
+                  const codes = isParts ? entry.partCodes : entry.serialNumbers;
+                  const codesOk = codes.length === qty && qty > 0;
                   return (
                     <div key={entry.machine._id} className="rounded-xl border bg-background shadow-sm overflow-hidden">
                       {/* Machine header */}
@@ -537,7 +537,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       {/* Pages Category Config Dialog */}
       {pagesCatConfig && (() => {
         const { serialNumbers, currentIndex, mi, pendingCodes, configs } = pagesCatConfig;
-        const sn       = serialNumbers[currentIndex];
+        const sn = serialNumbers[currentIndex];
         const entries_ = configs[sn] ?? [];
 
         const setEntries_ = (updated: PagesCategoryEntry[]) =>
@@ -559,15 +559,15 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             }
           }
           updateEntry(mi, "serialNumbers", pendingCodes.map(c => ({
-            serialNumber:    c.value.trim(),
-            contractTypeId:  c.contractTypeId,
-            validFrom:       c.validFrom,
-            validTo:         c.validTo,
-            minCopies:       c.minCopies,
+            serialNumber: c.value.trim(),
+            contractTypeId: c.contractTypeId,
+            validFrom: c.validFrom,
+            validTo: c.validTo,
+            minCopies: c.minCopies,
             pagesCategories: (configs[c.value.trim()] ?? entries[mi].serialNumbers.find(s => s.serialNumber === c.value.trim())?.pagesCategories?.map(e => ({ ...e, costPerPage: String(e.costPerPage) })) ?? []).map(e => ({
               pagesCategoryId: e.pagesCategoryId,
-              pagesCategory:   e.pagesCategory,
-              costPerPage:     String(e.costPerPage),
+              pagesCategory: e.pagesCategory,
+              costPerPage: String(e.costPerPage),
             })),
           })));
           setPagesCatConfig(null);
@@ -588,18 +588,17 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 <div className="flex flex-wrap gap-1.5 pb-1">
                   {serialNumbers.map((s, idx) => {
                     const configured = (configs[s] ?? []).length > 0;
-                    const isActive   = idx === currentIndex;
+                    const isActive = idx === currentIndex;
                     return (
                       <button
                         key={s} type="button"
                         onClick={() => setPagesCatConfig(p => p ? { ...p, currentIndex: idx } : p)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                          isActive
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${isActive
                             ? "bg-primary text-primary-foreground border-primary"
                             : configured
                               ? "bg-green-50 text-green-700 border-green-300"
                               : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                        }`}
+                          }`}
                       >
                         {s} {configured && !isActive ? "✓" : ""}
                       </button>
@@ -803,32 +802,34 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 const SellMachinesPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [data, setData]                       = useState<Sale[]>([]);
-  const [stats, setStats]                     = useState<Stats | null>(null);
-  const [search, setSearch]                   = useState("");
+  const [data, setData] = useState<Sale[]>([]);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filters, setFilters]                 = useState<Record<string, string>>({});
-  const [fromDate, setFromDate]               = useState("");
-  const [toDate, setToDate]                   = useState("");
-  const [loading, setLoading]                 = useState(true);
-  const [pageSize]                            = useState(10);
-  const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
-  const [dialogOpen, setDialogOpen]           = useState(false);
-  const [exportDialog, setExportDialog]       = useState(false);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pageSize] = useState(10);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [exportDialog, setExportDialog] = useState(false);
   const [initialCustomerId, setInitialCustomerId] = useState("");
-  const [invoiceDialog, setInvoiceDialog]     = useState<Sale | null>(null);
-  const [companies, setCompanies]             = useState<ActiveCompany[]>([]);
-  const [invoiceForm, setInvoiceForm]         = useState({ companyId: "", cgst: "", sgst: "", igst: "" });
+  const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
+  const [companies, setCompanies] = useState<ActiveCompany[]>([]);
+  const [invoiceForm, setInvoiceForm] = useState({ companyId: "", cgst: "", sgst: "", igst: "" });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
   const [customerOptions, setCustomerOptions] = useState<{ label: string; value: string }[]>([]);
+  const [zoneOptions, setZoneOptions] = useState<{ label: string; value: string }[]>([]);
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
-  const [machineOptions, setMachineOptions]   = useState<{ label: string; value: string }[]>([]);
-  const abortRef         = useRef<AbortController | null>(null);
+  const [machineOptions, setMachineOptions] = useState<{ label: string; value: string }[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const customerAbortRef = useRef<AbortController | null>(null);
+  const zoneAbortRef = useRef<AbortController | null>(null);
   const categoryAbortRef = useRef<AbortController | null>(null);
   const divisionAbortRef = useRef<AbortController | null>(null);
-  const machineAbortRef  = useRef<AbortController | null>(null);
+  const machineAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500); return () => clearTimeout(t); }, [search]);
   useEffect(() => { const cid = searchParams.get("customerId"); if (cid) { setInitialCustomerId(cid); setDialogOpen(true); } }, [searchParams]);
@@ -836,7 +837,7 @@ const SellMachinesPage = () => {
   useEffect(() => {
     api.get("/admin/companies", { params: { status: "Active", limit: 100 } })
       .then(r => setCompanies(r.data.data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleGenerateInvoice = async () => {
@@ -863,13 +864,15 @@ const SellMachinesPage = () => {
   useEffect(() => {
     const fetch = async () => {
       try {
-        const [cr, catr, dr, mr] = await Promise.all([
+        const [cr, zr, catr, dr, mr] = await Promise.all([
           api.get("/admin/customers", { params: { limit: 10 } }),
+          api.get("/admin/zones", { params: { status: "Active", limit: 100 } }),
           api.get("/admin/machine-categories", { params: { limit: 10 } }),
           api.get("/admin/machine-divisions", { params: { limit: 10 } }),
           api.get("/admin/machines", { params: { limit: 10 } }),
         ]);
         setCustomerOptions(cr.data.data.map((c: any) => ({ label: `${c.name} - ${c.phone}`, value: c._id })));
+        setZoneOptions(zr.data.data.map((z: any) => ({ label: `${z.name} (${z.code})`, value: z._id })));
         setCategoryOptions(catr.data.data.map((c: any) => ({ label: c.name, value: c._id })));
         setDivisionOptions(dr.data.data.map((d: any) => ({ label: d.name, value: d._id })));
         setMachineOptions(mr.data.data.map((m: any) => ({ label: m.name, value: m._id })));
@@ -885,26 +888,28 @@ const SellMachinesPage = () => {
         const p: any = { limit: "100" }; if (q) p.search = q;
         const res = await api.get(url, { params: p, signal: ctrl.signal });
         if (!ctrl.signal.aborted) setFn(res.data.data.map((i: any) => ({ label: labelFn(i), value: i._id })));
-      } catch {}
+      } catch { }
     }, []);
 
-  const fetchCustomers  = mkSearch(setCustomerOptions, customerAbortRef, "/admin/customers",            (c) => `${c.name} - ${c.phone}`);
-  const fetchCategories = mkSearch(setCategoryOptions, categoryAbortRef, "/admin/machine-categories",   (c) => c.name);
-  const fetchDivisions  = mkSearch(setDivisionOptions, divisionAbortRef, "/admin/machine-divisions",    (d) => d.name);
-  const fetchMachines   = mkSearch(setMachineOptions,  machineAbortRef,  "/admin/machines",              (m) => m.name);
+  const fetchCustomers = mkSearch(setCustomerOptions, customerAbortRef, "/admin/customers", (c) => `${c.name} - ${c.phone}`);
+  const fetchZones = mkSearch(setZoneOptions, zoneAbortRef, "/admin/zones", (z) => `${z.name} (${z.code})`);
+  const fetchCategories = mkSearch(setCategoryOptions, categoryAbortRef, "/admin/machine-categories", (c) => c.name);
+  const fetchDivisions = mkSearch(setDivisionOptions, divisionAbortRef, "/admin/machine-divisions", (d) => d.name);
+  const fetchMachines = mkSearch(setMachineOptions, machineAbortRef, "/admin/machines", (m) => m.name);
 
   const fetchSales = useCallback(async (page = 1) => {
     abortRef.current?.abort(); const ctrl = new AbortController(); abortRef.current = ctrl;
     setLoading(true);
     try {
       const p: Record<string, string> = { page: String(page), limit: String(pageSize) };
-      if (debouncedSearch)                                                          p.search     = debouncedSearch;
+      if (debouncedSearch) p.search = debouncedSearch;
       if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
-      if (filters.category && filters.category !== "all" && filters.category !== "") p.category   = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") p.division   = filters.division;
-      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId  = filters.machine;
+      if (filters.zone && filters.zone !== "all" && filters.zone !== "") p.zoneId = filters.zone;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
-      if (toDate)   p.toDate   = toISTDateParam(toDate);
+      if (toDate) p.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/sales", { params: p, signal: ctrl.signal });
       setData(res.data.data); setStats(res.data.stats || null);
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
@@ -918,13 +923,14 @@ const SellMachinesPage = () => {
     setExportDialog(false); toast.success("Download starting...");
     try {
       const p: Record<string, string> = {};
-      if (debouncedSearch)                                                          p.search     = debouncedSearch;
+      if (debouncedSearch) p.search = debouncedSearch;
       if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
-      if (filters.category && filters.category !== "all" && filters.category !== "") p.category   = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") p.division   = filters.division;
-      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId  = filters.machine;
+      if (filters.zone && filters.zone !== "all" && filters.zone !== "") p.zoneId = filters.zone;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
+      if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
-      if (toDate)   p.toDate   = toISTDateParam(toDate);
+      if (toDate) p.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/sales/export", { params: p, responseType: "blob" });
       const url = URL.createObjectURL(res.data); const a = document.createElement("a");
       a.href = url; a.download = "sales_export.xlsx"; a.click(); URL.revokeObjectURL(url);
@@ -934,20 +940,20 @@ const SellMachinesPage = () => {
   const sep = (i: number, total: number) => i < total - 1 ? <hr className="my-1 border-t border-border" /> : null;
 
   const columns: Column<Sale>[] = [
-    { key: "_id",          label: "No.",        render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
-    { key: "customerInfo", label: "Customer",   render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
-    { key: "machineName",  label: "Machine",    render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "category",     label: "Category",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "division",     label: "Division",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "modelNumber",  label: "Model No",   render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "quantity",     label: "Qty",        render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.quantity}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "_id", label: "No.", render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
+    { key: "customerInfo", label: "Customer", render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
+    { key: "machineName", label: "Machine", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "category", label: "Category", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "division", label: "Division", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "modelNumber", label: "Model No", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "quantity", label: "Qty", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.quantity}{sep(i, s.machines.length)}</div>)}</div> },
     {
       key: "codes", label: "Serial / Part Code",
       render: (s) => (
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const codes   = isParts ? (m.partCodes || []).map(e => e.partCode) : (m.serialNumbers || []).map(e => e.serialNumber);
+            const codes = isParts ? (m.partCodes || []).map(e => e.partCode) : (m.serialNumbers || []).map(e => e.serialNumber);
             return (
               <div key={i}>
                 {codes.map((c, j) => <div key={j} className="font-mono text-xs">{c}</div>)}
@@ -964,7 +970,7 @@ const SellMachinesPage = () => {
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const cts     = isParts
+            const cts = isParts
               ? (m.partCodes || []).map(e => e.contractType)
               : (m.serialNumbers || []).map(e => e.contractType);
             return (
@@ -983,7 +989,7 @@ const SellMachinesPage = () => {
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            const cts = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
             return (
               <div key={i}>
                 {cts.map((ct, j) => <div key={j}>{ct ? (ct.freeService ? <span className="text-green-600 text-xs">Yes</span> : <span className="text-red-500 text-xs">No</span>) : "—"}</div>)}
@@ -1000,7 +1006,7 @@ const SellMachinesPage = () => {
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            const cts = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
             return (
               <div key={i}>
                 {cts.map((ct, j) => <div key={j}>{ct ? (ct.freeParts ? <span className="text-green-600 text-xs">Yes</span> : <span className="text-red-500 text-xs">No</span>) : "—"}</div>)}
@@ -1017,7 +1023,7 @@ const SellMachinesPage = () => {
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            const cts = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
             return (
               <div key={i}>
                 {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.validFrom ? new Date(ct.validFrom).toLocaleDateString("en-IN") : "—"}</div>)}
@@ -1034,7 +1040,7 @@ const SellMachinesPage = () => {
         <div>
           {s.machines.map((m, i) => {
             const isParts = !!m.partCodes?.length;
-            const cts     = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
+            const cts = isParts ? (m.partCodes || []).map(e => e.contractType) : (m.serialNumbers || []).map(e => e.contractType);
             return (
               <div key={i}>
                 {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.validTo ? new Date(ct.validTo).toLocaleDateString("en-IN") : "—"}</div>)}
@@ -1045,23 +1051,25 @@ const SellMachinesPage = () => {
         </div>
       ),
     },
-    { key: "sellingPrice",           label: "Selling Price",      render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPrice.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "discountedSellingPrice", label: "Disc. Selling",      render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "basicTotal",             label: "Base Total",         render: (s) => s.basicTotal != null ? <span className="font-medium">₹{s.basicTotal.toLocaleString()}</span> : <span className="text-muted-foreground">—</span> },
-    { key: "cgst",                   label: "CGST",               render: (s) => s.cgst?.amount != null && s.cgst.amount > 0 ? <span className="text-xs">₹{s.cgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.cgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
-    { key: "sgst",                   label: "SGST",               render: (s) => s.sgst?.amount != null && s.sgst.amount > 0 ? <span className="text-xs">₹{s.sgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.sgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
-    { key: "igst",                   label: "IGST",               render: (s) => s.igst?.amount != null && s.igst.amount > 0 ? <span className="text-xs">₹{s.igst.amount.toLocaleString()} <span className="text-muted-foreground">({s.igst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
-    { key: "grandTotal",             label: "Grand Total",        render: (s) => <span className="font-semibold">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
-    { key: "createdAt",              label: "Sold At",            render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
-    { key: "actions", label: "Actions", sticky: true, render: (s) => (
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button>
-        {s.invoiceUrl
-          ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
-          : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
-        }
-      </div>
-    ) },
+    { key: "sellingPrice", label: "Selling Price", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPrice.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "discountedSellingPrice", label: "Disc. Selling", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "basicTotal", label: "Base Total", render: (s) => s.basicTotal != null ? <span className="font-medium">₹{s.basicTotal.toLocaleString()}</span> : <span className="text-muted-foreground">—</span> },
+    { key: "cgst", label: "CGST", render: (s) => s.cgst?.amount != null && s.cgst.amount > 0 ? <span className="text-xs">₹{s.cgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.cgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "sgst", label: "SGST", render: (s) => s.sgst?.amount != null && s.sgst.amount > 0 ? <span className="text-xs">₹{s.sgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.sgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "igst", label: "IGST", render: (s) => s.igst?.amount != null && s.igst.amount > 0 ? <span className="text-xs">₹{s.igst.amount.toLocaleString()} <span className="text-muted-foreground">({s.igst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
+    { key: "grandTotal", label: "Grand Total", render: (s) => <span className="font-semibold">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
+    { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    {
+      key: "actions", label: "Actions", sticky: true, render: (s) => (
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button>
+          {s.invoiceUrl
+            ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
+            : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
+          }
+        </div>
+      )
+    },
   ];
 
   return (
@@ -1075,9 +1083,9 @@ const SellMachinesPage = () => {
           {stats && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                { label: "Total Sales",          value: `₹${stats.totalSales.toLocaleString()}`,      icon: ShoppingCart, color: "blue"   },
-                { label: "Total Machines Sold",  value: stats.totalMachinesSold,                       icon: Package,      color: "green"  },
-                { label: "Avg Sale Value",        value: `₹${stats.avgSaleValue.toLocaleString()}`,    icon: ShoppingCart, color: "orange" },
+                { label: "Total Sales", value: `₹${stats.totalSales.toLocaleString()}`, icon: ShoppingCart, color: "blue" },
+                { label: "Total Machines Sold", value: stats.totalMachinesSold, icon: Package, color: "green" },
+                { label: "Avg Sale Value", value: `₹${stats.avgSaleValue.toLocaleString()}`, icon: ShoppingCart, color: "orange" },
               ].map((s) => (
                 <Card key={s.label} className="border-0 shadow-sm">
                   <CardContent className="pt-6">
@@ -1108,10 +1116,11 @@ const SellMachinesPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(p => ({ ...p, customer: v }))} onSearchChange={fetchCustomers}  placeholder="Customer" searchPlaceholder="Search customers..."  className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(p => ({ ...p, customer: v }))} onSearchChange={fetchCustomers} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={zoneOptions} value={filters.zone ?? ""} onChange={(v) => setFilters(p => ({ ...p, zone: v }))} onSearchChange={fetchZones} placeholder="Zone" searchPlaceholder="Search zones..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Machine"  searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine: v }))} onSearchChange={fetchMachines} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />

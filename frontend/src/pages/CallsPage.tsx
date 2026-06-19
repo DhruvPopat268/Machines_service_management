@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DataTable, Column } from "@/components/DataTable";
-import { Eye, UserPlus, Download, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
+import { Eye, UserPlus, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -511,7 +511,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             <Button variant="outline" className="gap-2" onClick={() => setShowFilters(!showFilters)}>
               {showFilters ? "Hide Filters" : "Show Filters"}
             </Button>
-            <Button variant="outline" className="gap-2" disabled><Download className="h-4 w-4" /> Export</Button>
+
           </PageHeader>
 
           {!statusFilter && stats && showStats && (

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contract Expiry Alert</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f7fb; font-family:Arial, Helvetica, sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f7fb; padding:40px 15px;">
+    <tr>
+      <td align="center">
+
+        <table width="100%" cellpadding="0" cellspacing="0" border="0"
+          style="max-width:660px; background:#ffffff; border-radius:18px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #0f172a, #1e3a5f); padding:36px 30px; text-align:center;">
+              <h1 style="margin:0; color:#ffffff; font-size:26px; font-weight:700;">Contract Expiry Alert</h1>
+              <p style="margin:8px 0 0; color:#93c5fd; font-size:14px;">{{alertDate}}</p>
+            </td>
+          </tr>
+
+          <!-- Greeting -->
+          <tr>
+            <td style="padding:32px 32px 0;">
+              <p style="margin:0 0 8px; font-size:15px; color:#374151; line-height:26px;">
+                Dear <strong>{{customerName}}</strong>,
+              </p>
+              <p style="margin:0 0 24px; font-size:15px; color:#374151; line-height:26px;">
+                The following machine contract(s) associated with your account have expired or are expiring soon.
+                Please contact us to renew your contract and ensure uninterrupted service.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Expired Machines Section -->
+          {{#if hasExpired}}
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#fef2f2; border:1px solid #fecaca; border-radius:12px; padding:20px 22px;">
+                    <p style="margin:0 0 16px; font-size:13px; font-weight:700; color:#991b1b; text-transform:uppercase; letter-spacing:0.5px;">
+                      🔴 Expired Contracts ({{expiredCount}})
+                    </p>
+                    <!-- Table header -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                      <tr style="background:#fee2e2; border-radius:8px;">
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#7f1d1d; text-transform:uppercase; letter-spacing:0.4px; width:22%;">Machine</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#7f1d1d; text-transform:uppercase; letter-spacing:0.4px; width:18%;">Serial No.</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#7f1d1d; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Contract Type</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#7f1d1d; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Valid From</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#7f1d1d; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Valid To</td>
+                      </tr>
+                      {{expiredRows}}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {{/if}}
+
+          <!-- Expiring Soon Section -->
+          {{#if hasExpiringSoon}}
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:20px 22px;">
+                    <p style="margin:0 0 16px; font-size:13px; font-weight:700; color:#92400e; text-transform:uppercase; letter-spacing:0.5px;">
+                      🟡 Expiring Soon ({{expiringSoonCount}})
+                    </p>
+                    <!-- Table header -->
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+                      <tr style="background:#fef3c7;">
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#78350f; text-transform:uppercase; letter-spacing:0.4px; width:22%;">Machine</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#78350f; text-transform:uppercase; letter-spacing:0.4px; width:18%;">Serial No.</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#78350f; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Contract Type</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#78350f; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Valid From</td>
+                        <td style="padding:8px 10px; font-size:11px; font-weight:700; color:#78350f; text-transform:uppercase; letter-spacing:0.4px; width:20%;">Valid To</td>
+                      </tr>
+                      {{expiringSoonRows}}
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {{/if}}
+
+          <!-- CTA -->
+          <tr>
+            <td style="padding:0 32px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px;">
+                <tr>
+                  <td style="padding:18px 22px;">
+                    <p style="margin:0 0 6px; font-size:13px; font-weight:700; color:#1e40af;">📞 Renew Your Contract</p>
+                    <p style="margin:0; font-size:13px; color:#374151; line-height:21px;">
+                      To renew your contract or for any queries, please reach out to us at
+                      <a href="mailto:{{supportEmail}}" style="color:#2563eb; text-decoration:none; font-weight:600;">{{supportEmail}}</a>
+                      or call <strong>{{supportPhone}}</strong>.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider + Footer -->
+          <tr>
+            <td style="padding:0 32px 32px;">
+              <hr style="border:none; border-top:1px solid #e5e7eb; margin:0 0 20px;" />
+              <p style="margin:0; font-size:13px; color:#9ca3af; line-height:22px; text-align:center;">
+                © 2025 Machine Service Management<br/>
+                This is a system-generated alert. Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

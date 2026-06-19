@@ -26,7 +26,7 @@ const buildMachineFilter = (category, division, machineId) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, vendorId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, vendorId, category, division, machineId, inventoryStatus, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -50,7 +50,16 @@ const getAll = async (req, res) => {
     }
 
     const machineFilter = buildMachineFilter(category, division, machineId);
-    if (machineFilter) query.machines = machineFilter;
+    if (inventoryStatus === "available" || inventoryStatus === "sold") {
+      const statusFilter = { $elemMatch: { serialNumbers: { $elemMatch: { status: inventoryStatus } } } };
+      if (machineFilter) {
+        query.machines = { $elemMatch: { ...machineFilter.$elemMatch, $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+      } else {
+        query.machines = { $elemMatch: { $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+      }
+    } else if (machineFilter) {
+      query.machines = machineFilter;
+    }
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -297,7 +306,7 @@ const verifyPartCodes = async (req, res) => {
 
 const exportToExcel = async (req, res) => {
   try {
-    const { search, vendorId, category, division, machineId, fromDate, toDate } = req.query;
+    const { search, vendorId, category, division, machineId, inventoryStatus, fromDate, toDate } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -316,7 +325,15 @@ const exportToExcel = async (req, res) => {
     if (vendorId && mongoose.isValidObjectId(vendorId)) query["vendorInfo.vendorId"] = vendorId;
 
     const machineFilter = buildMachineFilter(category, division, machineId);
-    if (machineFilter) query.machines = machineFilter;
+    if (inventoryStatus === "available" || inventoryStatus === "sold") {
+      if (machineFilter) {
+        query.machines = { $elemMatch: { ...machineFilter.$elemMatch, $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+      } else {
+        query.machines = { $elemMatch: { $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+      }
+    } else if (machineFilter) {
+      query.machines = machineFilter;
+    }
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -331,35 +348,71 @@ const exportToExcel = async (req, res) => {
 
     const purchases = await PurchasedMachine.find(query).sort({ createdAt: -1 }).lean();
 
+    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price", "Discounted Buying Price", "Selling Price", "Discounted Selling Price", "Buying Total", "Serial / Part Code", "Status", "Purchase Date", "Purchase Time"];
+
     const rows = [];
+    const merges = [];
+
     purchases.forEach((p) => {
       const date = new Date(p.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
       const time = new Date(p.createdAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+
+      const purchaseStartRow = rows.length;
+
       p.machines.forEach((m) => {
-        rows.push({
-          "Vendor Company":          p.vendorInfo.companyName || "",
-          "Vendor Name":             p.vendorInfo.name || "",
-          "Vendor Phone":            p.vendorInfo.phone || "",
-          "Vendor GST":              p.vendorInfo.gstNumber || "",
-          "Machine Name":            m.machineName || "",
-          "Model Number":            m.modelNumber || "",
-          "Category":                m.category || "",
-          "Division":                m.division || "",
-          "Quantity":                m.quantity,
-          "Buying Price":            m.buyingPrice,
-          "Discounted Buying Price": m.discountedBuyingPrice ?? "",
-          "Selling Price":           m.sellingPrice ?? "",
-          "Discounted Selling Price":m.discountedSellingPrice ?? "",
-          "Buying Total":            m.buyingTotal,
-          "Serial Numbers":          (m.serialNumbers || []).join(", "),
-          "Part Codes":              (m.partCodes || []).join(", "),
-          "Purchase Date":           date,
-          "Purchase Time":           time,
+        const isParts  = !!(m.partCodes && m.partCodes.length);
+        const codes    = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
+        const machineStartRow = rows.length;
+
+        const codeList = codes.length > 0 ? codes : [null];
+        codeList.forEach((entry, ci) => {
+          const code           = entry ? (isParts ? entry.partCode : entry.serialNumber) : "";
+          const status         = entry ? entry.status : "";
+          const isMachineFirst = ci === 0;
+          const isPurchaseFirst = isMachineFirst && machineStartRow === purchaseStartRow;
+          rows.push({
+            "Vendor Company":           isPurchaseFirst ? p.vendorInfo.companyName || "" : "",
+            "Vendor Name":              isPurchaseFirst ? p.vendorInfo.name        || "" : "",
+            "Vendor Phone":             isPurchaseFirst ? p.vendorInfo.phone       || "" : "",
+            "Machine Name":             isMachineFirst ? m.machineName || "" : "",
+            "Model Number":             isMachineFirst ? m.modelNumber || "" : "",
+            "Category":                 isMachineFirst ? m.category    || "" : "",
+            "Division":                 isMachineFirst ? m.division    || "" : "",
+            "Quantity":                 isMachineFirst ? m.quantity           : "",
+            "Buying Price":             isMachineFirst ? m.buyingPrice        : "",
+            "Discounted Buying Price":  isMachineFirst ? (m.discountedBuyingPrice  ?? "") : "",
+            "Selling Price":            isMachineFirst ? (m.sellingPrice           ?? "") : "",
+            "Discounted Selling Price": isMachineFirst ? (m.discountedSellingPrice ?? "") : "",
+            "Buying Total":             isMachineFirst ? m.buyingTotal        : "",
+            "Serial / Part Code":       code,
+            "Status":                   status,
+            "Purchase Date":            isPurchaseFirst ? date : "",
+            "Purchase Time":            isPurchaseFirst ? time : "",
+          });
         });
+
+        const sheetMachineStart = machineStartRow + 1;
+        const sheetMachineEnd   = rows.length;
+        if (sheetMachineStart < sheetMachineEnd) {
+          ["Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price", "Discounted Buying Price", "Selling Price", "Discounted Selling Price", "Buying Total"].forEach((col) => {
+            const c = COLS.indexOf(col);
+            merges.push({ s: { r: sheetMachineStart, c }, e: { r: sheetMachineEnd, c } });
+          });
+        }
       });
+
+      const sheetPurchaseStart = purchaseStartRow + 1;
+      const sheetPurchaseEnd   = rows.length;
+      if (sheetPurchaseStart < sheetPurchaseEnd) {
+        ["Vendor Company", "Vendor Name", "Vendor Phone", "Purchase Date", "Purchase Time"].forEach((col) => {
+          const c = COLS.indexOf(col);
+          merges.push({ s: { r: sheetPurchaseStart, c }, e: { r: sheetPurchaseEnd, c } });
+        });
+      }
     });
 
-    const ws = xlsx.utils.json_to_sheet(rows);
+    const ws = xlsx.utils.json_to_sheet(rows, { header: COLS });
+    if (merges.length) ws["!merges"] = merges;
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Purchases");
     const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });

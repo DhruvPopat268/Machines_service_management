@@ -442,6 +442,52 @@ const sendServiceCallInvoiceEmail = async (data) => {
   }
 };
 
+const sendContractExpiryAlert = async ({ customerName, customerEmail, expiredItems, expiringSoonItems }) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/contractExpiryAlert.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const alertDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const fmt = (d) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+    const buildRow = (bg, item) =>
+      `<tr style="background:${bg};">`+
+      `<td style="padding:7px 10px; font-size:12px; color:#111; border-bottom:1px solid rgba(0,0,0,0.06);">${item.machineName}</td>`+
+      `<td style="padding:7px 10px; font-size:12px; font-family:monospace; color:#111; border-bottom:1px solid rgba(0,0,0,0.06);">${item.serialNumber}</td>`+
+      `<td style="padding:7px 10px; font-size:12px; color:#111; border-bottom:1px solid rgba(0,0,0,0.06);">${item.contractType}</td>`+
+      `<td style="padding:7px 10px; font-size:12px; color:#111; border-bottom:1px solid rgba(0,0,0,0.06);">${fmt(item.validFrom)}</td>`+
+      `<td style="padding:7px 10px; font-size:12px; color:#111; border-bottom:1px solid rgba(0,0,0,0.06);">${fmt(item.validTo)}</td>`+
+      `</tr>`;
+
+    const expiredRows     = expiredItems.map(i => buildRow("#fff5f5", i)).join("");
+    const expiringSoonRows = expiringSoonItems.map(i => buildRow("#fffdf0", i)).join("");
+
+    html = html
+      .replace(/{{alertDate}}/g,         alertDate)
+      .replace(/{{customerName}}/g,       customerName)
+      .replace(/{{expiredCount}}/g,        expiredItems.length)
+      .replace(/{{expiringSoonCount}}/g,   expiringSoonItems.length)
+      .replace(/{{expiredRows}}/g,         expiredRows)
+      .replace(/{{expiringSoonRows}}/g,    expiringSoonRows)
+      .replace(/{{supportEmail}}/g,        process.env.SUPPORT_EMAIL || process.env.EMAIL_USER)
+      .replace(/{{supportPhone}}/g,        process.env.SUPPORT_PHONE || "");
+
+    html = expiredItems.length     > 0 ? html.replace(/{{#if hasExpired}}([\.\s\S]*?){{\/if}}/g,      "$1") : html.replace(/{{#if hasExpired}}[\.\s\S]*?{{\/if}}/g,      "");
+    html = expiringSoonItems.length > 0 ? html.replace(/{{#if hasExpiringSoon}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if hasExpiringSoon}}[\.\s\S]*?{{\/if}}/g, "");
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: customerEmail,
+      subject: "Contract Expiry Alert — Action Required",
+      html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Contract expiry email error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
 const sendMail = async ({ to, subject, html }) => {
   await transporter.sendMail({
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -451,4 +497,4 @@ const sendMail = async ({ to, subject, html }) => {
   });
 };
 
-module.exports = { sendMail, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
+module.exports = { sendMail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };

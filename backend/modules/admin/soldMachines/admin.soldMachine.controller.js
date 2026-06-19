@@ -10,8 +10,10 @@ const ContractType     = require("../contractTypesManagement/admin.contractType.
 const PagesCategory    = require("../pagesCategoryManagement/admin.pagesCategory.model");
 const InventoryLog     = require("../inventoryLogs/admin.inventoryLog.model");
 const Company          = require("../companyManagement/admin.company.model");
+const Zone             = require("../zoneManagement/admin.zone.model");
 const Counter          = require("../auth/counter.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
+const { sendContractExpiryAlert } = require("../../../utils/emailService");
 
 const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
@@ -68,7 +70,7 @@ const getAvailableCodes = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -88,6 +90,14 @@ const getAll = async (req, res) => {
       if (!mongoose.isValidObjectId(customerId))
         return res.status(400).json({ success: false, message: "Invalid customerId format" });
       query["customerInfo.customerId"] = customerId;
+    }
+
+    if (zoneId) {
+      if (!mongoose.isValidObjectId(zoneId))
+        return res.status(400).json({ success: false, message: "Invalid zoneId format" });
+      const zone = await Zone.findById(zoneId, { name: 1 }).lean();
+      if (!zone) return res.status(404).json({ success: false, message: "Zone not found" });
+      query["customerInfo.zone"] = zone.name;
     }
 
     const machineFilter = buildMachineFilter(category, division, machineId);
@@ -412,7 +422,7 @@ const renewContract = async (req, res) => {
 
 const exportToExcel = async (req, res) => {
   try {
-    const { search, customerId, category, division, machineId, fromDate, toDate } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, fromDate, toDate } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -428,6 +438,11 @@ const exportToExcel = async (req, res) => {
 
     if (customerId && mongoose.isValidObjectId(customerId))
       query["customerInfo.customerId"] = customerId;
+
+    if (zoneId && mongoose.isValidObjectId(zoneId)) {
+      const zone = await Zone.findById(zoneId, { name: 1 }).lean();
+      if (zone) query["customerInfo.zone"] = zone.name;
+    }
 
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (machineFilter) query.machines = machineFilter;
@@ -445,38 +460,73 @@ const exportToExcel = async (req, res) => {
 
     const sales = await SoldMachine.find(query).sort({ createdAt: -1 }).lean();
 
+    const COLS = ["Customer Name", "Customer Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Selling Price", "Discounted Selling Price", "Selling Total", "Serial / Part Code", "Contract Type", "Contract Code", "Free Service", "Free Parts", "Valid From", "Valid To", "Sale Date", "Sale Time"];
+
     const rows = [];
+    const merges = [];
+
     sales.forEach((sale) => {
       const date = new Date(sale.createdAt).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" });
       const time = new Date(sale.createdAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: true });
+
+      const saleStartRow = rows.length;
+
       sale.machines.forEach((m) => {
-        const codes = [...(m.serialNumbers || []).map(e => e.serialNumber), ...(m.partCodes || []).map(e => e.partCode)];
-        rows.push({
-          "Customer Name":            sale.customerInfo.name || "",
-          "Customer Phone":           sale.customerInfo.phone || "",
-          "Customer GST":             sale.customerInfo.gstNumber || "",
-          "Machine Name":             m.machineName || "",
-          "Model Number":             m.modelNumber || "",
-          "Category":                 m.category || "",
-          "Division":                 m.division || "",
-          "Quantity":                 m.quantity,
-          "Selling Price":            m.sellingPrice,
-          "Discounted Selling Price": m.discountedSellingPrice ?? "",
-          "Selling Total":            m.sellingTotal,
-          "Serial / Part Codes":      codes.join(", "),
-          "Contract Type":            "",
-          "Contract Code":            "",
-          "Free Service":             "",
-          "Free Parts":               "",
-          "Valid From":               "",
-          "Valid To":                 "",
-          "Sale Date":                date,
-          "Sale Time":                time,
+        const isParts  = !!(m.partCodes && m.partCodes.length);
+        const codes    = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
+        const machineStartRow = rows.length;
+
+        const codeList = codes.length > 0 ? codes : [null];
+        codeList.forEach((entry, ci) => {
+          const code          = entry ? (isParts ? entry.partCode : entry.serialNumber) : "";
+          const ct            = entry ? entry.contractType : null;
+          const isMachineFirst = ci === 0;
+          const isSaleFirst    = isMachineFirst && machineStartRow === saleStartRow;
+          rows.push({
+            "Customer Name":            isSaleFirst ? sale.customerInfo.name  || "" : "",
+            "Customer Phone":           isSaleFirst ? sale.customerInfo.phone || "" : "",
+            "Machine Name":             isMachineFirst ? m.machineName || "" : "",
+            "Model Number":             isMachineFirst ? m.modelNumber || "" : "",
+            "Category":                 isMachineFirst ? m.category    || "" : "",
+            "Division":                 isMachineFirst ? m.division    || "" : "",
+            "Quantity":                 isMachineFirst ? m.quantity           : "",
+            "Selling Price":            isMachineFirst ? m.sellingPrice       : "",
+            "Discounted Selling Price": isMachineFirst ? (m.discountedSellingPrice ?? "") : "",
+            "Selling Total":            isMachineFirst ? m.sellingTotal       : "",
+            "Serial / Part Code":       code,
+            "Contract Type":            ct?.name || "",
+            "Contract Code":            ct?.code || "",
+            "Free Service":             ct ? (ct.freeService ? "Yes" : "No") : "",
+            "Free Parts":               ct ? (ct.freeParts   ? "Yes" : "No") : "",
+            "Valid From":               ct?.validFrom ? new Date(ct.validFrom).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
+            "Valid To":                 ct?.validTo   ? new Date(ct.validTo).toLocaleDateString("en-IN",   { timeZone: "Asia/Kolkata" }) : "",
+            "Sale Date":                isSaleFirst ? date : "",
+            "Sale Time":                isSaleFirst ? time : "",
+          });
         });
+        const sheetMachineStart = machineStartRow + 1; // +1 for header row
+        const sheetMachineEnd   = rows.length; // rows.length - 1 + 1 for header
+        if (sheetMachineStart < sheetMachineEnd) {
+          ["Machine Name", "Model Number", "Category", "Division", "Quantity", "Selling Price", "Discounted Selling Price", "Selling Total"].forEach((col) => {
+            const c = COLS.indexOf(col);
+            merges.push({ s: { r: sheetMachineStart, c }, e: { r: sheetMachineEnd, c } });
+          });
+        }
       });
+
+      const saleEndRow = rows.length - 1;
+      const sheetSaleStart = saleStartRow + 1;
+      const sheetSaleEnd   = saleEndRow   + 1;
+      if (sheetSaleStart < sheetSaleEnd) {
+        ["Customer Name", "Customer Phone", "Sale Date", "Sale Time"].forEach((col) => {
+          const c = COLS.indexOf(col);
+          merges.push({ s: { r: sheetSaleStart, c }, e: { r: sheetSaleEnd, c } });
+        });
+      }
     });
 
-    const ws = xlsx.utils.json_to_sheet(rows);
+    const ws = xlsx.utils.json_to_sheet(rows, { header: COLS });
+    if (merges.length) ws["!merges"] = merges;
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, "Sales");
     const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
@@ -734,4 +784,69 @@ const generateInvoice = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice };
+const sendContractExpiryAlerts = async (req, res) => {
+  try {
+    const cronKey = req.headers["x-cron-key"];
+    if (!cronKey || cronKey !== process.env.CRON_JOB_KEY)
+      return res.status(403).json({ success: false, message: "Access denied" });
+
+    const now      = new Date();
+    const days     = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
+    const in30Days = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    // Fetch all sales that have at least one serial number with a contract expiring or expired
+    const sales = await SoldMachine.find({
+      "machines.serialNumbers.contractType.validTo": { $lte: in30Days },
+    }).lean();
+
+    if (!sales.length)
+      return res.status(200).json({ success: true, message: "No expiring contracts found" });
+
+    // Group by customer email
+    const customerMap = {};
+    for (const sale of sales) {
+      const { customerId, name, email } = sale.customerInfo;
+      if (!email) continue;
+      const key = customerId?.toString() || email;
+      if (!customerMap[key]) customerMap[key] = { name, email, expired: [], expiringSoon: [] };
+
+      for (const machine of sale.machines) {
+        for (const sn of (machine.serialNumbers || [])) {
+          const ct = sn.contractType;
+          if (!ct?.validTo) continue;
+          const validTo = new Date(ct.validTo);
+          const item = {
+            machineName:  machine.machineName,
+            serialNumber: sn.serialNumber,
+            contractType: ct.name,
+            validFrom:    ct.validFrom,
+            validTo:      ct.validTo,
+          };
+          if (validTo < now) {
+            customerMap[key].expired.push(item);
+          } else if (validTo <= in30Days) {
+            customerMap[key].expiringSoon.push(item);
+          }
+        }
+      }
+    }
+
+    const results = { sent: 0, skipped: 0, failed: 0 };
+    for (const entry of Object.values(customerMap)) {
+      if (!entry.expired.length && !entry.expiringSoon.length) { results.skipped++; continue; }
+      const result = await sendContractExpiryAlert({
+        customerName:       entry.name,
+        customerEmail:      entry.email,
+        expiredItems:       entry.expired,
+        expiringSoonItems:  entry.expiringSoon,
+      });
+      result.success ? results.sent++ : results.failed++;
+    }
+
+    return res.status(200).json({ success: true, ...results });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice, sendContractExpiryAlerts };

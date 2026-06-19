@@ -537,10 +537,11 @@ const PurchaseMachinesPage = () => {
     try {
       const p: Record<string, string> = { page: String(page), limit: String(pageSize) };
       if (debouncedSearch)                                                       p.search    = debouncedSearch;
-      if (filters.vendor   && filters.vendor   !== "all" && filters.vendor   !== "") p.vendorId  = filters.vendor;
-      if (filters.category && filters.category !== "all" && filters.category !== "") p.category  = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") p.division  = filters.division;
-      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId = filters.machine;
+      if (filters.vendor   && filters.vendor   !== "all" && filters.vendor   !== "") p.vendorId        = filters.vendor;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category        = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division        = filters.division;
+      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId       = filters.machine;
+      if (filters.inventoryStatus && filters.inventoryStatus !== "all" && filters.inventoryStatus !== "") p.inventoryStatus = filters.inventoryStatus;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate)   p.toDate   = toISTDateParam(toDate);
       const res = await api.get("/admin/purchases", { params: p, signal: ctrl.signal });
@@ -557,10 +558,11 @@ const PurchaseMachinesPage = () => {
     try {
       const p: Record<string, string> = {};
       if (debouncedSearch)                                                       p.search    = debouncedSearch;
-      if (filters.vendor   && filters.vendor   !== "all" && filters.vendor   !== "") p.vendorId  = filters.vendor;
-      if (filters.category && filters.category !== "all" && filters.category !== "") p.category  = filters.category;
-      if (filters.division && filters.division !== "all" && filters.division !== "") p.division  = filters.division;
-      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId = filters.machine;
+      if (filters.vendor   && filters.vendor   !== "all" && filters.vendor   !== "") p.vendorId        = filters.vendor;
+      if (filters.category && filters.category !== "all" && filters.category !== "") p.category        = filters.category;
+      if (filters.division && filters.division !== "all" && filters.division !== "") p.division        = filters.division;
+      if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId       = filters.machine;
+      if (filters.inventoryStatus && filters.inventoryStatus !== "all" && filters.inventoryStatus !== "") p.inventoryStatus = filters.inventoryStatus;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate)   p.toDate   = toISTDateParam(toDate);
       const res = await api.get("/admin/purchases/export", { params: p, responseType: "blob" });
@@ -588,32 +590,17 @@ const PurchaseMachinesPage = () => {
             const items   = isParts ? (m.partCodes || []).map(e => ({ code: e.partCode, status: e.status })) : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, status: e.status }));
             return (
               <div key={i}>
-                {items.map((item, j) => <div key={j} className="font-mono text-xs">{item.code}</div>)}
+                {items.map((item, j) => (
+                  <div key={j} className="flex items-center gap-1.5 font-mono text-xs">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${item.status === "sold" ? "bg-red-500" : "bg-green-500"}`} />
+                    {item.code}
+                  </div>
+                ))}
                 {sep(i, p.machines.length)}
               </div>
             );
           })}
         </div>
-      ),
-    },
-    {
-      key: "available", label: "Available",
-      render: (p) => (
-        <div>{p.machines.map((m, i) => {
-          const items = m.partCodes?.length ? m.partCodes : (m.serialNumbers || []);
-          const count = items.filter((e: any) => e.status === "available").length;
-          return <div key={i}><span className="text-green-600 font-medium">{count}</span>{sep(i, p.machines.length)}</div>;
-        })}</div>
-      ),
-    },
-    {
-      key: "sold", label: "Sold",
-      render: (p) => (
-        <div>{p.machines.map((m, i) => {
-          const items = m.partCodes?.length ? m.partCodes : (m.serialNumbers || []);
-          const count = items.filter((e: any) => e.status === "sold").length;
-          return <div key={i}><span className="text-red-500 font-medium">{count}</span>{sep(i, p.machines.length)}</div>;
-        })}</div>
       ),
     },
     { key: "buyingPrice",            label: "Buying Price",       render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPrice.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
@@ -673,6 +660,7 @@ const PurchaseMachinesPage = () => {
             <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Machine"  searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={[{ label: "Available", value: "available" }, { label: "Sold", value: "sold" }]} value={filters.inventoryStatus ?? ""} onChange={(v) => setFilters(p => ({ ...p, inventoryStatus: v }))} placeholder="Inventory Status" className="w-[160px] h-9 text-sm" />
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />
