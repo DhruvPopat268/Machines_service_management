@@ -787,8 +787,9 @@ const generateInvoice = async (req, res) => {
 const getContractExpiryStatus = async (req, res) => {
   try {
     const now   = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
     const days  = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
-    const inNDays = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const inNDays = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
     const sales = await SoldMachine.find({
       "machines.serialNumbers.contractType.validTo": { $lte: inNDays },
@@ -813,7 +814,7 @@ const getContractExpiryStatus = async (req, res) => {
             validFrom:    ct.validFrom,
             validTo:      ct.validTo,
           };
-          if (validTo < now)       customerMap[key].expired.push(item);
+          if (validTo < today)       customerMap[key].expired.push(item);
           else if (validTo <= inNDays) customerMap[key].expiringSoon.push(item);
         }
       }
@@ -833,8 +834,9 @@ const sendContractExpiryAlerts = async (req, res) => {
       return res.status(403).json({ success: false, message: "Access denied" });
 
     const now      = new Date();
+    const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
     const days     = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
-    const in30Days = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const in30Days = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
     // Fetch all sales that have at least one serial number with a contract expiring or expired
     const sales = await SoldMachine.find({
@@ -864,7 +866,7 @@ const sendContractExpiryAlerts = async (req, res) => {
             validFrom:    ct.validFrom,
             validTo:      ct.validTo,
           };
-          if (validTo < now) {
+          if (validTo < today) {
             customerMap[key].expired.push(item);
           } else if (validTo <= in30Days) {
             customerMap[key].expiringSoon.push(item);

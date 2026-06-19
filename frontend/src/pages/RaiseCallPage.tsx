@@ -219,7 +219,8 @@ const RaiseCallPage = () => {
     {
       key: "contractType", label: "Contract Type",
       render: (m) => {
-        const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const isExpired = m.contractType?.validTo ? today > new Date(m.contractType.validTo) : false;
         return (
           <div>
             <span>{m.contractType?.name || "—"}</span>
@@ -231,6 +232,18 @@ const RaiseCallPage = () => {
       },
     },
     {
+      key: "validFrom", label: "Valid From",
+      render: (m) => m.contractType?.validFrom
+        ? new Date(m.contractType.validFrom).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" })
+        : "—",
+    },
+    {
+      key: "validTo", label: "Valid To",
+      render: (m) => m.contractType?.validTo
+        ? new Date(m.contractType.validTo).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "2-digit", year: "numeric" })
+        : "—",
+    },
+    {
       key: "disInstalled", label: "Dis-Installed",
       render: (m) => m.disInstalled
         ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">Yes</span>
@@ -239,7 +252,8 @@ const RaiseCallPage = () => {
     {
       key: "actions", label: "Actions",
       render: (m) => {
-        const isExpired = m.contractType?.validTo ? new Date() > new Date(m.contractType.validTo) : false;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const isExpired = m.contractType?.validTo ? today > new Date(m.contractType.validTo) : false;
         return (
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
