@@ -287,7 +287,7 @@ const CallDetailsPage = () => {
                     <TableCell>
                       <div className="space-y-1 text-sm min-w-[160px]">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-medium">{machine.contractType.name} ({machine.contractType.code})</p>
+                          <p className="font-medium">{machine.contractType?.name ?? "N/A"} ({machine.contractType?.code ?? "—"})</p>
                           {(() => {
                             const isExpired = machine.contractType.validTo ? new Date() > new Date(machine.contractType.validTo) : false;
                             return (
@@ -297,10 +297,10 @@ const CallDetailsPage = () => {
                             );
                           })()}
                         </div>
-                        <p className="text-muted-foreground">Free Service: {machine.contractType.freeService ? "Yes" : "No"}</p>
-                        <p className="text-muted-foreground">Free Parts: {machine.contractType.freeParts ? "Yes" : "No"}</p>
-                        <p className="text-muted-foreground">From: {formatDate(machine.contractType.validFrom)}</p>
-                        <p className="text-muted-foreground">To: {formatDate(machine.contractType.validTo)}</p>
+                        <p className="text-muted-foreground">Free Service: {machine.contractType?.freeService ? "Yes" : "No"}</p>
+                        <p className="text-muted-foreground">Free Parts: {machine.contractType?.freeParts ? "Yes" : "No"}</p>
+                        <p className="text-muted-foreground">From: {formatDate(machine.contractType?.validFrom ?? "")}</p>
+                        <p className="text-muted-foreground">To: {formatDate(machine.contractType?.validTo ?? "")}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -612,7 +612,7 @@ const CallDetailsPage = () => {
                         <TableCell>{index + 1}</TableCell>
                         <TableCell className="font-medium">{machine.machineName}</TableCell>
                         <TableCell className="font-mono text-sm">{machine.serialNumber}</TableCell>
-                        <TableCell className="text-sm">{machine.contractType.name}</TableCell>
+                        <TableCell className="text-sm">{machine.contractType?.name ?? "N/A"}</TableCell>
                         <TableCell className="text-right">
                           {machine.serviceCharge !== undefined
                             ? <span className="text-green-600 font-medium">₹{machine.serviceCharge}</span>

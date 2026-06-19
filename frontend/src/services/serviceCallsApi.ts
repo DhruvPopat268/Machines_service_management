@@ -24,7 +24,7 @@ export interface ServiceCall {
     category: string;
     attributeName: string;
     attributeValue: string;
-    contractType: {
+    contractType?: {
       contractTypeId: string;
       name: string;
       code: string;
