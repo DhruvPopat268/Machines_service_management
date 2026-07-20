@@ -303,9 +303,9 @@ const formatIST = (date) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "modelNumber", "hsnCode", "gstPercentage", "category", "division", "lowStockThreshold", "status (Active/Inactive)", "notes"],
-    ["CNC Machine X200", "X200", "84715000", "18", "Heavy Machinery", "CNC Division", "5",  "Active", "Sample notes"],
-    ["Laser Cutter L10", "L10",  "",         "",   "Light Machinery", "Laser Division", "-1", "Active", ""],
+    ["name", "modelNumber", "hsnCode", "category", "division", "lowStockThreshold", "notes", "status (Active/Inactive)"],
+    ["CNC Machine X200", "X200", "84715000", "Heavy Machinery", "CNC Division", "5",  "Sample notes", "Active"],
+    ["Laser Cutter L10", "L10",  "",         "Light Machinery", "Laser Division", "-1", "", "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Machines");
@@ -367,12 +367,6 @@ const importMachines = async (req, res) => {
       if (status && !["Active", "Inactive"].includes(status)) {
         rowErrors.push(`Row ${rowNum}: status must be Active or Inactive`); continue;
       }
-      if (row.gstpercentage !== undefined && row.gstpercentage !== "") {
-        const gst = Number(row.gstpercentage);
-        if (isNaN(gst) || gst < 0 || gst > 100) {
-          rowErrors.push(`Row ${rowNum}: gstPercentage must be between 0 and 100`); continue;
-        }
-      }
 
       const key = `${name.toLowerCase()}||${category.toLowerCase()}||${division.toLowerCase()}||${modelNumber.toLowerCase()}`;
       if (!machineMap.has(key)) machineMap.set(key, { firstRowNum: rowNum, row });
@@ -418,7 +412,6 @@ const importMachines = async (req, res) => {
           name:              String(row.name        || ""),
           modelNumber:       String(row.modelnumber || ""),
           hsnCode:           String(row.hsncode     || ""),
-        gstPercentage:     row.gstpercentage !== "" ? Number(row.gstpercentage) : null,
           category:          categoryId,
           division:          divisionId,
           lowStockThreshold: isNaN(threshold) ? -1 : threshold,

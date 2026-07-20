@@ -374,8 +374,8 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "phone", "email", "address", "zoneName", "gstNumber", "totalPurchases", "status (Active/Inactive)"],
-    ["Acme Corp", "9800000000", "acme@example.com", "123 Main St, Mumbai", "North Zone", "27AABCA1234A1Z5", 5, "Active"],
+    ["name", "phone", "email", "zoneName", "gstNumber", "totalPurchases", "status (Active/Inactive)"],
+    ["Acme Corp", "9800000000", "acme@example.com", "North Zone", "27AABCA1234A1Z5", 5, "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Customers");
@@ -415,7 +415,6 @@ const importCustomers = async (req, res) => {
         name:           String(normalized.name           || "").trim(),
         phone:          String(normalized.phone          || "").trim(),
         email:          String(normalized.email          || "").trim().toLowerCase(),
-        address:        String(normalized.address        || "").trim(),
         zoneName:       String(normalized.zonename       || "").trim(),
         gstNumber:      String(normalized.gstnumber      || "").trim().toUpperCase(),
         totalPurchases: normalized.totalpurchases !== undefined && normalized.totalpurchases !== "" ? Math.max(0, Number(normalized.totalpurchases)) : 0,
@@ -440,16 +439,19 @@ const importCustomers = async (req, res) => {
         let zoneId = null;
         if (doc.zoneName) {
           const zone = await Zone.findOne({ name: { $regex: `^${doc.zoneName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
-          if (zone) zoneId = zone._id;
+          if (!zone) { skipped++; skippedReasons.push(`Row ${docs.indexOf(doc) + 2}: zone "${doc.zoneName}" not found`); continue; }
+          zoneId = zone._id;
         }
 
+        const customerId = await generateCustomerId();
         const defaultPassword = generatePassword();
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
         const newCustomer = await Customer.create({
           name: doc.name, phone: doc.phone, email: doc.email,
-          address: doc.address, zone: zoneId,
+          zone: zoneId,
           gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status, source: "imported",
+          customerId,
           password: hashedPassword,
         });
 
