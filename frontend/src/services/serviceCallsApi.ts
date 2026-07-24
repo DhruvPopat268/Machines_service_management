@@ -95,6 +95,7 @@ export interface CallsParams {
   toDate?: string;
   contractTypeId?: string;
   contractTypeStatus?: string;
+  freeParts?: string;
   page?: string;
   limit?: string;
 }

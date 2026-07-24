@@ -44,6 +44,11 @@ const getCalls = async (req, res) => {
     if (contractTypeId && mongoose.isValidObjectId(contractTypeId))
       query["machines.contractType.contractTypeId"] = new mongoose.Types.ObjectId(contractTypeId);
 
+    if (req.query.freeParts === "yes")
+      query["machines.usedParts"] = { $elemMatch: { total: 0 } };
+    else if (req.query.freeParts === "no")
+      query["machines.usedParts"] = { $elemMatch: { total: { $gt: 0 } } };
+
     if (contractTypeStatus === "Active") {
       query["machines"] = { $not: { $elemMatch: { "contractType.validTo": { $lt: new Date() } } } };
     } else if (contractTypeStatus === "Expired") {

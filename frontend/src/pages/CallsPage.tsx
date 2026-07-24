@@ -69,6 +69,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     problemTypeId:       getParam("problemTypeId"),
     contractTypeId:      getParam("contractTypeId"),
     contractTypeStatus:  getParam("contractTypeStatus"),
+    freeParts:           getParam("freeParts"),
   };
 
   const setSearch       = (v: string) => updateParam("search", v);
@@ -124,6 +125,35 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
   const [debouncedSearch, setDebouncedSearch]             = useState(search);
   const [debouncedSerialNumber, setDebouncedSerialNumber] = useState(serialNumber);
+
+  // Pending (uncommitted) filter state — only applied on Apply click
+  const [pendingSearch, setPendingSearch]           = useState(search);
+  const [pendingSerial, setPendingSerial]           = useState(serialNumber);
+  const [pendingFromDate, setPendingFromDate]       = useState(fromDate);
+  const [pendingToDate, setPendingToDate]           = useState(toDate);
+  const [pendingFilters, setPendingFilters]         = useState<Record<string, string>>(filters);
+
+  // Sync pending state when URL params change (e.g. navigating from dashboard)
+  useEffect(() => {
+    setPendingSearch(search);
+    setPendingSerial(serialNumber);
+    setPendingFromDate(fromDate);
+    setPendingToDate(toDate);
+    setPendingFilters({
+      callType:           getParam("callType"),
+      status:             getParam("status"),
+      customerName:       getParam("customerName"),
+      engineerName:       getParam("engineerName"),
+      machineName:        getParam("machineName"),
+      partId:             getParam("partId"),
+      category:           getParam("category"),
+      division:           getParam("division"),
+      problemTypeId:      getParam("problemTypeId"),
+      contractTypeId:     getParam("contractTypeId"),
+      contractTypeStatus: getParam("contractTypeStatus"),
+      freeParts:          getParam("freeParts"),
+    });
+  }, [searchParams]);
 
   useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500);        return () => clearTimeout(t); }, [search]);
   useEffect(() => { const t = setTimeout(() => setDebouncedSerialNumber(serialNumber), 500); return () => clearTimeout(t); }, [serialNumber]);
@@ -279,6 +309,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       if (!statusFilter && filters.status   && filters.status   !== "all")           params.status             = filters.status;
       if (filters.contractTypeId     && filters.contractTypeId     !== "all")        params.contractTypeId     = filters.contractTypeId;
       if (filters.contractTypeStatus && filters.contractTypeStatus !== "all")        params.contractTypeStatus = filters.contractTypeStatus;
+      if (filters.freeParts          && filters.freeParts          !== "all")        params.freeParts          = filters.freeParts;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
       if (toDate)   params.toDate   = toISTDateParam(toDate);
 
@@ -296,7 +327,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     statusFilter, debouncedSearch, debouncedSerialNumber, fromDate, toDate, limit,
     filters.callType, filters.status, filters.customerName, filters.engineerName,
     filters.machineName, filters.partId, filters.category, filters.division, filters.problemTypeId,
-    filters.contractTypeId, filters.contractTypeStatus,
+    filters.contractTypeId, filters.contractTypeStatus, filters.freeParts,
   ]);
 
   const highlightText = (text: string, search: string) => {
@@ -528,25 +559,22 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
           {showFilters && (
           <div className="space-y-6">
-          {/* Row 1: Search + Date Range + Clear */}
+          {/* Row 1: Search + Date Range */}
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by call ID, customer, mobile, engineer..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder="Search by call ID, customer, mobile, engineer..." value={pendingSearch} onChange={(e) => setPendingSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
-              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
-              {(search || serialNumber || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
-              )}
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={pendingFromDate} onChange={(e) => setPendingFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={pendingToDate} onChange={(e) => setPendingToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
             </div>
           </div>
 
-          {/* Rows 2–3: 12 filters in a 6-col grid */}
+          {/* Rows 2–3: 13 filters in a 6-col grid */}
           <div className="grid grid-cols-6 gap-3">
             {!statusFilter && (
-              <Select value={filters.callType || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, callType: v }))}>
+              <Select value={pendingFilters.callType || "all"} onValueChange={(v) => setPendingFilters(prev => ({ ...prev, callType: v }))}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Call Type" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
@@ -555,7 +583,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
               </Select>
             )}
             {!statusFilter && (
-              <Select value={filters.status || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, status: v }))}>
+              <Select value={pendingFilters.status || "all"} onValueChange={(v) => setPendingFilters(prev => ({ ...prev, status: v }))}>
                 <SelectTrigger className="w-full"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
@@ -563,16 +591,16 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 </SelectContent>
               </Select>
             )}
-            <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={filters.customerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={filters.engineerName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={filters.machineName ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={filters.partId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-full h-9 text-sm" />
-            <Input placeholder="Serial number..." value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} className="w-full h-9 text-sm" />
-            <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={filters.category ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={filters.division ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={filters.problemTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={contractTypes.map(c => ({ label: c.name, value: c._id }))} value={filters.contractTypeId ?? ""} onChange={(v) => setFilters(prev => ({ ...prev, contractTypeId: v }))} onSearchChange={fetchContractTypeOptions} placeholder="Contract Type" searchPlaceholder="Search contract types..." className="w-full h-9 text-sm" />
-            <Select value={filters.contractTypeStatus || "all"} onValueChange={(v) => setFilters(prev => ({ ...prev, contractTypeStatus: v }))}>
+            <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={pendingFilters.customerName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={pendingFilters.engineerName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={pendingFilters.machineName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={pendingFilters.partId ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-full h-9 text-sm" />
+            <Input placeholder="Serial number..." value={pendingSerial} onChange={(e) => setPendingSerial(e.target.value)} className="w-full h-9 text-sm" />
+            <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={pendingFilters.category ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={divisions.map(d => ({ label: d.name, value: d._id }))} value={pendingFilters.division ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, division: v }))} onSearchChange={fetchDivisionOptions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={problemTypes.map(p => ({ label: p.name, value: p._id }))} value={pendingFilters.problemTypeId ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, problemTypeId: v }))} onSearchChange={fetchProblemTypes} placeholder="Problem Type" searchPlaceholder="Search problem types..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={contractTypes.map(c => ({ label: c.name, value: c._id }))} value={pendingFilters.contractTypeId ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, contractTypeId: v }))} onSearchChange={fetchContractTypeOptions} placeholder="Contract Type" searchPlaceholder="Search contract types..." className="w-full h-9 text-sm" />
+            <Select value={pendingFilters.contractTypeStatus || "all"} onValueChange={(v) => setPendingFilters(prev => ({ ...prev, contractTypeStatus: v }))}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Contract Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Contract Status</SelectItem>
@@ -580,17 +608,56 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                 <SelectItem value="Expired">Expired Contracts</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          {/* Records per page */}
-          <div className="flex items-center justify-end gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
-            <Select value={String(limit)} onValueChange={(v) => updateParam("limit", v === "10" ? "" : v)}>
-              <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+            <Select value={pendingFilters.freeParts || "all"} onValueChange={(v) => setPendingFilters(prev => ({ ...prev, freeParts: v }))}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Free Parts" /></SelectTrigger>
               <SelectContent>
-                {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                <SelectItem value="all">Free Parts Used</SelectItem>
+                <SelectItem value="yes">Yes</SelectItem>
+                <SelectItem value="no">No</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Records per page + Apply / Clear */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+              <Select value={String(limit)} onValueChange={(v) => updateParam("limit", v === "10" ? "" : v)}>
+                <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {(() => {
+              const hasAny = !!pendingSearch || !!pendingSerial || !!pendingFromDate || !!pendingToDate ||
+                Object.values(pendingFilters).some(v => v && v !== "all");
+              return hasAny ? (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => {
+                    setPendingSearch("");
+                    setPendingSerial("");
+                    setPendingFromDate("");
+                    setPendingToDate("");
+                    setPendingFilters({ callType: "", status: "", customerName: "", engineerName: "", machineName: "", partId: "", category: "", division: "", problemTypeId: "", contractTypeId: "", contractTypeStatus: "", freeParts: "" });
+                    setSearchParams({}, { replace: true });
+                  }}><X className="h-4 w-4 mr-1" /> Clear</Button>
+                  <Button size="sm" className="h-9" onClick={() => {
+                    setSearchParams(prev => {
+                      const next = new URLSearchParams(prev);
+                      const set = (k: string, v: string) => { if (v && v !== "all") next.set(k, v); else next.delete(k); };
+                      set("search", pendingSearch);
+                      set("serialNumber", pendingSerial);
+                      set("fromDate", pendingFromDate);
+                      set("toDate", pendingToDate);
+                      Object.entries(pendingFilters).forEach(([k, v]) => set(k, v));
+                      next.delete("page");
+                      return next;
+                    }, { replace: true });
+                  }}>Apply Filters</Button>
+                </div>
+              ) : null;
+            })()}
           </div>
 
           </div>

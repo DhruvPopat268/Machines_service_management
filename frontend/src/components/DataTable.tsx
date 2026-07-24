@@ -29,7 +29,7 @@ export function DataTable<T extends Record<string, any>>({
 
   return (
     <div>
-      <div className="rounded-lg border bg-card overflow-x-auto overflow-y-auto max-h-[70vh]">
+      <div className="rounded-lg border bg-card overflow-x-auto overflow-y-auto max-h-[90vh]">
         <Table>
           <TableHeader className="sticky top-0 z-30 bg-muted">
             <TableRow className="bg-muted hover:bg-muted relative">
