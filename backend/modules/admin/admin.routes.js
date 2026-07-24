@@ -20,5 +20,6 @@ router.use("/roles",         require("./rolesManagement/admin.role.routes"));
 router.use("/engineers",     require("./engineerManagement/admin.engineer.routes"));
 router.use("/reimbursements", require("./reimbursement/admin.reimbursement.routes"));
 router.use("/pages-categories", require("./pagesCategoryManagement/admin.pagesCategory.routes"));
+router.use("/dashboard", require("./dashboard/admin.dashboard.routes"));
 
 module.exports = router;

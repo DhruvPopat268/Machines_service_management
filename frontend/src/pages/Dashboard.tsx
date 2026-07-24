@@ -1,12 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
-import { StatusBadge } from "@/components/StatusBadge";
-import { PhoneCall, AlertCircle, UserCog, Package, IndianRupee, ChevronLeft, ChevronRight } from "lucide-react";
-import { serviceCalls, users, customers, machines } from "@/data/dummyData";
+import { PhoneCall, AlertCircle, UserCog, Package, ChevronLeft, ChevronRight } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 import api from "@/lib/axiosInterceptor";
@@ -14,15 +14,24 @@ import api from "@/lib/axiosInterceptor";
 interface ExpiryItem { machineName: string; modelNumber: string; serialNumber: string; contractType: string; validFrom: string; validTo: string; }
 interface ExpiryCustomer { customerId: string | null; name: string; email: string; phone: string; expired: ExpiryItem[]; expiringSoon: ExpiryItem[]; }
 
-
-const allMonthlyData = [
-  { month: "Jan", calls: 18, completed: 15, profit: 320000 },
-  { month: "Feb", calls: 24, completed: 20, profit: 510000 },
-  { month: "Mar", calls: 30, completed: 28, profit: 780000 },
-  { month: "Apr", calls: 12, completed: 4, profit: 210000 },
+const DONUT_COLORS = [
+  "hsl(217, 91%, 50%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)",
+  "hsl(280, 70%, 55%)", "hsl(0, 84%, 60%)",  "hsl(199, 89%, 48%)",
+  "hsl(160, 60%, 45%)", "hsl(45, 93%, 47%)",
 ];
 
+interface DashboardStats {
+  totalCalls: number; completedCalls: number; openCalls: number; assignedCalls: number;
+  inProgressCalls: number; onHoldCalls: number; cancelledCalls: number;
+  activeEngineers: number; activeCustomers: number; lowStockMachines: number;
+}
+
+interface FreePart { machineId: string; machineName: string; modelNumber: string; freeCount: number; percentage: number; }
+interface FreePartsContractType { contractTypeId: string; contractTypeName: string; contractTypeCode: string; totalFreeParts: number; parts: FreePart[]; }
+
+
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dateMode, setDateMode] = useState<"all" | "custom">("all");
   const [fromDate, setFromDate] = useState("");
@@ -33,6 +42,44 @@ const Dashboard = () => {
   const [expiryPage, setExpiryPage]       = useState(0);
   const [expiryOpen, setExpiryOpen]       = useState(false);
   const [expiryLoading, setExpiryLoading] = useState(true);
+
+  const [stats, setStats]               = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const [zoneStats, setZoneStats]             = useState<{ zone: string; count: number }[]>([]);
+  const [freeParts, setFreeParts]             = useState<FreePartsContractType[]>([]);
+  const [totalEngineers, setTotalEngineers]   = useState(0);
+  const [inactiveEngineers, setInactiveEngineers] = useState(0);
+  const [totalCustomers, setTotalCustomers]   = useState(0);
+  const [inactiveCustomers, setInactiveCustomers] = useState(0);
+  const [callTypeStats, setCallTypeStats]     = useState<{ type: string; total: number; completed: number }[]>([]);
+  const [callStatusStats, setCallStatusStats] = useState<{ status: string; count: number }[]>([]);
+  const [monthlyStats, setMonthlyStats]       = useState<{ month: string; total: number; completed: number }[]>([]);
+  const [chartsLoading, setChartsLoading]     = useState(true);
+
+  const now = new Date();
+  const [monthlyEndYear,  setMonthlyEndYear]  = useState(now.getFullYear());
+  const [monthlyEndMonth, setMonthlyEndMonth] = useState(now.getMonth() + 1);
+  const isCurrentMonthWindow = monthlyEndYear > now.getFullYear() || (monthlyEndYear === now.getFullYear() && monthlyEndMonth >= (now.getMonth() + 1));
+
+  const shiftMonth = (dir: 1 | -1) => {
+    const totalMonths = monthlyEndYear * 12 + (monthlyEndMonth - 1) + dir * 4;
+    const newYear  = Math.floor(totalMonths / 12);
+    const newMonth = (totalMonths % 12) + 1;
+    setMonthlyEndYear(newYear);
+    setMonthlyEndMonth(newMonth);
+  };
+
+  useEffect(() => {
+    setStatsLoading(true);
+    const params: Record<string, string> = {};
+    if (dateMode === "custom" && fromDate) params.from = fromDate;
+    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    api.get("/admin/dashboard/stats", { params })
+      .then(r => setStats(r.data.data))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
+  }, [dateMode, fromDate, toDate]);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
@@ -46,61 +93,85 @@ const Dashboard = () => {
       .finally(() => setExpiryLoading(false));
   }, []);
 
+  useEffect(() => {
+    setChartsLoading(true);
+    const params: Record<string, string> = {
+      mYear:  String(monthlyEndYear),
+      mMonth: String(monthlyEndMonth),
+    };
+    if (dateMode === "custom" && fromDate) params.from = fromDate;
+    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    api.get("/admin/dashboard/charts", { params })
+      .then(r => {
+        const d = r.data.data;
+        setCallTypeStats(d.callTypeStats     ?? []);
+        setCallStatusStats(d.callStatusStats ?? []);
+        setFreeParts(d.freeParts             ?? []);
+        setMonthlyStats(d.monthlyStats       ?? []);
+        setZoneStats(d.zoneStats             ?? []);
+        setTotalEngineers(d.totalEngineers   ?? 0);
+        setInactiveEngineers(d.inactiveEngineers ?? 0);
+        setTotalCustomers(d.totalCustomers   ?? 0);
+        setInactiveCustomers(d.inactiveCustomers ?? 0);
+      })
+      .catch(() => {})
+      .finally(() => setChartsLoading(false));
+  }, [dateMode, fromDate, toDate, monthlyEndYear, monthlyEndMonth]);
 
 
-  const filteredCalls = dateMode === "custom" && fromDate && toDate
-    ? serviceCalls.filter((c) => c.createdDate >= fromDate && c.createdDate <= toDate)
-    : serviceCalls;
 
-  const statusData = [
-    { name: "Open", value: filteredCalls.filter((c) => c.status === "Open").length, color: "hsl(38, 92%, 50%)" },
-    { name: "Assigned", value: filteredCalls.filter((c) => c.status === "Assigned").length, color: "hsl(199, 89%, 48%)" },
-    { name: "In Progress", value: filteredCalls.filter((c) => c.status === "In Progress").length, color: "hsl(217, 91%, 50%)" },
-    { name: "On Hold", value: filteredCalls.filter((c) => c.status === "On Hold").length, color: "hsl(38, 92%, 65%)" },
-    { name: "Completed", value: filteredCalls.filter((c) => c.status === "Completed").length, color: "hsl(142, 71%, 45%)" },
-    { name: "Cancelled", value: filteredCalls.filter((c) => c.status === "Cancelled").length, color: "hsl(0, 84%, 60%)" },
+  const CALL_TYPE_ORDER = ["Service-Call", "Counter-Reading", "Installation", "Dis-Installation", "Others"];
+  const callTypeData = [...callTypeStats]
+    .sort((a, b) => CALL_TYPE_ORDER.indexOf(a.type) - CALL_TYPE_ORDER.indexOf(b.type))
+    .map(c => ({
+      ...c,
+      type: c.type.replace("Service-Call", "Service").replace("Dis-Installation", "Dis-Install").replace("Counter-Reading", "Counter"),
+    }));
+
+  const STATUS_COLORS: Record<string, string> = {
+    "Open":             "hsl(38, 92%, 50%)",
+    "Assigned":         "hsl(199, 89%, 48%)",
+    "Travel Started":   "hsl(280, 70%, 55%)",
+    "Reached Location": "hsl(45, 93%, 47%)",
+    "In Progress":      "hsl(217, 91%, 50%)",
+    "On Hold":          "hsl(38, 92%, 65%)",
+    "Completed":        "hsl(142, 71%, 45%)",
+    "Cancelled":        "hsl(0, 84%, 60%)",
+  };
+  const statusData = callStatusStats
+    .filter(s => s.count > 0)
+    .map(s => ({ name: s.status, value: s.count, color: STATUS_COLORS[s.status] ?? "hsl(0,0%,60%)" }));
+
+const serviceStats = [
+    { label: "Total Calls",       value: stats?.totalCalls       ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent" },
+    { label: "Completed Calls",   value: stats?.completedCalls   ?? 0, icon: PhoneCall,   colorClass: "text-success bg-success/10" },
+    { label: "Active Engineers",  value: stats?.activeEngineers  ?? 0, icon: UserCog,     colorClass: "text-primary bg-accent" },
+    { label: "Active Customers",  value: stats?.activeCustomers  ?? 0, icon: UserCog,     colorClass: "text-success bg-success/10" },
+    { label: "Low Stock Machines",value: stats?.lowStockMachines ?? 0, icon: Package,     colorClass: "text-destructive bg-destructive/10" },
   ];
 
-  const monthlyData = allMonthlyData;
-
-  const totalProfit = allMonthlyData.reduce((sum, m) => sum + m.profit, 0);
-
-  const accountStats = [
-    { label: "Total Revenue", value: `₹${totalProfit.toLocaleString()}`, icon: IndianRupee, colorClass: "text-success bg-success/10" },
-  ];
-
-  const serviceStats = [
-    { label: "Total Calls", value: filteredCalls.length, icon: PhoneCall, colorClass: "text-primary bg-accent" },
-    { label: "Completed Calls", value: filteredCalls.filter((c) => c.status === "Completed").length, icon: PhoneCall, colorClass: "text-success bg-success/10" },
-    { label: "Active Engineers", value: users.filter((u) => u.role === "Engineer" && u.status === "Active").length, icon: UserCog, colorClass: "text-primary bg-accent" },
-    { label: "Low Stock Machines", value: machines.filter((m) => m.stockStatus === "Low Stock" || m.stockStatus === "Out of Stock").length, icon: Package, colorClass: "text-destructive bg-destructive/10" },
-  ];
-
-  const stats = viewMode === "account" ? accountStats : viewMode === "service" ? serviceStats : [...accountStats, ...serviceStats];
+  const allStats = serviceStats;
 
   const callStats = [
-    { label: "Open Calls", value: filteredCalls.filter((c) => c.status === "Open").length, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
-    { label: "Assigned Calls", value: filteredCalls.filter((c) => c.status === "Assigned").length, icon: UserCog, colorClass: "text-info bg-info/10" },
-    { label: "In Progress", value: filteredCalls.filter((c) => c.status === "In Progress").length, icon: PhoneCall, colorClass: "text-primary bg-accent" },
-    { label: "On Hold", value: filteredCalls.filter((c) => c.status === "On Hold").length, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
-    { label: "Cancelled", value: filteredCalls.filter((c) => c.status === "Cancelled").length, icon: AlertCircle, colorClass: "text-destructive bg-destructive/10" },
+    { label: "Open Calls",    value: stats?.openCalls        ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
+    { label: "Assigned Calls",value: stats?.assignedCalls    ?? 0, icon: UserCog,     colorClass: "text-info bg-info/10" },
+    { label: "In Progress",   value: stats?.inProgressCalls  ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent" },
+    { label: "On Hold",       value: stats?.onHoldCalls      ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
+    { label: "Cancelled",     value: stats?.cancelledCalls   ?? 0, icon: AlertCircle, colorClass: "text-destructive bg-destructive/10" },
   ];
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
   const currentExpiry = expiryData[expiryPage];
 
-  const recentCalls = filteredCalls.slice(0, 5);
-
   const usersData = [
-    { name: "Active", value: customers.filter((c) => c.status === "Active").length, fill: "hsl(142, 71%, 45%)" },
-    { name: "Inactive", value: customers.filter((c) => c.status === "Inactive").length, fill: "hsl(0, 84%, 60%)" },
+    { name: "Active",   value: stats?.activeCustomers ?? 0,  fill: "hsl(142, 71%, 45%)" },
+    { name: "Inactive", value: inactiveCustomers,            fill: "hsl(0, 84%, 60%)" },
   ];
 
   const engineersData = [
-    { name: "Active", value: users.filter((u) => u.role === "Engineer" && u.status === "Active").length, fill: "hsl(142, 71%, 45%)" },
-    { name: "Inactive", value: users.filter((u) => u.role === "Engineer" && u.status === "Inactive").length, fill: "hsl(0, 84%, 60%)" },
+    { name: "Active",   value: stats?.activeEngineers ?? 0,  fill: "hsl(142, 71%, 45%)" },
+    { name: "Inactive", value: inactiveEngineers,            fill: "hsl(0, 84%, 60%)" },
   ];
-  const totalEngineers = users.filter((u) => u.role === "Engineer").length;
 
   return (
     <div className="space-y-6">
@@ -263,26 +334,54 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {stats.map((stat) => (
-            <StatsCard key={stat.label} {...stat} />
-          ))}
+          {statsLoading
+            ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+            : allStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+          }
         </div>
 
         {(viewMode === "both" || viewMode === "service") && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {callStats.map((stat) => (
-              <StatsCard key={stat.label} {...stat} />
-            ))}
+            {statsLoading
+              ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+              : callStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+            }
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:[grid-template-columns:30%_1fr_1fr]">
+          {/* Calls by Call Type */}
+          {(viewMode === "both" || viewMode === "service") && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg mb-0">Calls by Call Type</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 pb-0">
+              {chartsLoading
+                ? <div className="h-[250px] flex items-center justify-center"><Spinner /></div>
+                : <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={callTypeData} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="type" className="text-xs" tick={{ fontSize: 11 }} />
+                  <YAxis className="text-xs" />
+                  <Tooltip />
+                  <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
+                  <Bar dataKey="total" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} name="Total" />
+                  <Bar dataKey="completed" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} name="Completed" />
+                </BarChart>
+              </ResponsiveContainer>}
+            </CardContent>
+          </Card>
+          )}
+
           {/* Calls by Status - service */}
           {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm md:col-span-2 xl:col-span-1">
             <CardHeader><CardTitle className="text-lg">Calls by Status</CardTitle></CardHeader>
             <CardContent className="pr-0">
-              <ResponsiveContainer width="100%" height={250}>
+              {chartsLoading
+                ? <div className="h-[250px] flex items-center justify-center"><Spinner /></div>
+                : <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
                   <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value">
                     {statusData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -290,7 +389,7 @@ const Dashboard = () => {
                   <Tooltip />
                   <Legend align="right" verticalAlign="bottom" layout="vertical" />
                 </PieChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </CardContent>
           </Card>
           )}
@@ -298,91 +397,70 @@ const Dashboard = () => {
           {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg mb-0">
-                Monthly Service Trends
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg mb-0">Monthly Service Trends</CardTitle>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => shiftMonth(-1)}
+                    className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted">
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="text-xs text-muted-foreground w-28 text-center">
+                    {monthlyStats[0]?.month} – {monthlyStats[3]?.month}
+                  </span>
+                  <button onClick={() => shiftMonth(1)} disabled={isCurrentMonthWindow}
+                    className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40">
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
             </CardHeader>
-
-              <CardContent className="pt-0 pb-0">
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart
-                  data={allMonthlyData}
-                  margin={{ top: 0, right: 20, left: 0, bottom: 0 }} // 🔥 key change
-                >
+            <CardContent className="pt-0 pb-0">
+              {chartsLoading
+                ? <div className="h-[250px] flex items-center justify-center"><Spinner /></div>
+                : <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={monthlyStats} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="month" className="text-xs" />
+                  <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 11 }} />
                   <YAxis className="text-xs" />
                   <Tooltip />
-                  <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} /> {/* slight push up */}
-
-                  <Bar
-                    dataKey="calls"
-                    fill="hsl(217, 91%, 50%)"
-                    radius={[4, 4, 0, 0]}
-                    name="Total Calls"
-                  />
-                  <Bar
-                    dataKey="completed"
-                    fill="hsl(142, 71%, 45%)"
-                    radius={[4, 4, 0, 0]}
-                    name="Completed"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          )}
-
-          {(viewMode === "both" || viewMode === "account") && (
-          <Card className="border-0 shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg mb-0">
-                Monthly Profit
-              </CardTitle>
-            </CardHeader>
-
-              <CardContent className="pt-0 pb-0">
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart
-                  data={allMonthlyData}
-                  margin={{ top: 0, right: 20, left: 0, bottom: 0 }} // 🔥 pull chart up
-                >
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="month" className="text-xs" />
-                  <YAxis
-                    className="text-xs"
-                    tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [
-                      `₹${value.toLocaleString()}`,
-                      "Profit",
-                    ]}
-                  />
-
-                  {/* Move legend slightly up */}
                   <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
-
-                  <Bar
-                    dataKey="profit"
-                    fill="hsl(142, 71%, 45%)"
-                    radius={[4, 4, 0, 0]}
-                    name="Profit"
-                  />
+                  <Bar dataKey="total"     fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} name="Total Calls" />
+                  <Bar dataKey="completed" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} name="Completed" />
                 </BarChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </CardContent>
           </Card>
           )}
+
+
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {(viewMode === "both" || viewMode === "service") && (
           <Card className="border-0 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg mb-0">Calls by Zone</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 pb-0">
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={zoneStats} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="zone" className="text-xs" tick={{ fontSize: 11 }} />
+                  <YAxis className="text-xs" />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="hsl(280, 70%, 55%)" radius={[4, 4, 0, 0]} name="Total Calls" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          )}
+
+          {(viewMode === "both" || viewMode === "service") && (
+          <Card className="border-0 shadow-sm">
             <CardHeader className="pb-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Customers Overview</CardTitle>
-                <span className="text-sm font-semibold text-foreground">Total Customers: {customers.length}</span>
+                <span className="text-sm font-semibold text-foreground">Total: {totalCustomers}</span>
               </div>
             </CardHeader>
             <CardContent>
@@ -404,7 +482,7 @@ const Dashboard = () => {
             <CardHeader className="pb-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg">Engineers Overview</CardTitle>
-                <span className="text-sm font-semibold text-foreground">Total Engineers: {totalEngineers}</span>
+                <span className="text-sm font-semibold text-foreground">Total: {totalEngineers}</span>
               </div>
             </CardHeader>
             <CardContent>
@@ -420,39 +498,82 @@ const Dashboard = () => {
             </CardContent>
           </Card>
           )}
-
-          {(viewMode === "both" || viewMode === "service") && (
-          <Card className="border-0 shadow-sm">
-            <CardHeader><CardTitle className="text-lg">Recent Service Calls</CardTitle></CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-3 font-medium">Call ID</th>
-                      <th className="pb-3 font-medium">Customer</th>
-                      <th className="pb-3 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Problem Type</th>
-                      <th className="pb-3 font-medium">Engineer</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentCalls.map((call) => (
-                      <tr key={call.id} className="border-b last:border-0">
-                        <td className="py-3 font-medium text-foreground">{call.id}</td>
-                        <td className="py-3">{call.customer}</td>
-                        <td className="py-3"><StatusBadge status={call.status} /></td>
-                        <td className="py-3">{call.problemType}</td>
-                        <td className="py-3 text-muted-foreground">{call.engineer}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-          )}
         </div>
+
+        {(viewMode === "both" || viewMode === "service") && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Free Materials Usage Overview</h2>
+              <p className="text-sm text-muted-foreground">Parts given free per contract type</p>
+            </div>
+
+            {chartsLoading ? (
+              <div className="flex items-center justify-center h-40"><Spinner /></div>
+            ) : freeParts.length === 0 ? (
+              <Card className="border-0 shadow-sm">
+                <CardContent className="flex items-center justify-center h-40 text-muted-foreground text-sm">
+                  No free parts data found
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                {freeParts.map((ct) => (
+                  <Card key={ct.contractTypeId?.toString()} className="border-0 shadow-sm">
+                    <CardHeader className="pb-0">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">{ct.contractTypeName}</CardTitle>
+                        <span className="text-xs font-medium bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                          {ct.totalFreeParts} free part{ct.totalFreeParts !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-2">
+                      <ResponsiveContainer width="100%" height={220}>
+                        <PieChart>
+                          <Pie
+                            data={ct.parts}
+                            cx="50%" cy="50%"
+                            innerRadius={55} outerRadius={85}
+                            paddingAngle={3}
+                            dataKey="freeCount"
+                            nameKey="machineName"
+                            label={({ percentage }) => `${percentage}%`}
+                            labelLine={false}
+                            style={{ cursor: "pointer" }}
+                            onClick={(entry) => {
+                              const params = new URLSearchParams({
+                                partId:         entry.machineId,
+                                contractTypeId: ct.contractTypeId,
+                                freeParts:      "yes",
+                              });
+                              navigate(`/calls?${params.toString()}`);
+                            }}
+                          >
+                            {ct.parts.map((_, i) => (
+                              <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: number, _: string, entry: any) => [
+                              `${value} (${entry.payload.percentage}%)`,
+                              entry.payload.machineName,
+                            ]}
+                          />
+                          <Legend
+                            layout="vertical"
+                            align="right"
+                            verticalAlign="middle"
+                            formatter={(value) => <span className="text-xs">{value}</span>}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </>
       }
     </div>
