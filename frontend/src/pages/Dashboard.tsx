@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
-import { PhoneCall, AlertCircle, UserCog, Package, ChevronLeft, ChevronRight } from "lucide-react";
+import { PhoneCall, AlertCircle, UserCog, Package, ChevronLeft, ChevronRight, ShoppingCart, TrendingUp } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -24,6 +24,8 @@ interface DashboardStats {
   totalCalls: number; completedCalls: number; openCalls: number; assignedCalls: number;
   inProgressCalls: number; onHoldCalls: number; cancelledCalls: number;
   activeEngineers: number; activeCustomers: number; lowStockMachines: number;
+  totalPurchaseAmount: number; totalUnitsPurchased: number;
+  totalSaleAmount: number; totalUnitsSold: number;
 }
 
 interface FreePart { machineId: string; machineName: string; modelNumber: string; freeCount: number; percentage: number; }
@@ -48,6 +50,12 @@ const Dashboard = () => {
 
   const [zoneStats, setZoneStats]             = useState<{ zone: string; count: number }[]>([]);
   const [freeParts, setFreeParts]             = useState<FreePartsContractType[]>([]);
+  const [categoryStats, setCategoryStats]     = useState<{ category: string; purchaseAmount: number; saleAmount: number }[]>([]);
+  const [divisionStats, setDivisionStats]     = useState<{ division: string; purchaseAmount: number; saleAmount: number }[]>([]);
+  const [vendorStats, setVendorStats]         = useState<{ vendor: string; totalAmount: number }[]>([]);
+  const [customerSaleStats, setCustomerSaleStats] = useState<{ customer: string; totalAmount: number }[]>([]);
+  const [purchaseTrendStats, setPurchaseTrendStats] = useState<{ month: string; purchaseAmount: number; saleAmount: number }[]>([]);
+  const [contractTypeStats, setContractTypeStats]   = useState<{ name: string; totalAmount: number }[]>([]);
   const [totalEngineers, setTotalEngineers]   = useState(0);
   const [inactiveEngineers, setInactiveEngineers] = useState(0);
   const [totalCustomers, setTotalCustomers]   = useState(0);
@@ -55,7 +63,8 @@ const Dashboard = () => {
   const [callTypeStats, setCallTypeStats]     = useState<{ type: string; total: number; completed: number }[]>([]);
   const [callStatusStats, setCallStatusStats] = useState<{ status: string; count: number }[]>([]);
   const [monthlyStats, setMonthlyStats]       = useState<{ month: string; total: number; completed: number }[]>([]);
-  const [chartsLoading, setChartsLoading]     = useState(true);
+  const [chartsLoading, setChartsLoading]         = useState(true);
+  const [accountChartsLoading, setAccountChartsLoading] = useState(true);
 
   const now = new Date();
   const [monthlyEndYear,  setMonthlyEndYear]  = useState(now.getFullYear());
@@ -104,18 +113,40 @@ const Dashboard = () => {
     api.get("/admin/dashboard/charts", { params })
       .then(r => {
         const d = r.data.data;
-        setCallTypeStats(d.callTypeStats     ?? []);
-        setCallStatusStats(d.callStatusStats ?? []);
-        setFreeParts(d.freeParts             ?? []);
-        setMonthlyStats(d.monthlyStats       ?? []);
-        setZoneStats(d.zoneStats             ?? []);
-        setTotalEngineers(d.totalEngineers   ?? 0);
+        setCallTypeStats(d.callTypeStats         ?? []);
+        setCallStatusStats(d.callStatusStats     ?? []);
+        setFreeParts(d.freeParts                 ?? []);
+        setMonthlyStats(d.monthlyStats           ?? []);
+        setZoneStats(d.zoneStats                 ?? []);
+        setTotalEngineers(d.totalEngineers       ?? 0);
         setInactiveEngineers(d.inactiveEngineers ?? 0);
-        setTotalCustomers(d.totalCustomers   ?? 0);
+        setTotalCustomers(d.totalCustomers       ?? 0);
         setInactiveCustomers(d.inactiveCustomers ?? 0);
       })
       .catch(() => {})
       .finally(() => setChartsLoading(false));
+  }, [dateMode, fromDate, toDate, monthlyEndYear, monthlyEndMonth]);
+
+  useEffect(() => {
+    setAccountChartsLoading(true);
+    const params: Record<string, string> = {
+      mYear:  String(monthlyEndYear),
+      mMonth: String(monthlyEndMonth),
+    };
+    if (dateMode === "custom" && fromDate) params.from = fromDate;
+    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    api.get("/admin/dashboard/account-charts", { params })
+      .then(r => {
+        const d = r.data.data;
+        setCategoryStats(d.categoryStats         ?? []);
+        setDivisionStats(d.divisionStats         ?? []);
+        setVendorStats(d.vendorStats             ?? []);
+        setCustomerSaleStats(d.customerSaleStats ?? []);
+        setPurchaseTrendStats(d.purchaseTrendStats   ?? []);
+        setContractTypeStats(d.contractTypeStats     ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setAccountChartsLoading(false));
   }, [dateMode, fromDate, toDate, monthlyEndYear, monthlyEndMonth]);
 
 
@@ -142,10 +173,12 @@ const Dashboard = () => {
     .filter(s => s.count > 0)
     .map(s => ({ name: s.status, value: s.count, color: STATUS_COLORS[s.status] ?? "hsl(0,0%,60%)" }));
 
+  const fmtAmount = (n: number) => `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
 const serviceStats = [
-    { label: "Total Calls",       value: stats?.totalCalls       ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent" },
-    { label: "Completed Calls",   value: stats?.completedCalls   ?? 0, icon: PhoneCall,   colorClass: "text-success bg-success/10" },
-    { label: "Active Engineers",  value: stats?.activeEngineers  ?? 0, icon: UserCog,     colorClass: "text-primary bg-accent" },
+    { label: "Total Calls",       value: stats?.totalCalls       ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent",           onClick: () => navigate("/calls") },
+    { label: "Completed Calls",   value: stats?.completedCalls   ?? 0, icon: PhoneCall,   colorClass: "text-success bg-success/10",        onClick: () => navigate("/calls?status=Completed") },
+    { label: "Active Engineers",  value: stats?.activeEngineers  ?? 0, icon: UserCog,     colorClass: "text-primary bg-accent",    onClick: () => navigate("/users?role=Engineer&status=Active") },
     { label: "Active Customers",  value: stats?.activeCustomers  ?? 0, icon: UserCog,     colorClass: "text-success bg-success/10" },
     { label: "Low Stock Machines",value: stats?.lowStockMachines ?? 0, icon: Package,     colorClass: "text-destructive bg-destructive/10" },
   ];
@@ -153,11 +186,18 @@ const serviceStats = [
   const allStats = serviceStats;
 
   const callStats = [
-    { label: "Open Calls",    value: stats?.openCalls        ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
-    { label: "Assigned Calls",value: stats?.assignedCalls    ?? 0, icon: UserCog,     colorClass: "text-info bg-info/10" },
-    { label: "In Progress",   value: stats?.inProgressCalls  ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent" },
-    { label: "On Hold",       value: stats?.onHoldCalls      ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10" },
-    { label: "Cancelled",     value: stats?.cancelledCalls   ?? 0, icon: AlertCircle, colorClass: "text-destructive bg-destructive/10" },
+    { label: "Open Calls",    value: stats?.openCalls        ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10",         onClick: () => navigate("/calls?status=Open") },
+    { label: "Assigned Calls",value: stats?.assignedCalls    ?? 0, icon: UserCog,     colorClass: "text-info bg-info/10",              onClick: () => navigate("/calls?status=Assigned") },
+    { label: "In Progress",   value: stats?.inProgressCalls  ?? 0, icon: PhoneCall,   colorClass: "text-primary bg-accent",            onClick: () => navigate("/calls?status=In+Progress") },
+    { label: "On Hold",       value: stats?.onHoldCalls      ?? 0, icon: AlertCircle, colorClass: "text-warning bg-warning/10",         onClick: () => navigate("/calls?status=On+Hold") },
+    { label: "Cancelled",     value: stats?.cancelledCalls   ?? 0, icon: AlertCircle, colorClass: "text-destructive bg-destructive/10", onClick: () => navigate("/calls?status=Cancelled") },
+  ];
+
+  const accountStats = [
+    { label: "Total Purchase Amt", value: fmtAmount(stats?.totalPurchaseAmount ?? 0), icon: ShoppingCart, colorClass: "text-primary bg-accent" },
+    { label: "Units Purchased",    value: stats?.totalUnitsPurchased ?? 0,             icon: Package,      colorClass: "text-primary bg-accent" },
+    { label: "Total Sale Amt",     value: fmtAmount(stats?.totalSaleAmount ?? 0),      icon: TrendingUp,   colorClass: "text-success bg-success/10" },
+    { label: "Units Sold",         value: stats?.totalUnitsSold ?? 0,                  icon: Package,      colorClass: "text-success bg-success/10" },
   ];
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -169,8 +209,8 @@ const serviceStats = [
   ];
 
   const engineersData = [
-    { name: "Active",   value: stats?.activeEngineers ?? 0,  fill: "hsl(142, 71%, 45%)" },
-    { name: "Inactive", value: inactiveEngineers,            fill: "hsl(0, 84%, 60%)" },
+    { name: "Active",   value: stats?.activeEngineers ?? 0,  fill: "hsl(142, 71%, 45%)", status: "Active" },
+    { name: "Inactive", value: inactiveEngineers,            fill: "hsl(0, 84%, 60%)",   status: "Inactive" },
   ];
 
   return (
@@ -333,18 +373,29 @@ const serviceStats = [
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {statsLoading
-            ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
-            : allStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
-          }
-        </div>
+        {(viewMode === "both" || viewMode === "service") && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {statsLoading
+              ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+              : allStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+            }
+          </div>
+        )}
 
         {(viewMode === "both" || viewMode === "service") && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {statsLoading
               ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
               : callStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+            }
+          </div>
+        )}
+
+        {(viewMode === "both" || viewMode === "account") && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {statsLoading
+              ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+              : accountStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
             }
           </div>
         )}
@@ -383,7 +434,10 @@ const serviceStats = [
                 ? <div className="h-[250px] flex items-center justify-center"><Spinner /></div>
                 : <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value">
+                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value"
+                    style={{ cursor: "pointer" }}
+                    onClick={(entry) => navigate(`/calls?status=${encodeURIComponent(entry.name)}`)}
+                  >
                     {statusData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
                   <Tooltip />
@@ -488,7 +542,10 @@ const serviceStats = [
             <CardContent>
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie data={engineersData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value">
+                  <Pie data={engineersData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value"
+                    style={{ cursor: "pointer" }}
+                    onClick={(entry) => navigate(`/users?role=Engineer&status=${entry.status}`)}
+                  >
                     {engineersData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                   </Pie>
                   <Tooltip />
@@ -572,6 +629,155 @@ const serviceStats = [
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {(viewMode === "both" || viewMode === "account") && (
+          <div className="grid grid-cols-1 gap-6">
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg mb-0">Category-wise Purchase vs Sale Amount</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-0">
+                {accountChartsLoading
+                  ? <div className="h-[300px] flex items-center justify-center"><Spinner /></div>
+                  : <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={categoryStats} margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="category" className="text-xs" tick={{ fontSize: 11 }} />
+                      <YAxis className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                      <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
+                      <Bar dataKey="purchaseAmount" name="Purchase" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="saleAmount"     name="Sale"     fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                }
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg mb-0">Division-wise Purchase vs Sale Amount</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 pb-0">
+                {accountChartsLoading
+                  ? <div className="h-[300px] flex items-center justify-center"><Spinner /></div>
+                  : <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={divisionStats} margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis dataKey="division" className="text-xs" tick={{ fontSize: 11 }} />
+                      <YAxis className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                      <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
+                      <Bar dataKey="purchaseAmount" name="Purchase" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="saleAmount"     name="Sale"     fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                }
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg mb-0">Top 5 Vendors by Purchase Amount</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {accountChartsLoading
+                    ? <div className="h-[280px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={vendorStats} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis type="number" className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                        <YAxis type="category" dataKey="vendor" className="text-xs" tick={{ fontSize: 11 }} width={90} />
+                        <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                        <Bar dataKey="totalAmount" name="Purchase Amount" fill="hsl(217, 91%, 50%)" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg mb-0">Top 5 Customers by Sale Amount</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {accountChartsLoading
+                    ? <div className="h-[280px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={customerSaleStats} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis type="number" className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                        <YAxis type="category" dataKey="customer" className="text-xs" tick={{ fontSize: 11 }} width={90} />
+                        <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                        <Bar dataKey="totalAmount" name="Sale Amount" fill="hsl(142, 71%, 45%)" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg mb-0">Monthly Purchase vs Sale Trend</CardTitle>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => shiftMonth(-1)}
+                        className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted">
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs text-muted-foreground w-28 text-center">
+                        {purchaseTrendStats[0]?.month} – {purchaseTrendStats[3]?.month}
+                      </span>
+                      <button onClick={() => shiftMonth(1)} disabled={isCurrentMonthWindow}
+                        className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40">
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {accountChartsLoading
+                    ? <div className="h-[300px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={purchaseTrendStats} margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 11 }} />
+                        <YAxis className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                        <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
+                        <Bar dataKey="purchaseAmount" name="Purchase" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="saleAmount"     name="Sale"     fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg mb-0">Contract Type-wise Sales</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {accountChartsLoading
+                    ? <div className="h-[300px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={contractTypeStats} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={4} dataKey="totalAmount" nameKey="name">
+                          {contractTypeStats.map((_, i) => <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={(value: number, name: string) => [`₹${value.toLocaleString("en-IN")}`, name]} />
+                        <Legend layout="vertical" align="right" verticalAlign="middle" formatter={(value) => <span className="text-xs">{value}</span>} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
       </>

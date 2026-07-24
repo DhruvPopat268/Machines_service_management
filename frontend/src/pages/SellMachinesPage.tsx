@@ -102,7 +102,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const fetchMachines = async (search = "") => {
     setSearching(true);
     try {
-      const p: any = { status: "Active", limit: "10" }; if (search.trim()) p.search = search.trim();
+      const p: any = { status: "Active", stockStatus: "In Stock", limit: "10" }; if (search.trim()) p.search = search.trim();
       const r = await api.get("/admin/machines", { params: p });
       setMachineResults(r.data.data);
     } catch { toast.error("Failed to load machines"); }
@@ -379,7 +379,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                               className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
                               onClick={() => addMachine(m)} onMouseDown={(e) => e.preventDefault()}>
                               <span className="text-sm font-medium">{m.name}</span>
-                              <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
+                                <span className="text-xs font-medium bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{(m as any).currentStock}</span>
+                              </div>
                             </button>
                           ))}
                     </div>

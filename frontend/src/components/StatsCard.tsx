@@ -9,11 +9,15 @@ interface StatsCardProps {
   trend?: string;
   trendUp?: boolean;
   colorClass?: string;
+  onClick?: () => void;
 }
 
-export function StatsCard({ label, value, icon: Icon, trend, trendUp, colorClass = "text-primary bg-accent" }: StatsCardProps) {
+export function StatsCard({ label, value, icon: Icon, trend, trendUp, colorClass = "text-primary bg-accent", onClick }: StatsCardProps) {
   return (
-    <Card className="border-0 shadow-sm hover:shadow-md transition-shadow">
+    <Card
+      className={cn("border-0 shadow-sm hover:shadow-md transition-shadow", onClick && "cursor-pointer")}
+      onClick={onClick}
+    >
       <CardContent className="p-5 flex items-center gap-4">
         <div className={cn("flex h-12 w-12 items-center justify-center rounded-xl", colorClass)}>
           <Icon className="h-5 w-5" />
