@@ -77,9 +77,10 @@ const getAll = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { name:  { $regex: escaped, $options: "i" } },
-          { phone: { $regex: escaped, $options: "i" } },
-          { email: { $regex: escaped, $options: "i" } },
+          { name:       { $regex: escaped, $options: "i" } },
+          { phone:      { $regex: escaped, $options: "i" } },
+          { email:      { $regex: escaped, $options: "i" } },
+          { customerId: { $regex: escaped, $options: "i" } },
         ];
       }
     }

@@ -1,8 +1,9 @@
 const router = require("express").Router();
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
-const { getCharts, getStats } = require("./admin.dashboard.controller");
+const { getCharts, getStats, getAccountCharts } = require("./admin.dashboard.controller");
 
-router.get("/stats", adminAuthMiddleware, getStats);
-router.get("/charts", adminAuthMiddleware, getCharts);
+router.get("/stats",          adminAuthMiddleware, getStats);
+router.get("/charts",         adminAuthMiddleware, getCharts);
+router.get("/account-charts", adminAuthMiddleware, getAccountCharts);
 
 module.exports = router;

@@ -3,6 +3,8 @@ const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const Customer    = require("../customerManagement/admin.customer.model");
 const AdminUser   = require("../auth/admin.user.model");
 const Machine     = require("../inventoryManagement/admin.machine.model");
+const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.model");
+const SoldMachine      = require("../soldMachines/admin.soldMachine.model");
 
 const getStats = async (req, res) => {
   try {
@@ -19,7 +21,17 @@ const getStats = async (req, res) => {
       }
     }
 
-    const callFilter = { ...dateFilter };
+    const callFilter  = { ...dateFilter };
+    const dateCreated = {};
+    if (from || to) {
+      dateCreated.createdAt = {};
+      if (from) dateCreated.createdAt.$gte = new Date(from);
+      if (to) {
+        const toDate2 = new Date(to);
+        toDate2.setHours(23, 59, 59, 999);
+        dateCreated.createdAt.$lte = toDate2;
+      }
+    }
 
     const [
       totalCalls,
@@ -32,6 +44,8 @@ const getStats = async (req, res) => {
       activeEngineers,
       activeCustomers,
       lowStockMachines,
+      purchaseAgg,
+      saleAgg,
     ] = await Promise.all([
       ServiceCall.countDocuments(callFilter),
       ServiceCall.countDocuments({ ...callFilter, status: "Completed" }),
@@ -43,7 +57,20 @@ const getStats = async (req, res) => {
       AdminUser.countDocuments({ role: "Engineer", status: "Active" }),
       Customer.countDocuments({ status: "Active" }),
       Machine.countDocuments({ stockStatus: { $in: ["Low Stock", "Out of Stock"] } }),
+      PurchasedMachine.aggregate([
+        { $match: dateCreated },
+        { $group: { _id: null, totalAmount: { $sum: "$grandTotal" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
+      ]),
+      SoldMachine.aggregate([
+        { $match: dateCreated },
+        { $group: { _id: null, totalAmount: { $sum: "$grandTotal" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
+      ]),
     ]);
+
+    const totalPurchaseAmount  = purchaseAgg[0]?.totalAmount ?? 0;
+    const totalUnitsPurchased  = purchaseAgg[0]?.totalUnits  ?? 0;
+    const totalSaleAmount      = saleAgg[0]?.totalAmount     ?? 0;
+    const totalUnitsSold       = saleAgg[0]?.totalUnits      ?? 0;
 
 
     return res.status(200).json({
@@ -59,6 +86,10 @@ const getStats = async (req, res) => {
         activeEngineers,
         activeCustomers,
         lowStockMachines,
+        totalPurchaseAmount,
+        totalUnitsPurchased,
+        totalSaleAmount,
+        totalUnitsSold,
       },
     });
   } catch (err) {
@@ -222,4 +253,145 @@ const getCharts = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getCharts };
+const getAccountCharts = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    const accountFilter = {};
+    if (from || to) {
+      accountFilter.createdAt = {};
+      if (from) accountFilter.createdAt.$gte = new Date(from);
+      if (to) {
+        const d = new Date(to); d.setHours(23, 59, 59, 999);
+        accountFilter.createdAt.$lte = d;
+      }
+    }
+
+    const now    = new Date();
+    const mYear  = parseInt(req.query.mYear)  || now.getFullYear();
+    const mMonth = parseInt(req.query.mMonth) || (now.getMonth() + 1);
+    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    const monthWindow = [];
+    for (let i = 3; i >= 0; i--) {
+      let m = mMonth - i, y = mYear;
+      if (m <= 0) { m += 12; y -= 1; }
+      monthWindow.push({ year: y, month: m, label: `${MONTH_NAMES[m - 1]} ${y}` });
+    }
+    const windowStart = new Date(monthWindow[0].year, monthWindow[0].month - 1, 1);
+    const windowEnd   = new Date(monthWindow[3].year, monthWindow[3].month,     1);
+
+    const [categoryPurchaseRows, categorySaleRows, divisionPurchaseRows, divisionSaleRows, vendorRows, customerSaleRows, purchaseTrendRows, saleTrendRows, contractTypeRows] = await Promise.all([
+      // Category-wise Purchase
+      PurchasedMachine.aggregate([
+        { $match: accountFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.category": { $nin: [null, ""] } } },
+        { $group: { _id: "$machines.category", purchaseAmount: { $sum: "$machines.buyingTotal" } } },
+        { $project: { _id: 0, category: "$_id", purchaseAmount: 1 } },
+      ]),
+      // Category-wise Sale
+      SoldMachine.aggregate([
+        { $match: accountFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.category": { $nin: [null, ""] } } },
+        { $group: { _id: "$machines.category", saleAmount: { $sum: "$machines.sellingTotal" } } },
+        { $project: { _id: 0, category: "$_id", saleAmount: 1 } },
+      ]),
+      // Division-wise Purchase
+      PurchasedMachine.aggregate([
+        { $match: accountFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.division": { $nin: [null, ""] } } },
+        { $group: { _id: "$machines.division", purchaseAmount: { $sum: "$machines.buyingTotal" } } },
+        { $project: { _id: 0, division: "$_id", purchaseAmount: 1 } },
+      ]),
+      // Division-wise Sale
+      SoldMachine.aggregate([
+        { $match: accountFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.division": { $nin: [null, ""] } } },
+        { $group: { _id: "$machines.division", saleAmount: { $sum: "$machines.sellingTotal" } } },
+        { $project: { _id: 0, division: "$_id", saleAmount: 1 } },
+      ]),
+      // Top 5 Vendors
+      PurchasedMachine.aggregate([
+        { $match: accountFilter },
+        { $addFields: { vendorLabel: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$vendorInfo.companyName", ""] } }, 0] }, "$vendorInfo.companyName", "$vendorInfo.name"] } } },
+        { $match: { vendorLabel: { $nin: [null, ""] } } },
+        { $group: { _id: "$vendorLabel", totalAmount: { $sum: "$grandTotal" } } },
+        { $sort: { totalAmount: -1 } },
+        { $limit: 5 },
+        { $project: { _id: 0, vendor: "$_id", totalAmount: 1 } },
+      ]),
+      // Top 5 Customers
+      SoldMachine.aggregate([
+        { $match: { ...accountFilter, "customerInfo.customerId": { $nin: [null, ""] } } },
+        { $group: { _id: "$customerInfo.customerId", totalAmount: { $sum: "$grandTotal" } } },
+        { $sort: { totalAmount: -1 } },
+        { $limit: 5 },
+        { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "cust" } },
+        { $project: { _id: 0, customer: { $ifNull: [{ $arrayElemAt: ["$cust.customerId", 0] }, "Unknown"] }, totalAmount: 1 } },
+      ]),
+      // Monthly Purchase Trend
+      PurchasedMachine.aggregate([
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, purchaseAmount: { $sum: "$grandTotal" } } },
+      ]),
+      // Monthly Sale Trend
+      SoldMachine.aggregate([
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, saleAmount: { $sum: "$grandTotal" } } },
+      ]),
+      // Contract Type-wise Sales
+      SoldMachine.aggregate([
+        { $match: accountFilter },
+        { $unwind: "$machines" },
+        { $unwind: { path: "$machines.serialNumbers", includeArrayIndex: "snIdx" } },
+        { $match: { "machines.serialNumbers.contractType.name": { $nin: [null, ""] } } },
+        { $group: {
+          _id: { docId: "$_id", machineId: "$machines.machineId", contractType: "$machines.serialNumbers.contractType.name" },
+          sellingTotal: { $first: "$machines.sellingTotal" },
+        }},
+        { $group: { _id: "$_id.contractType", totalAmount: { $sum: "$sellingTotal" } } },
+        { $project: { _id: 0, name: "$_id", totalAmount: 1 } },
+      ]),
+    ]);
+
+    const categoryMap = {};
+    categoryPurchaseRows.forEach(r => { categoryMap[r.category] = { category: r.category, purchaseAmount: r.purchaseAmount, saleAmount: 0 }; });
+    categorySaleRows.forEach(r => {
+      if (categoryMap[r.category]) categoryMap[r.category].saleAmount = r.saleAmount;
+      else categoryMap[r.category] = { category: r.category, purchaseAmount: 0, saleAmount: r.saleAmount };
+    });
+    const categoryStats = Object.values(categoryMap).sort((a, b) => (b.purchaseAmount + b.saleAmount) - (a.purchaseAmount + a.saleAmount));
+
+    const divisionMap = {};
+    divisionPurchaseRows.forEach(r => { divisionMap[r.division] = { division: r.division, purchaseAmount: r.purchaseAmount, saleAmount: 0 }; });
+    divisionSaleRows.forEach(r => {
+      if (divisionMap[r.division]) divisionMap[r.division].saleAmount = r.saleAmount;
+      else divisionMap[r.division] = { division: r.division, purchaseAmount: 0, saleAmount: r.saleAmount };
+    });
+    const divisionStats = Object.values(divisionMap).sort((a, b) => (b.purchaseAmount + b.saleAmount) - (a.purchaseAmount + a.saleAmount));
+
+    const vendorStats       = vendorRows;
+    const customerSaleStats = customerSaleRows;
+
+    const purchaseTrendMap = Object.fromEntries(purchaseTrendRows.map(r => [`${r._id.year}-${r._id.month}`, r.purchaseAmount]));
+    const saleTrendMap     = Object.fromEntries(saleTrendRows.map(r => [`${r._id.year}-${r._id.month}`, r.saleAmount]));
+    const purchaseTrendStats = monthWindow.map(({ year, month, label }) => ({
+      month: label,
+      purchaseAmount: purchaseTrendMap[`${year}-${month}`] ?? 0,
+      saleAmount:     saleTrendMap[`${year}-${month}`]     ?? 0,
+    }));
+    const isCurrentWindow = mYear === now.getFullYear() && mMonth === (now.getMonth() + 1);
+
+    const contractTypeStats = contractTypeRows;
+
+    return res.status(200).json({ success: true, data: { categoryStats, divisionStats, vendorStats, customerSaleStats, purchaseTrendStats, contractTypeStats, isCurrentWindow } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getStats, getCharts, getAccountCharts };

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -250,13 +251,29 @@ const ResetPasswordPopup = ({ open, onClose, userId, userEmail }: { open: boolea
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const UsersPage = () => {
+  const [searchParams, setSearchParams]       = useSearchParams();
   const [data, setData]                       = useState<SystemUser[]>([]);
   const [search, setSearch]                   = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filters, setFilters]                 = useState<Record<string, string>>({});
   const [loading, setLoading]                 = useState(true);
   const [submitting, setSubmitting]           = useState(false);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
+
+  const filters = {
+    role:   searchParams.get("role")   ?? "",
+    status: searchParams.get("status") ?? "",
+  };
+
+  const setFilters = (updater: (prev: Record<string, string>) => Record<string, string>) => {
+    const updated = updater(filters);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      Object.entries(updated).forEach(([k, v]) => {
+        if (v && v !== "all") next.set(k, v); else next.delete(k);
+      });
+      return next;
+    }, { replace: true });
+  };
 
   const [addDialog, setAddDialog]             = useState(false);
   const [addForm, setAddForm]                 = useState(emptyForm);
@@ -285,8 +302,10 @@ const UsersPage = () => {
     try {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
       if (debouncedSearch)                                       params.search = debouncedSearch;
-      if (filters.role   && filters.role   !== "all")           params.role   = filters.role;
-      if (filters.status && filters.status !== "all")           params.status = filters.status;
+      const role   = searchParams.get("role");
+      const status = searchParams.get("status");
+      if (role   && role   !== "all") params.role   = role;
+      if (status && status !== "all") params.status = status;
       const res = await api.get("/admin/system-users", { params, signal: controller.signal });
       setData(res.data.data);
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
@@ -296,7 +315,7 @@ const UsersPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [debouncedSearch, filters]);
+  }, [debouncedSearch, searchParams]);
 
   useEffect(() => { fetchUsers(1); }, [fetchUsers]);
 
@@ -488,7 +507,7 @@ const UsersPage = () => {
                 </SelectContent>
               </Select>
               {(search || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); }} className="h-9">
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setSearchParams({}, { replace: true }); }} className="h-9">
                   <X className="h-4 w-4 mr-1" /> Clear
                 </Button>
               )}
