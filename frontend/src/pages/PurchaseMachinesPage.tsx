@@ -22,12 +22,13 @@ const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
 interface VendorInfo { vendorId: string | null; name: string; companyName: string; phone: string; email: string; gstNumber: string; }
 interface PurchaseMachine {
   machineId: string; machineName: string; modelNumber: string; category: string; categoryId: string; division: string;
-  quantity: number; buyingPrice: number; discountedBuyingPrice: number | null;
-  sellingPrice: number | null; discountedSellingPrice: number | null; buyingTotal: number;
+  quantity: number; buyingPriceWithGst: number; gstPercentage: number; buyingPriceBase: number;
+  sellingPriceWithGst: number | null; sellingPriceBase: number | null;
+  buyingTotalWithGst: number; buyingTotalBase: number;
   serialNumbers?: { serialNumber: string; status: string }[];
   partCodes?: { partCode: string; status: string }[];
 }
-interface Purchase { _id: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotal: number; createdAt: string; }
+interface Purchase { _id: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; createdAt: string; }
 interface Stats { totalPurchased: number; totalMachinesPurchased: number; avgPurchaseValue: number; }
 interface Vendor { _id: string; name: string; companyName: string; phone: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
@@ -35,10 +36,9 @@ interface Machine { _id: string; name: string; modelNumber: string; category?: {
 interface MachineEntry {
   machine: Machine;
   quantity: string;
-  buyingPrice: string;
-  discountedBuyingPrice: string;
-  sellingPrice: string;
-  discountedSellingPrice: string;
+  buyingPriceWithGst: string;
+  gstPercentage: string;
+  sellingPriceWithGst: string;
   serialNumbers: string[];
   partCodes: string[];
 }
@@ -113,7 +113,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   const addMachine = (machine: Machine) => {
     if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Machine already added"); return; }
-    setEntries((prev) => [...prev, { machine, quantity: "", buyingPrice: "", discountedBuyingPrice: "", sellingPrice: "", discountedSellingPrice: "", serialNumbers: [], partCodes: [] }]);
+    setEntries((prev) => [...prev, { machine, quantity: "", buyingPriceWithGst: "", gstPercentage: "", sellingPriceWithGst: "", serialNumbers: [], partCodes: [] }]);
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
 
@@ -166,7 +166,8 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
-      if (!e.buyingPrice)                          { toast.error(`Enter buying price for ${e.machine.name}`); return; }
+      if (!e.buyingPriceWithGst) { toast.error(`Enter buying price (with GST) for ${e.machine.name}`); return; }
+      if (!e.gstPercentage)       { toast.error(`Enter GST % for ${e.machine.name}`); return; }
       const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
       if (isParts) {
         if (e.partCodes.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} part codes for ${e.machine.name}`); return; }
@@ -180,12 +181,11 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
         return {
-          machineId:              e.machine._id,
-          quantity:               Number(e.quantity),
-          buyingPrice:            Number(e.buyingPrice),
-          discountedBuyingPrice:  e.discountedBuyingPrice !== "" ? Number(e.discountedBuyingPrice) : null,
-          sellingPrice:           e.sellingPrice !== "" ? Number(e.sellingPrice) : null,
-          discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
+          machineId:           e.machine._id,
+          quantity:            Number(e.quantity),
+          buyingPriceWithGst:  Number(e.buyingPriceWithGst),
+          gstPercentage:       Number(e.gstPercentage),
+          sellingPriceWithGst: e.sellingPriceWithGst !== "" ? Number(e.sellingPriceWithGst) : null,
           ...(isParts ? { partCodes: e.partCodes } : { serialNumbers: e.serialNumbers }),
         };
       }),
@@ -216,9 +216,9 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   const handleClose = () => { setVendorId(initialVendorId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
 
-  const buyingTotal = entries.reduce((sum, e) => {
-    if (!e.quantity || !e.buyingPrice) return sum;
-    return sum + (Number(e.discountedBuyingPrice) || Number(e.buyingPrice)) * Number(e.quantity);
+  const buyingTotalWithGst = entries.reduce((sum, e) => {
+    if (!e.quantity || !e.buyingPriceWithGst) return sum;
+    return sum + Number(e.buyingPriceWithGst) * Number(e.quantity);
   }, 0);
 
   return (
@@ -366,27 +366,20 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                           </Button>
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Buying Price <span className="text-destructive">*</span></Label>
-                          <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.buyingPrice}
-                            onChange={(e) => updateEntry(mi, "buyingPrice", e.target.value)} />
+                          <Label className="text-xs text-muted-foreground">Buying Price / Qty (with GST) <span className="text-destructive">*</span></Label>
+                          <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.buyingPriceWithGst}
+                            onChange={(e) => updateEntry(mi, "buyingPriceWithGst", e.target.value)} />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Disc. Buying Price</Label>
-                          <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.discountedBuyingPrice}
-                            onChange={(e) => updateEntry(mi, "discountedBuyingPrice", e.target.value)} />
+                          <Label className="text-xs text-muted-foreground">GST % <span className="text-destructive">*</span></Label>
+                          <Input type="number" min={0} max={100} className="h-8 text-sm" placeholder="e.g. 18" value={entry.gstPercentage}
+                            onChange={(e) => updateEntry(mi, "gstPercentage", e.target.value)} />
                         </div>
                         {isParts && (
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Selling Price</Label>
-                            <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.sellingPrice}
-                              onChange={(e) => updateEntry(mi, "sellingPrice", e.target.value)} />
-                          </div>
-                        )}
-                        {isParts && (
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Disc. Selling Price</Label>
-                            <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.discountedSellingPrice}
-                              onChange={(e) => updateEntry(mi, "discountedSellingPrice", e.target.value)} />
+                            <Label className="text-xs text-muted-foreground">Selling Price / Qty (with GST)</Label>
+                            <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.sellingPriceWithGst}
+                              onChange={(e) => updateEntry(mi, "sellingPriceWithGst", e.target.value)} />
                           </div>
                         )}
                       </div>
@@ -399,7 +392,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
             {/* Footer */}
             <div className="border-t px-4 py-3 flex items-center justify-between gap-4 shrink-0 bg-background">
               <span className="text-sm font-medium">
-                Buying Total: <span className="text-base font-bold text-green-600">₹{buyingTotal.toLocaleString()}</span>
+                Buying Total (GST): <span className="text-base font-bold text-green-600">₹{buyingTotalWithGst.toLocaleString()}</span>
               </span>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
@@ -603,11 +596,15 @@ const PurchaseMachinesPage = () => {
         </div>
       ),
     },
-    { key: "buyingPrice",            label: "Buying Price",       render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPrice.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
-    { key: "discountedBuyingPrice",  label: "Disc. Buying",       render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.discountedBuyingPrice != null ? `₹${m.discountedBuyingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
-    { key: "sellingPrice",           label: "Selling Price",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.sellingPrice != null ? `₹${m.sellingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
-    { key: "discountedSellingPrice", label: "Disc. Selling",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
-    { key: "grandTotal",             label: "Grand Total",        render: (p) => <span className="font-semibold">₹{p.grandTotal.toLocaleString()}</span> },
+    { key: "gstPercentage",      label: "GST %",            render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.gstPercentage}%{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "buyingPriceBase",    label: "Buying Base",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPriceBase.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "buyingPriceWithGst", label: "Buying (GST)",     render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPriceWithGst.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "sellingPriceBase",   label: "Selling Base",     render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.sellingPriceBase    != null ? `₹${m.sellingPriceBase.toLocaleString()}`    : "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "sellingPriceWithGst",label: "Selling (GST)",    render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.sellingPriceWithGst != null ? `₹${m.sellingPriceWithGst.toLocaleString()}` : "—"}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "buyingTotalWithGst", label: "Buying Total (GST)", render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingTotalWithGst.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "buyingTotalBase",    label: "Buying Total (Base)",render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingTotalBase.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "grandTotalWithGst",  label: "Grand Total (GST)", render: (p) => <span className="font-semibold">₹{p.grandTotalWithGst.toLocaleString()}</span> },
+    { key: "grandTotalBase",     label: "Grand Total (Base)",render: (p) => <span className="font-semibold">₹{p.grandTotalBase.toLocaleString()}</span> },
     { key: "createdAt",              label: "Purchased At",       render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     // { key: "actions", label: "Actions", sticky: true, render: (p) => <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/purchase-machines/${p._id}`)}><Eye className="h-3 w-3" /></Button> },
   ];

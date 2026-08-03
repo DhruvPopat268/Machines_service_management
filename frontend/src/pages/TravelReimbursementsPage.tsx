@@ -174,7 +174,7 @@ const TravelReimbursementsPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Travel Reimbursements" description="Track engineer travel reimbursement records" />
+          <PageHeader title="Travel Expenses" description="Track engineer travel expense records" />
 
           <div className="grid grid-cols-2 gap-4">
             <StatsCard label="Pending Reimbursement (km)" value={`${stats.pendingReimbursementKm} km`} icon={Clock}        colorClass="text-yellow-600 bg-yellow-50" />

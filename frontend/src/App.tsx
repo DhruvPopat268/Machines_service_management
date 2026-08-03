@@ -26,7 +26,6 @@ import MachineCategoriesPage from "./pages/MachineCategoriesPage";
 import CustomersPage from "./pages/CustomersPage";
 import ProblemTypesPage from "./pages/ProblemTypesPage";
 import PurchaseMachinesPage from "./pages/PurchaseMachinesPage";
-import PurchaseMachineDetailPage from "./pages/PurchaseMachineDetailPage";
 import SellMachinesPage from "./pages/SellMachinesPage";
 import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
@@ -35,6 +34,8 @@ import ZonesPage from "./pages/ZonesPage";
 import CompaniesPage from "./pages/CompaniesPage";
 import VendorsPage from "./pages/VendorsPage";
 import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
+import ExpenseCategoriesPage from "./pages/ExpenseCategoriesPage";
+import AddExpensePage from "./pages/AddExpensePage";
 import ProfilePage from "./pages/ProfilePage";
 import { ProfileProvider } from "./context/ProfileContext";
 import PermissionGuard from "./components/PermissionGuard";
@@ -79,7 +80,6 @@ const App = () => (
             <Route path="/inventory-logs/:id" element={<G k="inventory-logs"><InventoryLogDetailPage /></G>} />
 
             <Route path="/purchase-machines"      element={<G k="purchase-machines"><PurchaseMachinesPage /></G>} />
-            <Route path="/purchase-machines/:id"  element={<G k="purchase-machines"><PurchaseMachineDetailPage /></G>} />
 
             <Route path="/sell-machines"      element={<G k="sell-machines"><SellMachinesPage /></G>} />
             <Route path="/sell-machines/:id"  element={<G k="sell-machines"><SellMachineDetailPage /></G>} />
@@ -95,6 +95,9 @@ const App = () => (
             <Route path="/zones"              element={<G k="zones"><ZonesPage /></G>} />
             <Route path="/vendors"            element={<G k="vendors"><VendorsPage /></G>} />
             <Route path="/reimbursements"     element={<G k="reimbursements"><TravelReimbursementsPage /></G>} />
+
+            <Route path="/expense-categories" element={<G k="expense-categories"><ExpenseCategoriesPage /></G>} />
+            <Route path="/add-expenses"        element={<G k="add-expenses"><AddExpensePage /></G>} />
 
             <Route path="/users"              element={<G k="system-users"><UsersPage /></G>} />
             <Route path="/permissions"        element={<G k="permissions"><PermissionsPage /></G>} />

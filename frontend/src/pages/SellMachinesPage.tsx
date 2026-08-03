@@ -31,7 +31,7 @@ interface SaleMachine {
 interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotal: number; basicTotal?: number | null; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; invoiceGrandTotal?: number | null; }
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
-interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
+interface Machine { _id: string; name: string; modelNumber: string; currentStock: number; category?: { _id: string; name: string }; }
 interface ContractType { _id: string; name: string; code: string; freeService: boolean; freeParts: boolean; }
 interface ActiveCompany { _id: string; name: string; }
 
@@ -102,8 +102,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const fetchMachines = async (search = "") => {
     setSearching(true);
     try {
-      const p: any = { status: "Active", stockStatus: "In Stock", limit: "10" }; if (search.trim()) p.search = search.trim();
-      const r = await api.get("/admin/machines", { params: p });
+      const p: any = {}; if (search.trim()) p.search = search.trim();
+      const r = await api.get("/admin/sales/available-machines", { params: p });
       setMachineResults(r.data.data);
     } catch { toast.error("Failed to load machines"); }
     finally { setSearching(false); }
@@ -381,7 +381,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                               <span className="text-sm font-medium">{m.name}</span>
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
-                                <span className="text-xs font-medium bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{(m as any).currentStock}</span>
+                                <span className="text-xs font-medium bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Stock: {m.currentStock}</span>
                               </div>
                             </button>
                           ))}
@@ -452,8 +452,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Qty <span className="text-destructive">*</span></Label>
-                            <Input type="number" min={1} className="h-8 text-sm" value={entry.quantity}
-                              onChange={(e) => { updateEntry(mi, "quantity", e.target.value); updateEntry(mi, isParts ? "partCodes" : "serialNumbers", []); }} />
+                            <Input type="number" min={1} max={entry.machine.currentStock} className="h-8 text-sm" value={entry.quantity}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val !== "" && Number(val) > entry.machine.currentStock) { toast.error(`Max available stock is ${entry.machine.currentStock}`); return; }
+                                updateEntry(mi, "quantity", val); updateEntry(mi, isParts ? "partCodes" : "serialNumbers", []);
+                              }} />
                           </div>
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">{isParts ? "Part Codes" : "Serial Nos"}</Label>

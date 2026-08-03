@@ -21,5 +21,7 @@ router.use("/engineers",     require("./engineerManagement/admin.engineer.routes
 router.use("/reimbursements", require("./reimbursement/admin.reimbursement.routes"));
 router.use("/pages-categories", require("./pagesCategoryManagement/admin.pagesCategory.routes"));
 router.use("/dashboard", require("./dashboard/admin.dashboard.routes"));
+router.use("/expenses", require("./expenseCategoriesManagement/admin.expenseCategory.routes"));
+router.use("/add-expenses", require("./addExpense/admin.expense.routes"));
 
 module.exports = router;

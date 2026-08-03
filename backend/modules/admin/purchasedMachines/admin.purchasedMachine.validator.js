@@ -10,7 +10,7 @@ const validateCreatePurchase = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, quantity, buyingPrice, discountedBuyingPrice, sellingPrice, discountedSellingPrice, serialNumbers, partCodes } = machines[mi];
+    const { machineId, quantity, buyingPriceWithGst, gstPercentage, sellingPriceWithGst, serialNumbers, partCodes } = machines[mi];
     const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
@@ -19,31 +19,19 @@ const validateCreatePurchase = (body) => {
     if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
       return `${label}: quantity must be a positive number`;
 
-    if (buyingPrice == null || (typeof buyingPrice === "string" && buyingPrice.trim() === ""))
-      return `${label}: buyingPrice is required`;
-    const numPrice = Number(buyingPrice);
-    if (isNaN(numPrice)) return `${label}: buyingPrice must be a valid number`;
-    if (numPrice < 0)    return `${label}: buyingPrice must be a non-negative number`;
+    if (buyingPriceWithGst == null || (typeof buyingPriceWithGst === "string" && buyingPriceWithGst.trim() === ""))
+      return `${label}: buyingPriceWithGst is required`;
+    const numBuyGst = Number(buyingPriceWithGst);
+    if (isNaN(numBuyGst) || numBuyGst < 0) return `${label}: buyingPriceWithGst must be a non-negative number`;
 
-    if (discountedBuyingPrice !== undefined && discountedBuyingPrice !== null) {
-      const n = Number(discountedBuyingPrice);
-      if (isNaN(n))        return `${label}: discountedBuyingPrice must be a valid number`;
-      if (n < 0)           return `${label}: discountedBuyingPrice must be a non-negative number`;
-      if (n > numPrice)    return `${label}: discountedBuyingPrice cannot be greater than buyingPrice`;
-    }
+    if (gstPercentage == null || (typeof gstPercentage === "string" && gstPercentage.trim() === ""))
+      return `${label}: gstPercentage is required`;
+    const numGstPct = Number(gstPercentage);
+    if (isNaN(numGstPct) || numGstPct < 0) return `${label}: gstPercentage must be a non-negative number`;
 
-    if (sellingPrice !== undefined && sellingPrice !== null) {
-      const n = Number(sellingPrice);
-      if (isNaN(n)) return `${label}: sellingPrice must be a valid number`;
-      if (n < 0)    return `${label}: sellingPrice must be a non-negative number`;
-    }
-
-    if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
-      const n  = Number(discountedSellingPrice);
-      const ns = Number(sellingPrice);
-      if (isNaN(n))              return `${label}: discountedSellingPrice must be a valid number`;
-      if (n < 0)                 return `${label}: discountedSellingPrice must be a non-negative number`;
-      if (!isNaN(ns) && n > ns)  return `${label}: discountedSellingPrice cannot be greater than sellingPrice`;
+    if (sellingPriceWithGst !== undefined && sellingPriceWithGst !== null) {
+      const n = Number(sellingPriceWithGst);
+      if (isNaN(n) || n < 0) return `${label}: sellingPriceWithGst must be a non-negative number`;
     }
 
     if (serialNumbers !== undefined) {

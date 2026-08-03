@@ -26,6 +26,34 @@ const buildMachineFilter = (category, division, machineId) => {
   return Object.keys(f).length > 0 ? { $elemMatch: f } : null;
 };
 
+const getAvailableMachines = async (req, res) => {
+  try {
+    const { search } = req.query;
+    const query = { status: "Active", stockStatus: { $in: ["In Stock", "Low Stock"] } };
+
+    if (typeof search === "string") {
+      const s = search.trim().slice(0, 100);
+      if (s) {
+        const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        query.$or = [
+          { name:        { $regex: escaped, $options: "i" } },
+          { modelNumber: { $regex: escaped, $options: "i" } },
+        ];
+      }
+    }
+
+    const machines = await Machine.find(query)
+      .populate("category", "_id name")
+      .populate("division", "_id name")
+      .select("_id name modelNumber category division stockStatus currentStock")
+      .lean();
+
+    res.status(200).json({ success: true, data: machines });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getAvailableCodes = async (req, res) => {
   try {
     const { machineId } = req.query;
@@ -893,4 +921,4 @@ const sendContractExpiryAlerts = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus };
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus };
