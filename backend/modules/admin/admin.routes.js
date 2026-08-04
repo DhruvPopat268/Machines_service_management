@@ -23,5 +23,7 @@ router.use("/pages-categories", require("./pagesCategoryManagement/admin.pagesCa
 router.use("/dashboard", require("./dashboard/admin.dashboard.routes"));
 router.use("/expenses", require("./expenseCategoriesManagement/admin.expenseCategory.routes"));
 router.use("/add-expenses", require("./addExpense/admin.expense.routes"));
+router.use("/gst-config", require("./gstConfig/admin.gstConfig.routes"));
+router.use("/payment-transactions", require("./paymentTransactions/admin.paymentTransaction.routes"));
 
 module.exports = router;

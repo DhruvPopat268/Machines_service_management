@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Payment Receipt</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Times New Roman', Times, serif;
+    background: #f2f2f2;
+    display: flex;
+    justify-content: center;
+    padding: 30px;
+  }
+  .receipt {
+    width: 750px;
+    background: #fff;
+    border: 2px solid #000;
+    border-radius: 10px;
+    padding: 25px 35px 20px 35px;
+  }
+  .company-name {
+    text-align: center;
+    font-size: 34px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin: 0;
+  }
+  .company-sub {
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    font-size: 16px;
+    margin: 4px 0;
+  }
+  .company-address {
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    margin: 2px 0 10px 0;
+  }
+  hr {
+    border: none;
+    border-top: 2px solid #000;
+    margin: 6px 0;
+  }
+  .receipt-title {
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    font-size: 20px;
+    letter-spacing: 1px;
+    margin: 8px 0;
+  }
+  .no-date-row {
+    display: flex;
+    justify-content: space-between;
+    font-style: italic;
+    font-size: 17px;
+    margin: 25px 0 30px 0;
+  }
+  .no-date-row .no-block {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .no-date-row .no-block .fill-short {
+    border-bottom: 1px solid #000;
+    width: 120px;
+    height: 22px;
+    display: inline-block;
+  }
+  .no-date-row .date-block {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-right: 80px;
+  }
+  .no-date-row .date-block .fill-short {
+    border-bottom: 1px solid #000;
+    width: 160px;
+    height: 22px;
+    display: inline-block;
+  }
+  .field-line {
+    font-style: italic;
+    font-size: 17px;
+    display: flex;
+    align-items: flex-end;
+    margin: 20px 0 5px 0;
+  }
+  .field-line .fill {
+    flex: 1;
+    border-bottom: 1px solid #000;
+    height: 22px;
+    margin-left: 8px;
+    padding-left: 6px;
+    font-style: normal;
+    font-size: 16px;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 2px;
+  }
+  .blank-line {
+    border-bottom: 1px solid #000;
+    height: 22px;
+    margin: 10px 0 25px 0;
+    padding-left: 6px;
+    font-style: normal;
+    font-size: 16px;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 2px;
+  }
+  table.amount-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-style: italic;
+    font-size: 17px;
+  }
+  table.amount-table td {
+    border: 1px solid #000;
+    padding: 10px 12px;
+  }
+  table.amount-table td.label {
+    width: 32%;
+  }
+  table.amount-table td.value {
+    font-style: normal;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .footer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 60px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 16px;
+  }
+  .footer-row .for-company {
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+  <div class="receipt">
+    <h1 class="company-name">{{companyName}}</h1>
+    {{#if companyTagline}}<div class="company-sub">{{companyTagline}}</div>{{/if}}
+    <div class="company-address">{{companyAddress}} &nbsp;|&nbsp; Ph.: {{companyPhone}} &nbsp;|&nbsp; {{companyEmail}}</div>
+
+    <hr>
+    <div class="receipt-title">PAYMENT RECEIPT</div>
+    <hr>
+
+    <div class="no-date-row">
+      <div class="no-block">
+        <span>No.</span>
+        <span class="fill-short">{{receiptNumber}}</span>
+      </div>
+      <div class="date-block">
+        <span>Date</span>
+        <span class="fill-short">{{receiptDate}}</span>
+      </div>
+    </div>
+
+    <div class="field-line">
+      <span>Received with thanks from</span>
+      <div class="fill">{{customerName}}</div>
+    </div>
+    <div class="blank-line">{{customerAddress}}</div>
+
+    <div class="field-line">
+      <span>The sum of Rs.</span>
+      <div class="fill">{{amountInWords}}</div>
+    </div>
+    <div class="blank-line"></div>
+
+    <table class="amount-table">
+      <tr>
+        <td class="label">Rs.</td>
+        <td class="value">{{amountReceived}}</td>
+      </tr>
+      <tr>
+        <td class="label">By Cash / Online</td>
+        <td class="value">{{paymentMethod}}</td>
+      </tr>
+      <tr>
+        <td class="label">against Bill No.</td>
+        <td class="value">{{invoiceNumber}}</td>
+      </tr>
+    </table>
+
+    <div class="footer-row">
+      <span></span>
+      <span class="for-company">For {{companyName}}</span>
+    </div>
+
+  </div>
+
+</body>
+</html>

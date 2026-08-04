@@ -13,7 +13,7 @@ const validateCreateSale = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, categoryId, quantity, sellingPrice, discountedSellingPrice, serialNumbers, partCodes } = machines[mi];
+    const { machineId, categoryId, quantity, sellingPriceWithGst, discountPercentage, serialNumbers, partCodes } = machines[mi];
     const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
@@ -22,17 +22,17 @@ const validateCreateSale = (body) => {
     if (quantity == null || isNaN(quantity) || Number(quantity) <= 0)
       return `${label}: quantity must be a positive number`;
 
-    if (sellingPrice == null || (typeof sellingPrice === "string" && sellingPrice.trim() === ""))
-      return `${label}: sellingPrice is required`;
-    const numPrice = Number(sellingPrice);
-    if (isNaN(numPrice)) return `${label}: sellingPrice must be a valid number`;
-    if (numPrice < 0)    return `${label}: sellingPrice must be a non-negative number`;
+    if (sellingPriceWithGst == null || (typeof sellingPriceWithGst === "string" && sellingPriceWithGst.trim() === ""))
+      return `${label}: sellingPriceWithGst is required`;
+    const numPrice = Number(sellingPriceWithGst);
+    if (isNaN(numPrice)) return `${label}: sellingPriceWithGst must be a valid number`;
+    if (numPrice < 0)    return `${label}: sellingPriceWithGst must be a non-negative number`;
 
-    if (discountedSellingPrice !== undefined && discountedSellingPrice !== null) {
-      const n = Number(discountedSellingPrice);
-      if (isNaN(n))     return `${label}: discountedSellingPrice must be a valid number`;
-      if (n < 0)        return `${label}: discountedSellingPrice must be a non-negative number`;
-      if (n > numPrice) return `${label}: discountedSellingPrice cannot be greater than sellingPrice`;
+    if (discountPercentage !== undefined && discountPercentage !== null) {
+      const n = Number(discountPercentage);
+      if (isNaN(n))   return `${label}: discountPercentage must be a valid number`;
+      if (n < 0)      return `${label}: discountPercentage must be a non-negative number`;
+      if (n > 100)    return `${label}: discountPercentage cannot exceed 100`;
     }
 
     const isParts = categoryId && categoryId.toString() === PARTS_CATEGORY_ID;
@@ -80,6 +80,28 @@ const validateCreateSale = (body) => {
         }
       }
     }
+  }
+
+  const { currentPaymentStatus, paidAmount, paymentDate } = body;
+
+  const validStatuses = ["Paid", "Unpaid", "Partial-Paid"];
+  if (!currentPaymentStatus || !validStatuses.includes(currentPaymentStatus))
+    return "currentPaymentStatus must be one of: Paid, Unpaid, Partial-Paid";
+
+  if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
+    if (!paymentDate) return "paymentDate is required for Paid or Partial-Paid status";
+    if (isNaN(new Date(paymentDate).getTime())) return "paymentDate must be a valid date";
+    if (!body.paymentMethod || !["Cash", "Online"].includes(body.paymentMethod))
+      return "paymentMethod must be Cash or Online";
+    if (!body.companyId || !mongoose.isValidObjectId(body.companyId))
+      return "companyId is required for Paid or Partial-Paid status";
+  }
+
+  if (currentPaymentStatus === "Partial-Paid") {
+    if (paidAmount == null || isNaN(Number(paidAmount)))
+      return "paidAmount is required for Partial-Paid status";
+    if (Number(paidAmount) <= 0)
+      return "paidAmount must be greater than 0";
   }
 
   return null;

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog, ShieldCheck, ShieldHalf,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle, Percent,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -254,6 +254,18 @@ export function AppSidebar() {
                   )}
                 </SidebarMenu>
               </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* GST Management */}
+        {hasPermission("gst-config") && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">GST Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarLink to="/gst-config" icon={Percent} label="GST Config" collapsed={collapsed} />
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}

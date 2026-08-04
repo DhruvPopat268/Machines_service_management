@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, Edit, FileText, ExternalLink, UserCircle } from "lucide-react";
+import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -24,11 +24,14 @@ interface CustomerInfo { customerId: string | null; name: string; phone: string;
 interface ContractTypeSnapshot { contractTypeId: string; name: string; code: string; freeService: boolean; freeParts: boolean; validFrom: string; validTo: string; }
 interface SaleMachine {
   machineId: string; machineName: string; modelNumber: string; category: string; categoryId: string; division: string;
-  quantity: number; sellingPrice: number; discountedSellingPrice: number | null; sellingTotal: number;
+  quantity: number;
+  sellingPriceWithGst: number; sellingPriceBase: number; discountPercentage: number;
+  netSellingPriceBase: number; netSellingPriceWithGst: number;
+  sellingTotalBase: number; sellingTotalWithGst: number;
   serialNumbers?: { serialNumber: string; contractType: ContractTypeSnapshot | null }[];
   partCodes?: { partCode: string; contractType: ContractTypeSnapshot | null }[];
 }
-interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotal: number; basicTotal?: number | null; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; invoiceGrandTotal?: number | null; }
+interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotalBase: number; grandTotalWithGst: number; currentPaymentStatus: string; paidAmount: number; remainingAmount: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; }
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; currentStock: number; category?: { _id: string; name: string }; }
@@ -38,30 +41,23 @@ interface ActiveCompany { _id: string; name: string; }
 interface PagesCategory { _id: string; name: string; }
 interface PagesCategoryEntry { pagesCategoryId: string; pagesCategory: string; costPerPage: string; }
 
+interface UnitRow {
+  value: string;
+  contractTypeId: string;
+  validFrom: string;
+  validTo: string;
+  minCopies: string;
+  pagesCategories: PagesCategoryEntry[];
+}
+
 interface MachineEntry {
   machine: Machine;
   quantity: string;
-  sellingPrice: string;
-  discountedSellingPrice: string;
-  serialNumbers: { serialNumber: string; contractTypeId: string; validFrom: string; validTo: string; minCopies: string; pagesCategories: PagesCategoryEntry[] }[];
-  partCodes: string[];
-}
-
-interface CodesDialogState {
-  mi: number; machineName: string; isParts: boolean;
-  quantity: number;
+  sellingPriceWithGst: string;
+  discountPercentage: string;
   availableCodes: string[];
-  codes: { value: string; contractTypeId: string; validFrom: string; validTo: string; minCopies: string }[];
-  saving: boolean;
-  loading: boolean;
-}
-
-interface PagesCategoryConfigState {
-  serialNumbers: string[];
-  currentIndex: number;
-  mi: number;
-  pendingCodes: CodesDialogState["codes"];
-  configs: Record<string, PagesCategoryEntry[]>;
+  loadingCodes: boolean;
+  units: UnitRow[];
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -91,9 +87,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [customerForm, setCustomerForm] = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null as File | null });
   const [zones, setZones] = useState<{ label: string; value: string }[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
-  const [codesDialog, setCodesDialog] = useState<CodesDialogState | null>(null);
-  const [pagesCatConfig, setPagesCatConfig] = useState<PagesCategoryConfigState | null>(null);
   const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
+  const [totalGst, setTotalGst] = useState<number | null>(null);
   const ctAbortRef = useRef<AbortController | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -132,7 +127,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     } catch { }
   };
 
-  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); }, [open]);
+  const fetchGstConfig = async () => {
+    try {
+      const r = await api.get("/admin/gst-config");
+      if (r.data.data) setTotalGst(r.data.data.totalGst ?? null);
+    } catch { }
+  };
+
+  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); fetchGstConfig(); }, [open]);
 
   const fetchActivePagesCats = async () => {
     try {
@@ -148,7 +150,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
   const addMachine = (machine: Machine) => {
     if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Machine already added"); return; }
-    setEntries((prev) => [...prev, { machine, quantity: "", sellingPrice: "", discountedSellingPrice: "", serialNumbers: [], partCodes: [] }]);
+    setEntries((prev) => [...prev, { machine, quantity: "", sellingPriceWithGst: "", discountPercentage: "", availableCodes: [], loadingCodes: false, units: [] }]);
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
 
@@ -156,84 +158,51 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const updateEntry = (mi: number, field: keyof MachineEntry, value: any) =>
     setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, [field]: value }));
 
-  const openCodesDialog = async (mi: number) => {
-    const e = entries[mi];
-    const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
-    const qty = Number(e.quantity) || 0;
+  const updateUnit = (mi: number, ui: number, field: keyof UnitRow, value: any) =>
+    setEntries((prev) => prev.map((e, i) => {
+      if (i !== mi) return e;
+      const units = e.units.map((u, j) => j !== ui ? u : { ...u, [field]: value });
+      return { ...e, units };
+    }));
 
-    // First fetch available codes to check max allowed
-    let available: string[] = [];
+  const handleQtyChange = async (mi: number, val: string) => {
+    const entry = entries[mi];
+    const isParts = entry.machine.category?._id === PARTS_CATEGORY_ID;
+    const qty = Number(val) || 0;
+
+    if (val !== "" && qty > entry.machine.currentStock) {
+      toast.error(`Max available stock is ${entry.machine.currentStock}`); return;
+    }
+
+    // Reset units immediately
+    setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, quantity: val, units: [], loadingCodes: qty > 0 }));
+
+    if (qty <= 0) return;
+
     try {
-      const res = await api.get("/admin/sales/available-codes", { params: { machineId: e.machine._id } });
-      available = res.data.data;
+      const res = await api.get("/admin/sales/available-codes", { params: { machineId: entry.machine._id } });
+      const available: string[] = res.data.data;
+
+      if (available.length === 0) {
+        toast.error(`No available ${isParts ? "part codes" : "serial numbers"} in stock`);
+        setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, quantity: "", loadingCodes: false }));
+        return;
+      }
+      if (qty > available.length) {
+        toast.error(`Max available quantity is ${available.length}. Please reduce the quantity.`);
+        setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, quantity: String(available.length), loadingCodes: false, availableCodes: available, units: Array.from({ length: available.length }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "", pagesCategories: [] })) }));
+        return;
+      }
+
+      setEntries((prev) => prev.map((e, i) => i !== mi ? e : {
+        ...e,
+        loadingCodes: false,
+        availableCodes: available,
+        units: Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "", pagesCategories: [] })),
+      }));
     } catch {
       toast.error("Failed to load available codes");
-      return;
-    }
-
-    if (available.length === 0) {
-      toast.error(`No available ${isParts ? "part codes" : "serial numbers"} in stock for this machine`);
-      return;
-    }
-
-    if (qty > available.length) {
-      toast.error(`Max available quantity is ${available.length}. Please reduce the quantity.`);
-      return;
-    }
-
-    const existingCodes = isParts
-      ? (e.partCodes.length > 0 ? e.partCodes.map(v => ({ value: v, contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })))
-      : (e.serialNumbers.length > 0 ? e.serialNumbers.map(s => ({ value: s.serialNumber, contractTypeId: s.contractTypeId, validFrom: s.validFrom, validTo: s.validTo, minCopies: s.minCopies })) : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "" })));
-
-    setCodesDialog({ mi, machineName: e.machine.name, isParts, quantity: qty, availableCodes: available, codes: existingCodes.slice(0, qty), saving: false, loading: false });
-  };
-
-  const saveCodes = async () => {
-    if (!codesDialog) return;
-    const { mi, codes, quantity, isParts, availableCodes } = codesDialog;
-
-    for (let i = 0; i < quantity; i++) {
-      if (!codes[i]?.value?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is not selected`); return; }
-      if (!isParts) {
-        if (!codes[i].contractTypeId) { toast.error(`Select contract type for serial number ${i + 1}`); return; }
-        if (!codes[i].validFrom) { toast.error(`Enter valid from date for serial number ${i + 1}`); return; }
-        if (!codes[i].validTo) { toast.error(`Enter valid to date for serial number ${i + 1}`); return; }
-        if (codes[i].validTo <= codes[i].validFrom) { toast.error(`Valid To must be after Valid From for serial number ${i + 1}`); return; }
-      }
-    }
-
-    const trimmedValues = codes.map(c => c.value.trim());
-    const unique = new Set(trimmedValues.map(v => v.toUpperCase()));
-    if (unique.size !== trimmedValues.length) { toast.error("Duplicate codes selected"); return; }
-
-    const notAvailable = trimmedValues.filter(v => !availableCodes.includes(v));
-    if (notAvailable.length > 0) { toast.error(`Some codes are no longer available: ${notAvailable.join(", ")}`); return; }
-
-    if (isParts) {
-      updateEntry(mi, "partCodes", trimmedValues);
-      setCodesDialog(null);
-      return;
-    }
-
-    // Check if any serial has TSS contract type — needs pages category config
-    const tssSerials = TSS_CONTRACT_TYPE_ID
-      ? codes.slice(0, quantity).filter(c => c.contractTypeId === TSS_CONTRACT_TYPE_ID).map(c => c.value.trim())
-      : [];
-
-    if (tssSerials.length > 0) {
-      const existing = entries[mi].serialNumbers;
-      const existingConfigs: Record<string, PagesCategoryEntry[]> = {};
-      for (const sn of tssSerials) {
-        const prev = existing.find(s => s.serialNumber === sn);
-        existingConfigs[sn] = (prev?.pagesCategories ?? []).map(e => ({ ...e, costPerPage: String(e.costPerPage) }));
-      }
-      setPagesCatConfig({ serialNumbers: tssSerials, currentIndex: 0, mi, pendingCodes: codes, configs: existingConfigs });
-    } else {
-      updateEntry(mi, "serialNumbers", codes.slice(0, quantity).map(c => ({
-        serialNumber: c.value.trim(), contractTypeId: c.contractTypeId,
-        validFrom: c.validFrom, validTo: c.validTo, minCopies: c.minCopies, pagesCategories: [],
-      })));
-      setCodesDialog(null);
+      setEntries((prev) => prev.map((e, i) => i !== mi ? e : { ...e, loadingCodes: false }));
     }
   };
 
@@ -243,13 +212,34 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
-      if (!e.sellingPrice) { toast.error(`Enter selling price for ${e.machine.name}`); return; }
+      if (!e.sellingPriceWithGst) { toast.error(`Enter selling price for ${e.machine.name}`); return; }
       const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
-      if (isParts) {
-        if (e.partCodes.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} part codes for ${e.machine.name}`); return; }
-      } else {
-        if (e.serialNumbers.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} serial numbers for ${e.machine.name}`); return; }
+      const qty = Number(e.quantity);
+      if (e.units.length !== qty) { toast.error(`Codes not loaded for ${e.machine.name}`); return; }
+      for (let i = 0; i < qty; i++) {
+        const u = e.units[i];
+        if (!u.value.trim()) { toast.error(`Select ${isParts ? "part code" : "serial number"} for ${e.machine.name} unit ${i + 1}`); return; }
+        if (!isParts) {
+          if (!u.contractTypeId) { toast.error(`Select contract type for ${e.machine.name} unit ${i + 1}`); return; }
+          if (!u.validFrom) { toast.error(`Enter valid from for ${e.machine.name} unit ${i + 1}`); return; }
+          if (!u.validTo) { toast.error(`Enter valid to for ${e.machine.name} unit ${i + 1}`); return; }
+          if (u.validTo <= u.validFrom) { toast.error(`Valid To must be after Valid From for ${e.machine.name} unit ${i + 1}`); return; }
+          if (u.contractTypeId === TSS_CONTRACT_TYPE_ID && u.pagesCategories.length === 0) {
+            toast.error(`Add at least one pages category for ${e.machine.name} unit ${i + 1}`); return;
+          }
+          if (u.contractTypeId === TSS_CONTRACT_TYPE_ID) {
+            for (let pi = 0; pi < u.pagesCategories.length; pi++) {
+              const p = u.pagesCategories[pi];
+              if (!p.pagesCategoryId) { toast.error(`Select pages category for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return; }
+              if (p.costPerPage === "" || isNaN(Number(p.costPerPage)) || Number(p.costPerPage) < 0) {
+                toast.error(`Enter valid cost per page for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return;
+              }
+            }
+          }
+        }
       }
+      const vals = e.units.map(u => u.value.trim().toUpperCase());
+      if (new Set(vals).size !== vals.length) { toast.error(`Duplicate codes in ${e.machine.name}`); return; }
     }
 
     const payload = {
@@ -260,11 +250,18 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           machineId: e.machine._id,
           categoryId: e.machine.category?._id,
           quantity: Number(e.quantity),
-          sellingPrice: Number(e.sellingPrice),
-          discountedSellingPrice: e.discountedSellingPrice !== "" ? Number(e.discountedSellingPrice) : null,
+          sellingPriceWithGst: Number(e.sellingPriceWithGst),
+          discountPercentage: e.discountPercentage !== "" ? Number(e.discountPercentage) : undefined,
           ...(isParts
-            ? { partCodes: e.partCodes }
-            : { serialNumbers: e.serialNumbers.map(s => ({ ...s, minCopies: Number(s.minCopies) || 0, pagesCategories: (s.pagesCategories ?? []).map(p => ({ ...p, costPerPage: Number(p.costPerPage) })) })) }),
+            ? { partCodes: e.units.map(u => u.value.trim()) }
+            : { serialNumbers: e.units.map(u => ({
+                serialNumber: u.value.trim(),
+                contractTypeId: u.contractTypeId,
+                validFrom: u.validFrom,
+                validTo: u.validTo,
+                minCopies: Number(u.minCopies) || 0,
+                pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
+              })) }),
         };
       }),
     };
@@ -310,8 +307,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const handleClose = () => { setCustomerId(initialCustomerId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
-    if (!e.quantity || !e.sellingPrice) return s;
-    return s + (Number(e.discountedSellingPrice) || Number(e.sellingPrice)) * Number(e.quantity);
+    if (!e.quantity || !e.sellingPriceWithGst) return s;
+    const discPct = Number(e.discountPercentage) || 0;
+    const net = Number(e.sellingPriceWithGst) * (1 - discPct / 100);
+    return s + net * Number(e.quantity);
   }, 0);
 
   return (
@@ -431,8 +430,6 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 {entries.map((entry, mi) => {
                   const isParts = entry.machine.category?._id === PARTS_CATEGORY_ID;
                   const qty = Number(entry.quantity) || 0;
-                  const codes = isParts ? entry.partCodes : entry.serialNumbers;
-                  const codesOk = codes.length === qty && qty > 0;
                   return (
                     <div key={entry.machine._id} className="rounded-xl border bg-background shadow-sm overflow-hidden">
                       {/* Machine header */}
@@ -448,74 +445,140 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
                       {/* Fields */}
                       <div className="p-4 space-y-3">
-                        {/* Row 1: qty, codes, selling price, disc price */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {/* Row 1: qty, selling price */}
+                        <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Qty <span className="text-destructive">*</span></Label>
                             <Input type="number" min={1} max={entry.machine.currentStock} className="h-8 text-sm" value={entry.quantity}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val !== "" && Number(val) > entry.machine.currentStock) { toast.error(`Max available stock is ${entry.machine.currentStock}`); return; }
-                                updateEntry(mi, "quantity", val); updateEntry(mi, isParts ? "partCodes" : "serialNumbers", []);
-                              }} />
+                              onChange={(e) => handleQtyChange(mi, e.target.value)} />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">{isParts ? "Part Codes" : "Serial Nos"}</Label>
-                            <Button type="button" variant="outline" size="sm"
-                              className={`h-8 text-xs gap-1.5 w-full font-normal ${codesOk ? "border-green-400 text-green-600 bg-green-50" : ""}`}
-                              disabled={!entry.quantity || Number(entry.quantity) === 0}
-                              onClick={() => openCodesDialog(mi)}>
-                              <Hash className="h-3.5 w-3.5" />
-                              {codesOk ? `${codes.length} saved ✓` : `Enter ${isParts ? "Part Codes" : "Serial Nos"}`}
-                            </Button>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Selling Price <span className="text-destructive">*</span></Label>
-                            <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.sellingPrice}
-                              onChange={(e) => updateEntry(mi, "sellingPrice", e.target.value)} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Disc. Selling Price</Label>
-                            <Input type="number" min={0} className="h-8 text-sm" placeholder="—" value={entry.discountedSellingPrice}
-                              onChange={(e) => updateEntry(mi, "discountedSellingPrice", e.target.value)} />
+                            <div className="flex items-center justify-between">
+                              <Label className="text-xs text-muted-foreground">Selling Price (GST Included) <span className="text-destructive">*</span></Label>
+                              {totalGst !== null && (
+                                <span className="text-[10px] font-medium bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">GST {totalGst}%</span>
+                              )}
+                            </div>
+                            <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.sellingPriceWithGst}
+                              onChange={(e) => updateEntry(mi, "sellingPriceWithGst", e.target.value)} />
                           </div>
                         </div>
-                        {/* TSS serial numbers — pages category edit */}
-                        {!isParts && entry.serialNumbers.some(s => s.contractTypeId === TSS_CONTRACT_TYPE_ID) && (
-                          <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">Pages Category Config</Label>
-                            <div className="flex flex-col gap-1">
-                              {entry.serialNumbers.filter(s => s.contractTypeId === TSS_CONTRACT_TYPE_ID).map((s) => (
-                                <div key={s.serialNumber} className="flex items-center justify-between rounded-md border px-2.5 py-1.5 bg-muted/30">
-                                  <div>
-                                    <p className="text-xs font-medium">{s.serialNumber}</p>
-                                    <p className="text-[10px] text-muted-foreground">
-                                      {s.pagesCategories.length > 0
-                                        ? s.pagesCategories.map(p => `${p.pagesCategory} — ₹${p.costPerPage}/pg`).join(", ")
-                                        : <span className="text-amber-600">No pages categories configured</span>}
-                                      {s.minCopies ? <span className="ml-1 text-blue-600">· Min: {s.minCopies} copies</span> : null}
-                                    </p>
+
+                        {/* Inline unit rows */}
+                        {entry.loadingCodes && (
+                          <p className="text-xs text-muted-foreground">Loading available codes...</p>
+                        )}
+                        {!entry.loadingCodes && qty > 0 && entry.units.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              {isParts ? "Part Codes" : "Serial Numbers"} ({qty})
+                            </Label>
+                            {entry.units.map((unit, ui) => {
+                              const selectedVals = entry.units.map(u => u.value).filter(Boolean);
+                              const codeOptions = entry.availableCodes.filter(c => c === unit.value || !selectedVals.includes(c));
+                              return (
+                                <div key={ui} className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                                  <p className="text-xs font-semibold text-muted-foreground">Unit {ui + 1}</p>
+                                  {/* Code select + contract type + dates */}
+                                  <div className={`grid gap-2 ${isParts ? "grid-cols-1" : "grid-cols-2 md:grid-cols-4"}`}>
+                                    <div className="space-y-1">
+                                      <Label className="text-[10px] text-muted-foreground">{isParts ? "Part Code" : "Serial No"} <span className="text-destructive">*</span></Label>
+                                      <Select value={unit.value} onValueChange={(v) => updateUnit(mi, ui, "value", v)}>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                                        <SelectContent>
+                                          {codeOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                    {!isParts && (
+                                      <>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">Contract Type <span className="text-destructive">*</span></Label>
+                                          <SearchableSelect
+                                            options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
+                                            value={unit.contractTypeId}
+                                            onChange={(v) => updateUnit(mi, ui, "contractTypeId", v)}
+                                            onSearchChange={fetchContractTypes}
+                                            placeholder="Select" searchPlaceholder="Search..."
+                                            className="h-8 text-xs"
+                                          />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">Valid From <span className="text-destructive">*</span></Label>
+                                          <Input type="date" className="h-8 text-xs"
+                                            value={unit.validFrom}
+                                            disabled={!unit.contractTypeId}
+                                            onChange={(e) => updateUnit(mi, ui, "validFrom", e.target.value)} />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">Valid To <span className="text-destructive">*</span></Label>
+                                          <Input type="date" className="h-8 text-xs"
+                                            value={unit.validTo}
+                                            disabled={!unit.contractTypeId}
+                                            onChange={(e) => updateUnit(mi, ui, "validTo", e.target.value)} />
+                                        </div>
+                                        {unit.contractTypeId === TSS_CONTRACT_TYPE_ID && (
+                                          <div className="space-y-1">
+                                            <Label className="text-[10px] text-muted-foreground">Min Copies</Label>
+                                            <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
+                                              value={unit.minCopies}
+                                              onChange={(e) => updateUnit(mi, ui, "minCopies", e.target.value)} />
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
                                   </div>
-                                  <Button
-                                    type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                                    onClick={() => {
-                                      const existingConfigs: Record<string, PagesCategoryEntry[]> = {
-                                        [s.serialNumber]: (s.pagesCategories ?? []).map(e => ({ ...e, costPerPage: String(e.costPerPage) })),
-                                      };
-                                      setPagesCatConfig({
-                                        serialNumbers: [s.serialNumber],
-                                        currentIndex: 0,
-                                        mi,
-                                        pendingCodes: entry.serialNumbers.map(sn => ({ value: sn.serialNumber, contractTypeId: sn.contractTypeId, validFrom: sn.validFrom, validTo: sn.validTo, minCopies: sn.minCopies })),
-                                        configs: existingConfigs,
-                                      });
-                                    }}
-                                  >
-                                    <Edit className="h-3.5 w-3.5" />
-                                  </Button>
+
+                                  {/* TSS pages category inline */}
+                                  {!isParts && unit.contractTypeId === TSS_CONTRACT_TYPE_ID && (
+                                    <div className="space-y-1.5 pt-1">
+                                      <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Pages Categories</Label>
+                                      {unit.pagesCategories.map((pc, pi) => {
+                                        const usedIds = unit.pagesCategories.map(p => p.pagesCategoryId).filter(Boolean);
+                                        const availableOpts = activePagesCats.filter(c => c._id === pc.pagesCategoryId || !usedIds.includes(c._id));
+                                        return (
+                                          <div key={pi} className="flex items-end gap-2 rounded-md border bg-background p-2">
+                                            <div className="flex-1 space-y-1">
+                                              <Label className="text-[10px] text-muted-foreground">Category <span className="text-destructive">*</span></Label>
+                                              <Select
+                                                value={pc.pagesCategoryId}
+                                                onValueChange={(v) => {
+                                                  const cat = activePagesCats.find(c => c._id === v);
+                                                  const updated = unit.pagesCategories.map((p, idx) => idx !== pi ? p : { ...p, pagesCategoryId: v, pagesCategory: cat?.name ?? "" });
+                                                  updateUnit(mi, ui, "pagesCategories", updated);
+                                                }}
+                                              >
+                                                <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectContent>{availableOpts.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}</SelectContent>
+                                              </Select>
+                                            </div>
+                                            <div className="w-28 space-y-1">
+                                              <Label className="text-[10px] text-muted-foreground">Cost/Page <span className="text-destructive">*</span></Label>
+                                              <Input type="number" min={0} className="h-7 text-xs" placeholder="0.00"
+                                                value={pc.costPerPage}
+                                                onChange={(e) => {
+                                                  const updated = unit.pagesCategories.map((p, idx) => idx !== pi ? p : { ...p, costPerPage: e.target.value });
+                                                  updateUnit(mi, ui, "pagesCategories", updated);
+                                                }} />
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 shrink-0"
+                                              onClick={() => updateUnit(mi, ui, "pagesCategories", unit.pagesCategories.filter((_, idx) => idx !== pi))}>
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          </div>
+                                        );
+                                      })}
+                                      {unit.pagesCategories.length < activePagesCats.length && (
+                                        <Button variant="outline" size="sm" className="w-full gap-1 text-xs h-7"
+                                          onClick={() => updateUnit(mi, ui, "pagesCategories", [...unit.pagesCategories, { pagesCategoryId: "", pagesCategory: "", costPerPage: "" }])}>
+                                          <Plus className="h-3 w-3" /> Add Pages Category
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -540,226 +603,6 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </div>
         </div>
       </DialogContent>
-
-      {/* Pages Category Config Dialog */}
-      {pagesCatConfig && (() => {
-        const { serialNumbers, currentIndex, mi, pendingCodes, configs } = pagesCatConfig;
-        const sn = serialNumbers[currentIndex];
-        const entries_ = configs[sn] ?? [];
-
-        const setEntries_ = (updated: PagesCategoryEntry[]) =>
-          setPagesCatConfig(p => p ? { ...p, configs: { ...p.configs, [sn]: updated } } : p);
-
-        const allConfigured = serialNumbers.every(s => (configs[s] ?? []).length > 0);
-
-        const commit = () => {
-          // validate all serials
-          for (const snKey of serialNumbers) {
-            const snEntries = configs[snKey] ?? [];
-            if (snEntries.length === 0) { toast.error(`Add at least one pages category for serial ${snKey}`); return; }
-            for (let pi = 0; pi < snEntries.length; pi++) {
-              const e = snEntries[pi];
-              if (!e.pagesCategoryId) { toast.error(`Select a pages category for ${snKey} entry ${pi + 1}`); return; }
-              if (e.costPerPage === "" || isNaN(Number(e.costPerPage)) || Number(e.costPerPage) < 0) {
-                toast.error(`Enter a valid cost per page for ${snKey} entry ${pi + 1}`); return;
-              }
-            }
-          }
-          updateEntry(mi, "serialNumbers", pendingCodes.map(c => ({
-            serialNumber: c.value.trim(),
-            contractTypeId: c.contractTypeId,
-            validFrom: c.validFrom,
-            validTo: c.validTo,
-            minCopies: c.minCopies,
-            pagesCategories: (configs[c.value.trim()] ?? entries[mi].serialNumbers.find(s => s.serialNumber === c.value.trim())?.pagesCategories?.map(e => ({ ...e, costPerPage: String(e.costPerPage) })) ?? []).map(e => ({
-              pagesCategoryId: e.pagesCategoryId,
-              pagesCategory: e.pagesCategory,
-              costPerPage: String(e.costPerPage),
-            })),
-          })));
-          setPagesCatConfig(null);
-          setCodesDialog(null);
-        };
-
-        const usedCategoryIds = entries_.map(e => e.pagesCategoryId).filter(Boolean);
-
-        return (
-          <Dialog open onOpenChange={(o) => { if (!o) setPagesCatConfig(null); }}>
-            <DialogContent className="max-w-xl">
-              <DialogHeader>
-                <DialogTitle>Pages Category Config</DialogTitle>
-              </DialogHeader>
-
-              {/* Serial number tabs */}
-              {serialNumbers.length > 1 && (
-                <div className="flex flex-wrap gap-1.5 pb-1">
-                  {serialNumbers.map((s, idx) => {
-                    const configured = (configs[s] ?? []).length > 0;
-                    const isActive = idx === currentIndex;
-                    return (
-                      <button
-                        key={s} type="button"
-                        onClick={() => setPagesCatConfig(p => p ? { ...p, currentIndex: idx } : p)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${isActive
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : configured
-                              ? "bg-green-50 text-green-700 border-green-300"
-                              : "bg-muted text-muted-foreground border-border hover:border-primary/50"
-                          }`}
-                      >
-                        {s} {configured && !isActive ? "✓" : ""}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Current serial label */}
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Configuring: <span className="text-foreground">{sn}</span>
-              </p>
-
-              {/* Pages category entries for selected serial */}
-              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                {entries_.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-3">No entries yet. Add a pages category below.</p>
-                )}
-                {entries_.map((entry, pi) => {
-                  const availableOpts = activePagesCats.filter(
-                    c => c._id === entry.pagesCategoryId || !usedCategoryIds.includes(c._id)
-                  );
-                  return (
-                    <div key={pi} className="flex items-end gap-2 rounded-lg border p-3">
-                      <div className="flex-1 space-y-1">
-                        <Label className="text-xs text-muted-foreground">Pages Category <span className="text-destructive">*</span></Label>
-                        <Select
-                          value={entry.pagesCategoryId}
-                          onValueChange={(v) => {
-                            const cat = activePagesCats.find(c => c._id === v);
-                            setEntries_(entries_.map((e, i) => i !== pi ? e : { ...e, pagesCategoryId: v, pagesCategory: cat?.name ?? "" }));
-                          }}
-                        >
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
-                          <SelectContent>
-                            {availableOpts.map(c => <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="w-32 space-y-1">
-                        <Label className="text-xs text-muted-foreground">Cost / Page <span className="text-destructive">*</span></Label>
-                        <Input
-                          type="number" min={0} className="h-8 text-xs" placeholder="0.00"
-                          value={entry.costPerPage}
-                          onChange={(e) => setEntries_(entries_.map((en, i) => i !== pi ? en : { ...en, costPerPage: e.target.value }))}
-                        />
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
-                        onClick={() => setEntries_(entries_.filter((_, i) => i !== pi))}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  );
-                })}
-                {entries_.length < activePagesCats.length && (
-                  <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs h-8"
-                    onClick={() => setEntries_([...entries_, { pagesCategoryId: "", pagesCategory: "", costPerPage: "" }])}>
-                    <Plus className="h-3.5 w-3.5" /> Add Pages Category
-                  </Button>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setPagesCatConfig(null)}>Cancel</Button>
-                <Button onClick={commit} disabled={!allConfigured}>Done</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        );
-      })()}
-
-      {/* Codes Dialog */}
-      {codesDialog && (
-        <Dialog open onOpenChange={(o) => { if (!o) setCodesDialog(null); }}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Select {codesDialog.isParts ? "Part Codes" : "Serial Numbers"} — {codesDialog.machineName}</DialogTitle>
-            </DialogHeader>
-            {codesDialog.availableCodes.length === 0 ? (
-              <div className="py-8 flex items-center justify-center text-sm text-muted-foreground">No available {codesDialog.isParts ? "part codes" : "serial numbers"} found in stock</div>
-            ) : (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  {codesDialog.quantity} unit{codesDialog.quantity > 1 ? "s" : ""} · {codesDialog.availableCodes.length} available in stock
-                </p>
-                <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
-                  {Array.from({ length: codesDialog.quantity }).map((_, i) => {
-                    const selectedValues = codesDialog.codes.map(c => c.value).filter(Boolean);
-                    const options = codesDialog.availableCodes.filter(c => c === codesDialog.codes[i]?.value || !selectedValues.includes(c));
-                    return (
-                      <div key={i} className="space-y-2 rounded-lg border p-3">
-                        <Label className="text-xs font-semibold">Unit {i + 1}</Label>
-                        <Select
-                          value={codesDialog.codes[i]?.value ?? ""}
-                          onValueChange={(v) => setCodesDialog(p => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], value: v }; return { ...p, codes: c }; })}
-                        >
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={`Select ${codesDialog.isParts ? "part code" : "serial number"}`} /></SelectTrigger>
-                          <SelectContent>
-                            {options.map(code => <SelectItem key={code} value={code}>{code}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        {!codesDialog.isParts && (
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="space-y-1">
-                              <Label className="text-[10px] text-muted-foreground">Contract Type <span className="text-destructive">*</span></Label>
-                              <SearchableSelect
-                                options={contractTypes.map((ct) => ({ label: `${ct.name} (${ct.code})`, value: ct._id }))}
-                                value={codesDialog.codes[i]?.contractTypeId ?? ""}
-                                onChange={(v) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], contractTypeId: v }; return { ...p, codes: c }; })}
-                                onSearchChange={fetchContractTypes}
-                                placeholder="Select" searchPlaceholder="Search..."
-                                className="h-8 text-xs"
-                              />
-                              {(() => { const ct = contractTypes.find(ct => ct._id === codesDialog.codes[i]?.contractTypeId); return ct ? <p className="text-[10px] text-muted-foreground">Free Svc: {ct.freeService ? "Yes" : "No"} · Free Parts: {ct.freeParts ? "Yes" : "No"}</p> : null; })()}
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] text-muted-foreground">Valid From <span className="text-destructive">*</span></Label>
-                              <Input type="date" className="h-8 text-xs"
-                                value={codesDialog.codes[i]?.validFrom ?? ""}
-                                disabled={!codesDialog.codes[i]?.contractTypeId}
-                                onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validFrom: e.target.value }; return { ...p, codes: c }; })} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[10px] text-muted-foreground">Valid To <span className="text-destructive">*</span></Label>
-                              <Input type="date" className="h-8 text-xs"
-                                value={codesDialog.codes[i]?.validTo ?? ""}
-                                disabled={!codesDialog.codes[i]?.contractTypeId}
-                                onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], validTo: e.target.value }; return { ...p, codes: c }; })} />
-                            </div>
-                            {codesDialog.codes[i]?.contractTypeId === TSS_CONTRACT_TYPE_ID && (
-                              <div className="space-y-1">
-                                <Label className="text-[10px] text-muted-foreground">Min Copies</Label>
-                                <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
-                                  value={codesDialog.codes[i]?.minCopies ?? ""}
-                                  onChange={(e) => setCodesDialog((p) => { if (!p) return p; const c = [...p.codes]; c[i] = { ...c[i], minCopies: e.target.value }; return { ...p, codes: c }; })} />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCodesDialog(null)}>Cancel</Button>
-              <Button onClick={saveCodes} disabled={codesDialog.saving || codesDialog.availableCodes.length === 0}>
-                {codesDialog.saving ? "Saving..." : "Save"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* Create Customer Dialog */}
       <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null }); } }}>
@@ -1058,13 +901,23 @@ const SellMachinesPage = () => {
         </div>
       ),
     },
-    { key: "sellingPrice", label: "Selling Price", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPrice.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "discountedSellingPrice", label: "Disc. Selling", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountedSellingPrice != null ? `₹${m.discountedSellingPrice.toLocaleString()}` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "basicTotal", label: "Base Total", render: (s) => s.basicTotal != null ? <span className="font-medium">₹{s.basicTotal.toLocaleString()}</span> : <span className="text-muted-foreground">—</span> },
+    { key: "sellingPriceWithGst", label: "Price (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "sellingPriceBase", label: "Price (Base)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "discountPercentage", label: "Disc. %", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountPercentage > 0 ? `${m.discountPercentage}%` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "netSellingPriceWithGst", label: "Net Price (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.netSellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "sellingTotalWithGst", label: "Total (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingTotalWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "sellingTotalBase", label: "Total (Base)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingTotalBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "grandTotalBase", label: "Grand Total (Base)", render: (s) => <span className="font-medium">₹{s.grandTotalBase.toLocaleString()}</span> },
+    { key: "grandTotalWithGst", label: "Grand Total (GST Incl.)", render: (s) => <span className="font-semibold">₹{s.grandTotalWithGst.toLocaleString()}</span> },
     { key: "cgst", label: "CGST", render: (s) => s.cgst?.amount != null && s.cgst.amount > 0 ? <span className="text-xs">₹{s.cgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.cgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
     { key: "sgst", label: "SGST", render: (s) => s.sgst?.amount != null && s.sgst.amount > 0 ? <span className="text-xs">₹{s.sgst.amount.toLocaleString()} <span className="text-muted-foreground">({s.sgst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
     { key: "igst", label: "IGST", render: (s) => s.igst?.amount != null && s.igst.amount > 0 ? <span className="text-xs">₹{s.igst.amount.toLocaleString()} <span className="text-muted-foreground">({s.igst.percent}%)</span></span> : <span className="text-muted-foreground">—</span> },
-    { key: "grandTotal", label: "Grand Total", render: (s) => <span className="font-semibold">₹{(s.invoiceGrandTotal ?? s.grandTotal).toLocaleString()}</span> },
+    { key: "currentPaymentStatus", label: "Payment", render: (s) => {
+      const color = s.currentPaymentStatus === "Paid" ? "text-green-600 bg-green-50 border-green-200" : s.currentPaymentStatus === "Partial-Paid" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
+      return <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${color}`}>{s.currentPaymentStatus}</span>;
+    }},
+    { key: "paidAmount", label: "Paid", render: (s) => <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
+    { key: "remainingAmount", label: "Remaining", render: (s) => <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
     { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     {
       key: "actions", label: "Actions", sticky: true, render: (s) => (

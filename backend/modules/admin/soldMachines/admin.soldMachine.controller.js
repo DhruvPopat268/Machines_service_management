@@ -1,28 +1,57 @@
 const mongoose = require("mongoose");
 const xlsx = require("xlsx");
 const path = require("path");
-const fs   = require("fs/promises");
-const SoldMachine      = require("./admin.soldMachine.model");
+const fs = require("fs/promises");
+const SoldMachine = require("./admin.soldMachine.model");
 const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.model");
-const Machine          = require("../inventoryManagement/admin.machine.model");
-const Customer         = require("../customerManagement/admin.customer.model");
-const ContractType     = require("../contractTypesManagement/admin.contractType.model");
-const PagesCategory    = require("../pagesCategoryManagement/admin.pagesCategory.model");
-const InventoryLog     = require("../inventoryLogs/admin.inventoryLog.model");
-const Company          = require("../companyManagement/admin.company.model");
-const Zone             = require("../zoneManagement/admin.zone.model");
-const Counter          = require("../auth/counter.model");
+const Machine = require("../inventoryManagement/admin.machine.model");
+const Customer = require("../customerManagement/admin.customer.model");
+const ContractType = require("../contractTypesManagement/admin.contractType.model");
+const PagesCategory = require("../pagesCategoryManagement/admin.pagesCategory.model");
+const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
+const Company = require("../companyManagement/admin.company.model");
+const Zone = require("../zoneManagement/admin.zone.model");
+const Counter = require("../auth/counter.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
 const { sendContractExpiryAlert } = require("../../../utils/emailService");
 
-const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
+const GstConfig = require("../gstConfig/admin.gstConfig.model");
+const PaymentTransaction = require("../paymentTransactions/admin.paymentTransaction.model");
+const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
+
+const DOCS_DIR = process.env.NODE_ENV === "production"
+  ? "/app/cloud/Documents"
+  : path.join(__dirname, "../../../cloud/Documents");
+
+const numberToWords = (amount) => {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const convert = (n) => {
+    if (n === 0) return "";
+    if (n < 20) return ones[n] + " ";
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "") + " ";
+    if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred " + convert(n % 100);
+    if (n < 100000) return convert(Math.floor(n / 1000)) + "Thousand " + convert(n % 1000);
+    if (n < 10000000) return convert(Math.floor(n / 100000)) + "Lakh " + convert(n % 100000);
+    return convert(Math.floor(n / 10000000)) + "Crore " + convert(n % 10000000);
+  };
+  const rupees = Math.floor(amount);
+  const paise = Math.round((amount - rupees) * 100);
+  let words = convert(rupees).trim();
+  if (!words) words = "Zero";
+  words += " Rupees";
+  if (paise > 0) words += " and " + convert(paise).trim() + " Paise";
+  words += " Only";
+  return words;
+};
 
 const buildMachineFilter = (category, division, machineId) => {
   const f = {};
-  if (category)  f.categoryId = category;
-  if (division)  f.divisionId = division;
-  if (machineId) f.machineId  = machineId;
+  if (category) f.categoryId = category;
+  if (division) f.divisionId = division;
+  if (machineId) f.machineId = machineId;
   return Object.keys(f).length > 0 ? { $elemMatch: f } : null;
 };
 
@@ -36,7 +65,7 @@ const getAvailableMachines = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { name:        { $regex: escaped, $options: "i" } },
+          { name: { $regex: escaped, $options: "i" } },
           { modelNumber: { $regex: escaped, $options: "i" } },
         ];
       }
@@ -108,8 +137,8 @@ const getAll = async (req, res) => {
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
           { "machines.modelNumber": { $regex: escaped, $options: "i" } },
-          { "customerInfo.name":    { $regex: escaped, $options: "i" } },
-          { "customerInfo.phone":   { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -139,31 +168,31 @@ const getAll = async (req, res) => {
       };
       query.createdAt = {};
       if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (toDate) query.createdAt.$lte = parseIST(toDate, true);
     }
 
-    const pageNum  = Math.max(1, parseInt(page));
+    const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip     = (pageNum - 1) * limitNum;
+    const skip = (pageNum - 1) * limitNum;
 
     const [sales, total] = await Promise.all([
       SoldMachine.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       SoldMachine.countDocuments(query),
     ]);
 
-    const allSales    = await SoldMachine.find(query).lean();
-    const totalSales  = allSales.reduce((s, sale) => s + sale.grandTotal, 0);
+    const allSales = await SoldMachine.find(query).lean();
+    const totalSales = allSales.reduce((s, sale) => s + (sale.grandTotalWithGst || 0), 0);
     const totalMachines = allSales.reduce((s, sale) => s + sale.machines.length, 0);
-    const avgValue    = allSales.length > 0 ? Math.round((totalSales / allSales.length) * 100) / 100 : 0;
+    const avgValue = allSales.length > 0 ? Math.round((totalSales / allSales.length) * 100) / 100 : 0;
 
     res.status(200).json({
       success: true,
       data: sales.map((s) => ({ ...s.toObject(), machinesCount: s.machines.length })),
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
       stats: {
-        totalSales:        Math.round(totalSales * 100) / 100,
+        totalSales: Math.round(totalSales * 100) / 100,
         totalMachinesSold: totalMachines,
-        avgSaleValue:      avgValue,
+        avgSaleValue: avgValue,
       },
     });
   } catch (err) {
@@ -198,29 +227,29 @@ const createSale = async (req, res) => {
       return res.status(status).json({ success: false, message });
     };
 
-    const validationError = validateCreateSale(req.body);
-    if (validationError) return abort(400, validationError);
-
     const { customerId, machines } = req.body;
 
     const customer = await Customer.findById(customerId).populate("zone", "name").session(session);
-    if (!customer)                      return abort(404, "Customer not found");
+    if (!customer) return abort(404, "Customer not found");
     if (customer.status === "Inactive") return abort(400, "Customer is inactive");
 
+    const validationError = validateCreateSale(req.body);
+    if (validationError) return abort(400, validationError);
+
     const customerInfo = {
-      customerId:       customer._id,
+      customerId: customer._id,
       customerUniqueId: customer.customerId || "",
-      name:             customer.name,
-      phone:      customer.phone,
-      email:      customer.email,
-      address:    customer.userLocation?.address || "",
-      zone:       customer.zone?.name || "",
-      gstNumber:  customer.gstNumber || "",
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.userLocation?.address || "",
+      zone: customer.zone?.name || "",
+      gstNumber: customer.gstNumber || "",
     };
 
     // ── Collect all serial numbers and part codes for bulk verification ──
     const allSerialNumbers = machines.flatMap((m) => (m.serialNumbers || []).map(e => e.serialNumber.trim()));
-    const allPartCodes     = machines.flatMap((m) => m.partCodes || []).map((c) => c.trim());
+    const allPartCodes = machines.flatMap((m) => m.partCodes || []).map((c) => c.trim());
 
     // Check serial numbers: must exist in purchase as available, must not already be sold
     if (allSerialNumbers.length > 0) {
@@ -264,37 +293,53 @@ const createSale = async (req, res) => {
         return abort(400, `Part codes already sold: ${alreadySold.join(", ")}`);
     }
 
+    // ── Fetch GST config ──
+    const gstConfig = await GstConfig.findOne().lean();
+    const totalGst = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
+    const gstDivisor = 1 + totalGst / 100;
+
     // ── Build machine entries ──
     const machineEntries = [];
-    let grandTotal = 0;
+    let grandTotalBase = 0;
+    let grandTotalWithGst = 0;
 
     for (const m of machines) {
       const machine = await Machine.findById(m.machineId)
         .populate("category", "name")
         .populate("division", "name")
         .session(session);
-      if (!machine)                       return abort(404, `Machine "${m.machineId}" not found`);
-      if (machine.status === "Inactive")  return abort(400, `Machine "${machine.name}" is inactive`);
+      if (!machine) return abort(404, `Machine "${m.machineId}" not found`);
+      if (machine.status === "Inactive") return abort(400, `Machine "${machine.name}" is inactive`);
 
       const isParts = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
+      const discountPct = Number(m.discountPercentage) || 0;
+      const sellingPriceWithGst = Math.round(m.sellingPriceWithGst * 100) / 100;
+      const sellingPriceBase = Math.round((sellingPriceWithGst / gstDivisor) * 100) / 100;
+      const netSellingPriceWithGst = Math.round(sellingPriceWithGst * (1 - discountPct / 100) * 100) / 100;
+      const netSellingPriceBase = Math.round((netSellingPriceWithGst / gstDivisor) * 100) / 100;
+      const sellingTotalBase = Math.round(netSellingPriceBase * m.quantity * 100) / 100;
+      const sellingTotalWithGst = Math.round(netSellingPriceWithGst * m.quantity * 100) / 100;
 
-      const effectivePrice = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
-      const sellingTotal   = Math.round(effectivePrice * m.quantity * 100) / 100;
-      grandTotal           = Math.round((grandTotal + sellingTotal) * 100) / 100;
+      grandTotalBase = Math.round((grandTotalBase + sellingTotalBase) * 100) / 100;
+      grandTotalWithGst = Math.round((grandTotalWithGst + sellingTotalWithGst) * 100) / 100;
 
       const entryData = {
-        machineId:              machine._id,
-        machineName:            machine.name,
-        modelNumber:            machine.modelNumber || "",
-        hsnCode:                machine.hsnCode || "",
-        categoryId:             machine.category?._id || null,
-        category:               machine.category?.name || "",
-        divisionId:             machine.division?._id || null,
-        division:               machine.division?.name || "",
-        quantity:               m.quantity,
-        sellingPrice:           m.sellingPrice,
-        discountedSellingPrice: m.discountedSellingPrice ?? null,
-        sellingTotal,
+        machineId: machine._id,
+        machineName: machine.name,
+        modelNumber: machine.modelNumber || "",
+        hsnCode: machine.hsnCode || "",
+        categoryId: machine.category?._id || null,
+        category: machine.category?.name || "",
+        divisionId: machine.division?._id || null,
+        division: machine.division?.name || "",
+        quantity: m.quantity,
+        sellingPriceWithGst,
+        sellingPriceBase,
+        discountPercentage: discountPct,
+        netSellingPriceBase,
+        netSellingPriceWithGst,
+        sellingTotalBase,
+        sellingTotalWithGst,
       };
 
       if (isParts) {
@@ -305,10 +350,10 @@ const createSale = async (req, res) => {
           if (!ct) throw new Error(`Contract type "${sEntry.contractTypeId}" not found`);
           if (ct.status === "Inactive") throw new Error(`Contract type "${ct.name}" is inactive`);
           const validFrom = new Date(sEntry.validFrom);
-          const validTo   = new Date(sEntry.validTo);
+          const validTo = new Date(sEntry.validTo);
           if (isNaN(validFrom.getTime())) throw new Error(`Invalid validFrom for serial ${sEntry.serialNumber}`);
-          if (isNaN(validTo.getTime()))   throw new Error(`Invalid validTo for serial ${sEntry.serialNumber}`);
-          if (validTo <= validFrom)       throw new Error(`validTo must be after validFrom for serial ${sEntry.serialNumber}`);
+          if (isNaN(validTo.getTime())) throw new Error(`Invalid validTo for serial ${sEntry.serialNumber}`);
+          if (validTo <= validFrom) throw new Error(`validTo must be after validFrom for serial ${sEntry.serialNumber}`);
 
           let pagesCategories = [];
           if (TSS_CONTRACT_TYPE_ID && ct._id.toString() === TSS_CONTRACT_TYPE_ID) {
@@ -318,21 +363,21 @@ const createSale = async (req, res) => {
               if (cat.status === "Inactive") throw new Error(`Pages category "${cat.name}" is inactive`);
               return {
                 pagesCategoryId: cat._id,
-                pagesCategory:   cat.name,
-                costPerPage:     Number(pc.costPerPage),
+                pagesCategory: cat.name,
+                costPerPage: Number(pc.costPerPage),
               };
             }));
           }
 
           return {
             serialNumber: sEntry.serialNumber.trim(),
-            minCopies:    Number(sEntry.minCopies) || 0,
+            minCopies: Number(sEntry.minCopies) || 0,
             contractType: {
               contractTypeId: ct._id,
-              name:           ct.name,
-              code:           ct.code,
-              freeService:    ct.freeService,
-              freeParts:      ct.freeParts,
+              name: ct.name,
+              code: ct.code,
+              freeService: ct.freeService,
+              freeParts: ct.freeParts,
               validFrom,
               validTo,
             },
@@ -344,7 +389,98 @@ const createSale = async (req, res) => {
       machineEntries.push(entryData);
     }
 
-    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotal }], { session });
+    const { currentPaymentStatus, paidAmount: rawPaidAmount, paymentDate, paymentMethod, companyId } = req.body;
+    let paidAmount = 0;
+    let remainingAmount = grandTotalWithGst;
+
+    if (currentPaymentStatus === "Paid") {
+      paidAmount = grandTotalWithGst;
+      remainingAmount = 0;
+    } else if (currentPaymentStatus === "Partial-Paid") {
+      paidAmount = Math.round(Number(rawPaidAmount) * 100) / 100;
+      if (paidAmount >= grandTotalWithGst) return abort(400, "paidAmount must be less than grandTotalWithGst for Partial-Paid");
+      remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
+    }
+
+    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, currentPaymentStatus, paidAmount, remainingAmount }], { session });
+
+    if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
+      const [transaction] = await PaymentTransaction.create([{ soldMachineId: sale._id, amount: paidAmount, paymentDate: new Date(paymentDate), paymentMethod }], { session });
+
+      // ── Generate payment receipt PDF ──
+      try {
+        const company = await Company.findById(companyId).lean();
+        if (company) {
+          const receiptCounter = await Counter.findByIdAndUpdate(
+            "paymentReceipt",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const receiptNumber = `REC-${receiptCounter.seq}`;
+
+          const d = new Date(paymentDate);
+          const receiptDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+
+          const formatNum = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+          const templatePath = path.join(__dirname, "../../../invoicesExamples/payment-receipt.html");
+          let html = await fs.readFile(templatePath, "utf-8");
+
+          html = html
+            .replace(/{{receiptNumber}}/g, receiptNumber)
+            .replace(/{{receiptDate}}/g, receiptDate)
+            .replace(/{{customerName}}/g, customerInfo.name || "")
+            .replace(/{{customerAddress}}/g, customerInfo.address || "")
+            .replace(/{{amountInWords}}/g, numberToWords(paidAmount))
+            .replace(/{{amountReceived}}/g, formatNum(paidAmount))
+            .replace(/{{paymentMethod}}/g, paymentMethod || "")
+            .replace(/{{invoiceNumber}}/g, "")
+            .replace(/{{companyName}}/g, company.name || "")
+            .replace(/{{companyTagline}}/g, company.tagline || "")
+            .replace(/{{companyAddress}}/g, company.address || "")
+            .replace(/{{companyPhone}}/g, company.phone || "")
+            .replace(/{{companyEmail}}/g, company.email || "")
+            .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g, invoiceLogoText);
+
+          html = company.tagline
+            ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl
+            ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText
+            ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const filename = `payment_receipt_${receiptNumber}_${Date.now()}.pdf`;
+          const filepath = path.join(DOCS_DIR, filename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: "networkidle0" });
+          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          const receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          await PaymentTransaction.findByIdAndUpdate(transaction._id, { receiptNumber, receiptUrl });
+        }
+      } catch (receiptErr) {
+        console.error("Receipt generation failed (non-fatal):", receiptErr.message);
+      }
+    }
 
     // ── Deduct currentStock from Machine ──
     for (const e of machineEntries) {
@@ -376,16 +512,16 @@ const createSale = async (req, res) => {
         action: "sold",
         customerInfo,
         machines: machineEntries.map((e) => ({
-          machineId:     e.machineId,
-          machineName:   e.machineName,
-          modelNumber:   e.modelNumber,
-          categoryId:    e.categoryId,
-          category:      e.category,
-          divisionId:    e.divisionId,
-          division:      e.division,
-          quantity:      e.quantity,
+          machineId: e.machineId,
+          machineName: e.machineName,
+          modelNumber: e.modelNumber,
+          categoryId: e.categoryId,
+          category: e.category,
+          divisionId: e.divisionId,
+          division: e.division,
+          quantity: e.quantity,
           serialNumbers: (e.serialNumbers || []).map(s => s.serialNumber),
-          partCodes:     (e.partCodes || []).map(p => p.partCode),
+          partCodes: (e.partCodes || []).map(p => p.partCode),
         })),
       }],
       { session }
@@ -394,7 +530,7 @@ const createSale = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    res.status(201).json({ success: true, data: sale });
+    res.status(201).json({ success: true, data: { _id: sale._id, currentPaymentStatus: sale.currentPaymentStatus, paidAmount: sale.paidAmount, remainingAmount: sale.remainingAmount } });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -412,10 +548,10 @@ const renewContract = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid newContractTypeId" });
 
     const validFrom = new Date(newValidFrom);
-    const validTo   = new Date(newValidTo);
+    const validTo = new Date(newValidTo);
     if (isNaN(validFrom.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidFrom" });
-    if (isNaN(validTo.getTime()))   return res.status(400).json({ success: false, message: "Invalid newValidTo" });
-    if (validTo <= validFrom)       return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
+    if (isNaN(validTo.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidTo" });
+    if (validTo <= validFrom) return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
 
     const ct = await ContractType.findOne({ _id: newContractTypeId, status: "Active" });
     if (!ct) return res.status(404).json({ success: false, message: "Active contract type not found" });
@@ -427,10 +563,10 @@ const renewContract = async (req, res) => {
         $set: {
           "machines.$[outer].serialNumbers.$[inner].contractType": {
             contractTypeId: ct._id,
-            name:           ct.name,
-            code:           ct.code,
-            freeService:    ct.freeService,
-            freeParts:      ct.freeParts,
+            name: ct.name,
+            code: ct.code,
+            freeService: ct.freeService,
+            freeParts: ct.freeParts,
             validFrom,
             validTo,
           },
@@ -459,7 +595,7 @@ const exportToExcel = async (req, res) => {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
-          { "customerInfo.name":    { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -483,7 +619,7 @@ const exportToExcel = async (req, res) => {
       };
       query.createdAt = {};
       if (fromDate) query.createdAt.$gte = parseIST(fromDate, false);
-      if (toDate)   query.createdAt.$lte = parseIST(toDate, true);
+      if (toDate) query.createdAt.$lte = parseIST(toDate, true);
     }
 
     const sales = await SoldMachine.find(query).sort({ createdAt: -1 }).lean();
@@ -500,40 +636,40 @@ const exportToExcel = async (req, res) => {
       const saleStartRow = rows.length;
 
       sale.machines.forEach((m) => {
-        const isParts  = !!(m.partCodes && m.partCodes.length);
-        const codes    = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
+        const isParts = !!(m.partCodes && m.partCodes.length);
+        const codes = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
         const machineStartRow = rows.length;
 
         const codeList = codes.length > 0 ? codes : [null];
         codeList.forEach((entry, ci) => {
-          const code          = entry ? (isParts ? entry.partCode : entry.serialNumber) : "";
-          const ct            = entry ? entry.contractType : null;
+          const code = entry ? (isParts ? entry.partCode : entry.serialNumber) : "";
+          const ct = entry ? entry.contractType : null;
           const isMachineFirst = ci === 0;
-          const isSaleFirst    = isMachineFirst && machineStartRow === saleStartRow;
+          const isSaleFirst = isMachineFirst && machineStartRow === saleStartRow;
           rows.push({
-            "Customer Name":            isSaleFirst ? sale.customerInfo.name  || "" : "",
-            "Customer Phone":           isSaleFirst ? sale.customerInfo.phone || "" : "",
-            "Machine Name":             isMachineFirst ? m.machineName || "" : "",
-            "Model Number":             isMachineFirst ? m.modelNumber || "" : "",
-            "Category":                 isMachineFirst ? m.category    || "" : "",
-            "Division":                 isMachineFirst ? m.division    || "" : "",
-            "Quantity":                 isMachineFirst ? m.quantity           : "",
-            "Selling Price":            isMachineFirst ? m.sellingPrice       : "",
+            "Customer Name": isSaleFirst ? sale.customerInfo.name || "" : "",
+            "Customer Phone": isSaleFirst ? sale.customerInfo.phone || "" : "",
+            "Machine Name": isMachineFirst ? m.machineName || "" : "",
+            "Model Number": isMachineFirst ? m.modelNumber || "" : "",
+            "Category": isMachineFirst ? m.category || "" : "",
+            "Division": isMachineFirst ? m.division || "" : "",
+            "Quantity": isMachineFirst ? m.quantity : "",
+            "Selling Price": isMachineFirst ? m.sellingPrice : "",
             "Discounted Selling Price": isMachineFirst ? (m.discountedSellingPrice ?? "") : "",
-            "Selling Total":            isMachineFirst ? m.sellingTotal       : "",
-            "Serial / Part Code":       code,
-            "Contract Type":            ct?.name || "",
-            "Contract Code":            ct?.code || "",
-            "Free Service":             ct ? (ct.freeService ? "Yes" : "No") : "",
-            "Free Parts":               ct ? (ct.freeParts   ? "Yes" : "No") : "",
-            "Valid From":               ct?.validFrom ? new Date(ct.validFrom).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
-            "Valid To":                 ct?.validTo   ? new Date(ct.validTo).toLocaleDateString("en-IN",   { timeZone: "Asia/Kolkata" }) : "",
-            "Sale Date":                isSaleFirst ? date : "",
-            "Sale Time":                isSaleFirst ? time : "",
+            "Selling Total": isMachineFirst ? m.sellingTotal : "",
+            "Serial / Part Code": code,
+            "Contract Type": ct?.name || "",
+            "Contract Code": ct?.code || "",
+            "Free Service": ct ? (ct.freeService ? "Yes" : "No") : "",
+            "Free Parts": ct ? (ct.freeParts ? "Yes" : "No") : "",
+            "Valid From": ct?.validFrom ? new Date(ct.validFrom).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
+            "Valid To": ct?.validTo ? new Date(ct.validTo).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }) : "",
+            "Sale Date": isSaleFirst ? date : "",
+            "Sale Time": isSaleFirst ? time : "",
           });
         });
         const sheetMachineStart = machineStartRow + 1; // +1 for header row
-        const sheetMachineEnd   = rows.length; // rows.length - 1 + 1 for header
+        const sheetMachineEnd = rows.length; // rows.length - 1 + 1 for header
         if (sheetMachineStart < sheetMachineEnd) {
           ["Machine Name", "Model Number", "Category", "Division", "Quantity", "Selling Price", "Discounted Selling Price", "Selling Total"].forEach((col) => {
             const c = COLS.indexOf(col);
@@ -544,7 +680,7 @@ const exportToExcel = async (req, res) => {
 
       const saleEndRow = rows.length - 1;
       const sheetSaleStart = saleStartRow + 1;
-      const sheetSaleEnd   = saleEndRow   + 1;
+      const sheetSaleEnd = saleEndRow + 1;
       if (sheetSaleStart < sheetSaleEnd) {
         ["Customer Name", "Customer Phone", "Sale Date", "Sale Time"].forEach((col) => {
           const c = COLS.indexOf(col);
@@ -573,7 +709,7 @@ const verifySerialNumbers = async (req, res) => {
       return res.status(400).json({ success: false, message: "serialNumbers must be a non-empty array" });
 
     const trimmed = serialNumbers.map((s) => s.trim()).filter(Boolean);
-    const unique  = new Set(trimmed.map((s) => s.toUpperCase()));
+    const unique = new Set(trimmed.map((s) => s.toUpperCase()));
     if (unique.size !== trimmed.length)
       return res.status(400).json({ success: false, message: "Duplicate serial numbers in submitted list" });
 
@@ -604,7 +740,7 @@ const verifyPartCodes = async (req, res) => {
       return res.status(400).json({ success: false, message: "partCodes must be a non-empty array" });
 
     const trimmed = partCodes.map((c) => c.trim()).filter(Boolean);
-    const unique  = new Set(trimmed.map((c) => c.toUpperCase()));
+    const unique = new Set(trimmed.map((c) => c.toUpperCase()));
     if (unique.size !== trimmed.length)
       return res.status(400).json({ success: false, message: "Duplicate part codes in submitted list" });
 
@@ -627,10 +763,6 @@ const verifyPartCodes = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
-const DOCS_DIR = process.env.NODE_ENV === "production"
-  ? "/app/cloud/Documents"
-  : path.join(__dirname, "../../../cloud/Documents");
 
 const generateInvoice = async (req, res) => {
   try {
@@ -663,25 +795,25 @@ const generateInvoice = async (req, res) => {
     const invoiceNumber = `INV-${counter.seq}`;
 
     const companyInfo = {
-      companyId:         company._id,
-      name:              company.name,
-      tagline:           company.tagline || "",
-      address:           company.address,
-      phone:             company.phone,
-      email:             company.email,
-      gstNumber:         company.gstNumber,
+      companyId: company._id,
+      name: company.name,
+      tagline: company.tagline || "",
+      address: company.address,
+      phone: company.phone,
+      email: company.email,
+      gstNumber: company.gstNumber,
       bankAccountNumber: company.bankAccountNumber || "",
-      bankName:          company.bankName || "",
-      ifscCode:          company.ifscCode || "",
-      bankBranch:        company.bankBranch || "",
-      qrCode:            company.qrCode || "",
+      bankName: company.bankName || "",
+      ifscCode: company.ifscCode || "",
+      bankBranch: company.bankBranch || "",
+      qrCode: company.qrCode || "",
     };
 
     const cgstNum = Number(cgst);
     const sgstNum = Number(sgst);
     const igstNum = Number(igst);
 
-    const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
+    const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
     const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
     const templatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
@@ -689,10 +821,10 @@ const generateInvoice = async (req, res) => {
 
     const formatNum = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const basicTotal       = sale.grandTotal;
-    const cgstAmount       = parseFloat(((basicTotal * cgstNum) / 100).toFixed(2));
-    const sgstAmount       = parseFloat(((basicTotal * sgstNum) / 100).toFixed(2));
-    const igstAmount       = parseFloat(((basicTotal * igstNum) / 100).toFixed(2));
+    const basicTotal = sale.grandTotalBase;
+    const cgstAmount = parseFloat(((basicTotal * cgstNum) / 100).toFixed(2));
+    const sgstAmount = parseFloat(((basicTotal * sgstNum) / 100).toFixed(2));
+    const igstAmount = parseFloat(((basicTotal * igstNum) / 100).toFixed(2));
     const invoiceGrandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
 
     const d = new Date(sale.createdAt);
@@ -750,7 +882,7 @@ const generateInvoice = async (req, res) => {
     if (machineRowsMatch) {
       const rowTemplate = machineRowsMatch[1];
       const rows = sale.machines.map((m, idx) => {
-        const rate    = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
+        const rate = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
         const isParts = m.categoryId?.toString() === PARTS_CATEGORY_ID;
         const serials = isParts
           ? (m.partCodes || []).map(p => p.partCode)
@@ -798,11 +930,9 @@ const generateInvoice = async (req, res) => {
     const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
     await SoldMachine.findByIdAndUpdate(id, {
       invoiceNumber, companyInfo, invoiceUrl,
-      basicTotal,
       cgst: { percent: cgstNum, amount: cgstAmount },
       sgst: { percent: sgstNum, amount: sgstAmount },
       igst: { percent: igstNum, amount: igstAmount },
-      invoiceGrandTotal,
     });
 
     return res.status(200).json({ success: true, invoiceUrl, invoiceNumber });
@@ -814,9 +944,9 @@ const generateInvoice = async (req, res) => {
 
 const getContractExpiryStatus = async (req, res) => {
   try {
-    const now   = new Date();
+    const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
-    const days  = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
+    const days = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
     const inNDays = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
     const sales = await SoldMachine.find({
@@ -835,14 +965,14 @@ const getContractExpiryStatus = async (req, res) => {
           if (!ct?.validTo) continue;
           const validTo = new Date(ct.validTo);
           const item = {
-            machineName:  machine.machineName,
-            modelNumber:  machine.modelNumber,
+            machineName: machine.machineName,
+            modelNumber: machine.modelNumber,
             serialNumber: sn.serialNumber,
             contractType: ct.name,
-            validFrom:    ct.validFrom,
-            validTo:      ct.validTo,
+            validFrom: ct.validFrom,
+            validTo: ct.validTo,
           };
-          if (validTo < today)       customerMap[key].expired.push(item);
+          if (validTo < today) customerMap[key].expired.push(item);
           else if (validTo <= inNDays) customerMap[key].expiringSoon.push(item);
         }
       }
@@ -861,9 +991,9 @@ const sendContractExpiryAlerts = async (req, res) => {
     if (!cronKey || cronKey !== process.env.CRON_JOB_KEY)
       return res.status(403).json({ success: false, message: "Access denied" });
 
-    const now      = new Date();
-    const today    = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
-    const days     = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
+    const days = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
     const in30Days = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
     // Fetch all sales that have at least one serial number with a contract expiring or expired
@@ -888,11 +1018,11 @@ const sendContractExpiryAlerts = async (req, res) => {
           if (!ct?.validTo) continue;
           const validTo = new Date(ct.validTo);
           const item = {
-            machineName:  machine.machineName,
+            machineName: machine.machineName,
             serialNumber: sn.serialNumber,
             contractType: ct.name,
-            validFrom:    ct.validFrom,
-            validTo:      ct.validTo,
+            validFrom: ct.validFrom,
+            validTo: ct.validTo,
           };
           if (validTo < today) {
             customerMap[key].expired.push(item);
@@ -907,10 +1037,10 @@ const sendContractExpiryAlerts = async (req, res) => {
     for (const entry of Object.values(customerMap)) {
       if (!entry.expired.length && !entry.expiringSoon.length) { results.skipped++; continue; }
       const result = await sendContractExpiryAlert({
-        customerName:       entry.name,
-        customerEmail:      entry.email,
-        expiredItems:       entry.expired,
-        expiringSoonItems:  entry.expiringSoon,
+        customerName: entry.name,
+        customerEmail: entry.email,
+        expiredItems: entry.expired,
+        expiringSoonItems: entry.expiringSoon,
       });
       result.success ? results.sent++ : results.failed++;
     }
