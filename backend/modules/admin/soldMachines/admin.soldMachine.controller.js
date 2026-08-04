@@ -404,13 +404,67 @@ const createSale = async (req, res) => {
 
     const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, currentPaymentStatus, paidAmount, remainingAmount }], { session });
 
+    let transactionId = null;
     if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
       const [transaction] = await PaymentTransaction.create([{ soldMachineId: sale._id, amount: paidAmount, paymentDate: new Date(paymentDate), paymentMethod }], { session });
+      transactionId = transaction._id;
+    }
 
-      // ── Generate payment receipt PDF ──
-      try {
-        const company = await Company.findById(companyId).lean();
-        if (company) {
+    // ── Deduct currentStock from Machine ──
+    for (const e of machineEntries) {
+      const machine = await Machine.findById(e.machineId).session(session);
+      const newStock = Math.max(0, machine.currentStock - e.quantity);
+      const stockStatus = newStock === 0 ? "Out of Stock" : machine.lowStockThreshold === -1 ? "In Stock" : newStock <= machine.lowStockThreshold ? "Low Stock" : "In Stock";
+      await Machine.updateOne({ _id: e.machineId }, { $set: { currentStock: newStock, stockStatus } }, { session });
+    }
+
+    // ── Mark serial numbers and part codes as sold in PurchasedMachine ──
+    for (const sn of allSerialNumbers) {
+      await PurchasedMachine.updateOne(
+        { "machines.serialNumbers.serialNumber": sn },
+        { $set: { "machines.$[outer].serialNumbers.$[inner].status": "sold" } },
+        { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }], session }
+      );
+    }
+    for (const pc of allPartCodes) {
+      await PurchasedMachine.updateOne(
+        { "machines.partCodes.partCode": pc },
+        { $set: { "machines.$[outer].partCodes.$[inner].status": "sold" } },
+        { arrayFilters: [{ "outer.partCodes.partCode": pc }, { "inner.partCode": pc }], session }
+      );
+    }
+
+    // ── Inventory log ──
+    await InventoryLog.create(
+      [{
+        action: "sold",
+        customerInfo,
+        machines: machineEntries.map((e) => ({
+          machineId: e.machineId,
+          machineName: e.machineName,
+          modelNumber: e.modelNumber,
+          categoryId: e.categoryId,
+          category: e.category,
+          divisionId: e.divisionId,
+          division: e.division,
+          quantity: e.quantity,
+          serialNumbers: (e.serialNumbers || []).map(s => s.serialNumber),
+          partCodes: (e.partCodes || []).map(p => p.partCode),
+        })),
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ── Generate payment receipt PDF (after commit, non-blocking) ──
+    if (transactionId && companyId) {
+      (async () => {
+        try {
+          const company = await Company.findById(companyId).lean();
+          if (!company) return;
+
           const receiptCounter = await Counter.findByIdAndUpdate(
             "paymentReceipt",
             { $inc: { seq: 1 } },
@@ -475,60 +529,12 @@ const createSale = async (req, res) => {
           await browser.close();
 
           const receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
-          await PaymentTransaction.findByIdAndUpdate(transaction._id, { receiptNumber, receiptUrl });
+          await PaymentTransaction.findByIdAndUpdate(transactionId, { receiptNumber, receiptUrl });
+        } catch (receiptErr) {
+          console.error("Receipt generation failed (non-fatal):", receiptErr.message);
         }
-      } catch (receiptErr) {
-        console.error("Receipt generation failed (non-fatal):", receiptErr.message);
-      }
+      })();
     }
-
-    // ── Deduct currentStock from Machine ──
-    for (const e of machineEntries) {
-      const machine = await Machine.findById(e.machineId).session(session);
-      const newStock = Math.max(0, machine.currentStock - e.quantity);
-      const stockStatus = newStock === 0 ? "Out of Stock" : machine.lowStockThreshold === -1 ? "In Stock" : newStock <= machine.lowStockThreshold ? "Low Stock" : "In Stock";
-      await Machine.updateOne({ _id: e.machineId }, { $set: { currentStock: newStock, stockStatus } }, { session });
-    }
-
-    // ── Mark serial numbers and part codes as sold in PurchasedMachine ──
-    for (const sn of allSerialNumbers) {
-      await PurchasedMachine.updateOne(
-        { "machines.serialNumbers.serialNumber": sn },
-        { $set: { "machines.$[outer].serialNumbers.$[inner].status": "sold" } },
-        { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }], session }
-      );
-    }
-    for (const pc of allPartCodes) {
-      await PurchasedMachine.updateOne(
-        { "machines.partCodes.partCode": pc },
-        { $set: { "machines.$[outer].partCodes.$[inner].status": "sold" } },
-        { arrayFilters: [{ "outer.partCodes.partCode": pc }, { "inner.partCode": pc }], session }
-      );
-    }
-
-    // ── Inventory log ──
-    await InventoryLog.create(
-      [{
-        action: "sold",
-        customerInfo,
-        machines: machineEntries.map((e) => ({
-          machineId: e.machineId,
-          machineName: e.machineName,
-          modelNumber: e.modelNumber,
-          categoryId: e.categoryId,
-          category: e.category,
-          divisionId: e.divisionId,
-          division: e.division,
-          quantity: e.quantity,
-          serialNumbers: (e.serialNumbers || []).map(s => s.serialNumber),
-          partCodes: (e.partCodes || []).map(p => p.partCode),
-        })),
-      }],
-      { session }
-    );
-
-    await session.commitTransaction();
-    session.endSession();
 
     res.status(201).json({ success: true, data: { _id: sale._id, currentPaymentStatus: sale.currentPaymentStatus, paidAmount: sale.paidAmount, remainingAmount: sale.remainingAmount } });
   } catch (err) {

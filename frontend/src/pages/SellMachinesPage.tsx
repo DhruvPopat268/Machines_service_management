@@ -89,6 +89,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const photoRef = useRef<HTMLInputElement>(null);
   const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
   const [totalGst, setTotalGst] = useState<number | null>(null);
+  const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
+  const [companyId, setCompanyId] = useState("");
   const ctAbortRef = useRef<AbortController | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -134,7 +136,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     } catch { }
   };
 
-  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); fetchGstConfig(); }, [open]);
+  const fetchCompanies = async () => {
+    try { const r = await api.get("/admin/companies", { params: { status: "Active", limit: 100 } }); setCompanies(r.data.data); }
+    catch { toast.error("Failed to load companies"); }
+  };
+
+  useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); fetchGstConfig(); fetchCompanies(); }, [open]);
 
   const fetchActivePagesCats = async () => {
     try {
@@ -242,8 +249,11 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       if (new Set(vals).size !== vals.length) { toast.error(`Duplicate codes in ${e.machine.name}`); return; }
     }
 
+    if (!companyId) { toast.error("Please select a company"); return; }
+
     const payload = {
       customerId,
+      companyId,
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
         return {
@@ -304,7 +314,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -352,6 +362,21 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                           <p className="text-xs text-muted-foreground">{c.phone}</p>
                         </div>
                       </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Company */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company <span className="text-destructive">*</span></Label>
+                <Select value={companyId} onValueChange={setCompanyId}>
+                  <SelectTrigger className="h-9 text-sm bg-background">
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
