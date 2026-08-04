@@ -32,7 +32,6 @@ interface Reimbursement {
   createdAt: string;
 }
 
-const LIMIT = 10;
 
 const formatDate = (iso: string) => {
   const d = new Date(iso);
@@ -49,6 +48,7 @@ const TravelReimbursementsPage = () => {
   const [purpose, setPurpose]         = useState("");
   const [fromDate, setFromDate]       = useState("");
   const [toDate, setToDate]           = useState("");
+  const [limit, setLimit]             = useState(10);
   const [engineers, setEngineers]     = useState<{ _id: string; name: string }[]>([]);
   const [selected, setSelected]       = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -66,7 +66,7 @@ const TravelReimbursementsPage = () => {
     abortRef.current = controller;
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
+      const params: Record<string, string> = { page: String(page), limit: String(limit) };
       if (engineerId) params.engineerId = engineerId;
       if (status)     params.status     = status;
       if (purpose)    params.purpose    = purpose;
@@ -84,7 +84,7 @@ const TravelReimbursementsPage = () => {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [engineerId, status, purpose, fromDate, toDate]);
+  }, [engineerId, status, purpose, fromDate, toDate, limit]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -134,7 +134,7 @@ const TravelReimbursementsPage = () => {
         </div>
       ) : null,
     },
-    { key: "no",          label: "No.",      render: (_, i) => <span className="font-medium">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "no",          label: "No.",      render: (_, i) => <span className="font-medium">{(pagination.page - 1) * limit + i + 1}</span> },
     { key: "callId",      label: "Call ID",   render: (r) => <span className="font-medium text-foreground">{r.callId?.callId}</span> },
     { key: "purpose",     label: "Purpose",   render: (r) => <Badge variant="outline" className="text-xs">{r.purpose}</Badge> },
     { key: "engineer",    label: "Engineer", render: (r) => (
@@ -236,7 +236,16 @@ const TravelReimbursementsPage = () => {
           </div>
 
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+                <Select value={String(limit)} onValueChange={(v) => setLimit(Number(v))}>
+                  <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               {pendingData.length > 0 && (
                 <div className="flex items-center gap-2">
                   <Checkbox checked={allPendingSelected} onCheckedChange={toggleSelectAll} />
@@ -253,7 +262,7 @@ const TravelReimbursementsPage = () => {
             )}
           </div>
 
-          <DataTable columns={columns} data={data} />
+          <DataTable columns={columns} data={data} pageSize={999} />
 
           <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
             <AlertDialogContent>
@@ -276,7 +285,7 @@ const TravelReimbursementsPage = () => {
             page={pagination.page}
             totalPages={pagination.totalPages}
             total={pagination.total}
-            pageSize={LIMIT}
+            pageSize={limit}
             onPageChange={fetchData}
           />
         </>
