@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import api from "@/lib/axiosInterceptor";
 
 const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 
 interface ContractTypeSnapshot {
   contractTypeId: string;
@@ -206,9 +207,9 @@ const SellMachineDetailPage = () => {
       <div className="space-y-4">
         {sale.machines.map((m, mi) => {
           const isParts = m.categoryId === PARTS_CATEGORY_ID;
-          const items   = isParts
-            ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType, pagesCategories: undefined }))
-            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, minCopies: e.minCopies, contractType: e.contractType, pagesCategories: e.pagesCategories }));
+                          const items   = isParts
+            ? (m.partCodes || []).map(e => ({ code: e.partCode, contractType: e.contractType, isTss: false, pagesCategories: undefined, minCopies: undefined }))
+            : (m.serialNumbers || []).map(e => ({ code: e.serialNumber, minCopies: e.minCopies, contractType: e.contractType, isTss: e.contractType?.contractTypeId === TSS_CONTRACT_TYPE_ID, pagesCategories: e.pagesCategories }));
           return (
             <Card key={mi} className="border-0 shadow-sm">
               <CardHeader>
@@ -230,7 +231,9 @@ const SellMachineDetailPage = () => {
                 </div>
 
                 {/* Inline codes table */}
-                {items.length > 0 && (
+                {items.length > 0 && (() => {
+                  const hasTss = items.some(item => item.isTss);
+                  return (
                   <div className="overflow-x-auto rounded-lg border">
                     <table className="w-full text-sm">
                       <thead>
@@ -244,7 +247,7 @@ const SellMachineDetailPage = () => {
                               <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Free Parts</th>
                               <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Valid From</th>
                               <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Valid To</th>
-                              <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Pages Categories</th>
+                              {hasTss && <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Pages Categories</th>}
                             </>
                           )}
                         </tr>
@@ -273,17 +276,21 @@ const SellMachineDetailPage = () => {
                                 </td>
                                 <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validFrom) : "—"}</td>
                                 <td className="px-3 py-2.5 text-xs">{item.contractType ? formatDate(item.contractType.validTo) : "—"}</td>
-                                <td className="px-3 py-2.5">
-                                  {item.pagesCategories && item.pagesCategories.length > 0
-                                    ? <div className="flex flex-col gap-0.5">{item.pagesCategories.map((pc, pi) => (
-                                        <span key={pi} className="text-xs"><span className="font-medium">{pc.pagesCategory}</span> <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span></span>
-                                      ))}
-                                      {item.minCopies ? <span className="text-xs text-blue-600">Min: {item.minCopies} copies</span> : null}
-                                    </div>
-                                    : item.minCopies
-                                      ? <span className="text-xs text-blue-600">Min: {item.minCopies} copies</span>
+                                {hasTss && (
+                                  <td className="px-3 py-2.5">
+                                    {item.isTss && item.pagesCategories && item.pagesCategories.length > 0
+                                      ? <div className="flex flex-col gap-0.5">
+                                          {item.pagesCategories.map((pc, pi) => (
+                                            <span key={pi} className="text-xs">
+                                              <span className="font-medium">{pc.pagesCategory}</span>
+                                              <span className="text-muted-foreground"> ₹{pc.costPerPage}/pg</span>
+                                            </span>
+                                          ))}
+                                          {item.minCopies ? <span className="text-xs text-blue-600">Min: {item.minCopies} copies</span> : null}
+                                        </div>
                                       : <span className="text-muted-foreground text-xs">—</span>}
-                                </td>
+                                  </td>
+                                )}
                               </>
                             )}
                           </tr>
@@ -291,7 +298,8 @@ const SellMachineDetailPage = () => {
                       </tbody>
                     </table>
                   </div>
-                )}
+                  );
+                })()}
               </CardContent>
             </Card>
           );

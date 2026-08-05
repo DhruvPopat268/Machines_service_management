@@ -40,6 +40,7 @@
     .items-table { width: 100%; border-collapse: collapse; }
     .items-table th { background: #111; color: #fff; padding: 7px 10px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
     .items-table th.right, .items-table td.right { text-align: right; }
+    .discount-cell { font-size: 10px; color: #c00; }
     .items-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
     .items-table tbody tr:last-child td { border-bottom: none; }
     .items-table tbody tr:nth-child(even) td { background: #fafafa; }
@@ -103,7 +104,7 @@
 
     <!-- Invoice Meta -->
     <div class="invoice-meta">
-      <span class="inv-no">GST INV NO: {{invoiceNumber}}</span>
+      <span class="inv-no">INV NO: {{invoiceNumber}}</span>
       <span class="inv-date">DATE: {{invoiceDate}}</span>
     </div>
 
@@ -129,10 +130,12 @@
         <tr>
           <th style="width:40px;">Sr.No.</th>
           <th>Description</th>
-          <th style="width:100px;">HSN Code</th>
-          <th style="width:50px;" class="right">Qty</th>
-          <th style="width:110px;" class="right">Rate (₹)</th>
-          <th style="width:110px;" class="right">Amount (₹)</th>
+          <th style="width:90px;">HSN Code</th>
+          <th style="width:40px;" class="right">Qty</th>
+          <th style="width:100px;" class="right">Base Price (₹)</th>
+          <th style="width:100px;" class="right">Discount</th>
+          <th style="width:100px;" class="right">Net Price (₹)</th>
+          <th style="width:100px;" class="right">Total (₹)</th>
         </tr>
       </thead>
       <tbody>
@@ -146,8 +149,10 @@
           </td>
           <td>{{hsnCode}}</td>
           <td class="right">{{quantity}}</td>
-          <td class="right">{{rate}}</td>
-          <td class="right">{{amount}}</td>
+          <td class="right">{{sellingPriceBase}}</td>
+          <td class="right"><span class="discount-cell">{{discountPercentage}}% (₹{{discountAmount}})</span></td>
+          <td class="right">{{netSellingPriceBase}}</td>
+          <td class="right">{{sellingTotalBase}}</td>
         </tr>
         {{/each}}
       </tbody>
@@ -174,11 +179,11 @@
         </div>
       </div>
       <div class="footer-right">
-        <div class="totals-row"><span>Basic Total</span><span>₹{{basicTotal}}</span></div>
+        <div class="totals-row"><span>Basic Total</span><span>₹{{grandTotalBase}}</span></div>
         {{#if cgst}}<div class="totals-row"><span>CGST @ {{cgstPercent}}%</span><span>₹{{cgstAmount}}</span></div>{{/if}}
         {{#if sgst}}<div class="totals-row"><span>SGST @ {{sgstPercent}}%</span><span>₹{{sgstAmount}}</span></div>{{/if}}
         {{#if igst}}<div class="totals-row"><span>IGST @ {{igstPercent}}%</span><span>₹{{igstAmount}}</span></div>{{/if}}
-        <div class="totals-row grand"><span>Grand Total</span><span>₹{{grandTotal}}</span></div>
+        <div class="totals-row grand"><span>Grand Total</span><span>₹{{grandTotalWithGst}}</span></div>
       </div>
     </div>
 

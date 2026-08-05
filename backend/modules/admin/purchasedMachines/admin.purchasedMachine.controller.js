@@ -6,6 +6,7 @@ const Vendor = require("../vendorManagement/admin.vendor.model");
 const MachineCategory = require("../machineCategoryManagement/admin.machineCategory.model");
 const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
 const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
+const GstConfig = require("../gstConfig/admin.gstConfig.model");
 const { validateCreatePurchase } = require("./admin.purchasedMachine.validator");
 
 const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
@@ -146,6 +147,11 @@ const createPurchase = async (req, res) => {
       gstNumber:   vendor.gstNumber || "",
     };
 
+    // ── Fetch GST config ──
+    const gstConfig = await GstConfig.findOne().lean();
+    const totalGst = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
+    const gstDivisor = 1 + totalGst / 100;
+
     // ── Collect all serial numbers and part codes for bulk duplicate check ──
     const allSerialNumbers = machines.flatMap((m) => m.serialNumbers || []).map((s) => s.trim());
     const allPartCodes     = machines.flatMap((m) => m.partCodes     || []).map((c) => c.trim());
@@ -182,9 +188,8 @@ const createPurchase = async (req, res) => {
       if (machine.status === "Inactive")  return abort(400, `Machine "${machine.name}" is inactive`);
 
       const isParts    = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
-      const gstPct      = m.gstPercentage;
-      const buyBase          = Math.round(m.buyingPriceWithGst / (1 + gstPct / 100));
-      const sellBase          = m.sellingPriceWithGst != null ? Math.round(m.sellingPriceWithGst / (1 + gstPct / 100)) : null;
+      const buyBase          = Math.round((m.buyingPriceWithGst / gstDivisor) * 100) / 100;
+      const sellBase          = m.sellingPriceWithGst != null ? Math.round((m.sellingPriceWithGst / gstDivisor) * 100) / 100 : null;
       const buyingTotalWithGst = Math.round(m.buyingPriceWithGst * m.quantity * 100) / 100;
       const buyingTotalBase    = Math.round(buyBase * m.quantity);
       grandTotalWithGst        = Math.round((grandTotalWithGst + buyingTotalWithGst) * 100) / 100;
@@ -200,7 +205,6 @@ const createPurchase = async (req, res) => {
         division:            machine.division?.name || "",
         quantity:            m.quantity,
         buyingPriceWithGst:  m.buyingPriceWithGst,
-        gstPercentage:       gstPct,
         buyingPriceBase:     buyBase,
         sellingPriceWithGst: m.sellingPriceWithGst ?? null,
         sellingPriceBase:    sellBase,
@@ -355,7 +359,7 @@ const exportToExcel = async (req, res) => {
 
     const purchases = await PurchasedMachine.find(query).sort({ createdAt: -1 }).lean();
 
-    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "GST %", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Serial / Part Code", "Status", "Purchase Date", "Purchase Time"];
+    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Serial / Part Code", "Status", "Purchase Date", "Purchase Time"];
 
     const rows = [];
     const merges = [];
@@ -386,7 +390,6 @@ const exportToExcel = async (req, res) => {
             "Category":                 isMachineFirst ? m.category    || "" : "",
             "Division":                 isMachineFirst ? m.division    || "" : "",
             "Quantity":                  isMachineFirst ? m.quantity              : "",
-            "GST %":                      isMachineFirst ? m.gstPercentage         : "",
             "Buying Price (Base)":        isMachineFirst ? m.buyingPriceBase       : "",
             "Buying Price (With GST)":    isMachineFirst ? m.buyingPriceWithGst    : "",
             "Selling Price (Base)":       isMachineFirst ? (m.sellingPriceBase    ?? "") : "",
@@ -403,7 +406,7 @@ const exportToExcel = async (req, res) => {
         const sheetMachineStart = machineStartRow + 1;
         const sheetMachineEnd   = rows.length;
         if (sheetMachineStart < sheetMachineEnd) {
-          ["Machine Name", "Model Number", "Category", "Division", "Quantity", "GST %", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)"].forEach((col) => {
+          ["Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)"].forEach((col) => {
             const c = COLS.indexOf(col);
             merges.push({ s: { r: sheetMachineStart, c }, e: { r: sheetMachineEnd, c } });
           });

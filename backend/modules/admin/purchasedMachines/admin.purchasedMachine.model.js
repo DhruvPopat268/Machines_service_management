@@ -27,7 +27,6 @@ const purchasedMachineEntrySchema = new mongoose.Schema(
     division:               { type: String, trim: true, default: "" },
     quantity:             { type: Number, required: true },
     buyingPriceWithGst:   { type: Number, required: true },
-    gstPercentage:        { type: Number, required: true },
     buyingPriceBase:      { type: Number, required: true },
     sellingPriceWithGst:  { type: Number, default: null },
     sellingPriceBase:     { type: Number, default: null },

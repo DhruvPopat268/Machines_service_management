@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Eye, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -28,7 +28,7 @@ interface SaleMachine {
   sellingPriceWithGst: number; sellingPriceBase: number; discountPercentage: number;
   netSellingPriceBase: number; netSellingPriceWithGst: number;
   sellingTotalBase: number; sellingTotalWithGst: number;
-  serialNumbers?: { serialNumber: string; contractType: ContractTypeSnapshot | null }[];
+  serialNumbers?: { serialNumber: string; contractType: ContractTypeSnapshot | null; pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[] }[];
   partCodes?: { partCode: string; contractType: ContractTypeSnapshot | null }[];
 }
 interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotalBase: number; grandTotalWithGst: number; currentPaymentStatus: string; paidAmount: number; remainingAmount: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; }
@@ -91,6 +91,10 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [totalGst, setTotalGst] = useState<number | null>(null);
   const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<"Unpaid" | "Paid" | "Partial-Paid">("Unpaid");
+  const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Online" | "">("Cash");
+  const [paidAmount, setPaidAmount] = useState("");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split("T")[0]);
   const ctAbortRef = useRef<AbortController | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -250,10 +254,20 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
 
     if (!companyId) { toast.error("Please select a company"); return; }
+    if (paymentStatus !== "Unpaid") {
+      if (!paymentMethod) { toast.error("Please select a payment method"); return; }
+      if (!paymentDate) { toast.error("Please select a payment date"); return; }
+      if (paymentStatus === "Partial-Paid") {
+        if (!paidAmount || Number(paidAmount) <= 0) { toast.error("Enter paid amount for Partial-Paid"); return; }
+      }
+    }
 
-    const payload = {
+    const payload: any = {
       customerId,
       companyId,
+      currentPaymentStatus: paymentStatus,
+      ...(paymentStatus !== "Unpaid" && { paymentMethod, paymentDate }),
+      ...(paymentStatus === "Partial-Paid" && { paidAmount: Number(paidAmount) }),
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
         return {
@@ -314,7 +328,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -342,6 +356,21 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           <div className="w-72 shrink-0 border-r flex flex-col bg-muted/30">
             <div className="p-4 space-y-4 flex-1 overflow-y-auto">
 
+              {/* Company */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company <span className="text-destructive">*</span></Label>
+                <Select value={companyId} onValueChange={setCompanyId}>
+                  <SelectTrigger className="h-9 text-sm bg-background">
+                    <SelectValue placeholder="Select company" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {companies.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Customer */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -362,21 +391,6 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                           <p className="text-xs text-muted-foreground">{c.phone}</p>
                         </div>
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Company */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company <span className="text-destructive">*</span></Label>
-                <Select value={companyId} onValueChange={setCompanyId}>
-                  <SelectTrigger className="h-9 text-sm bg-background">
-                    <SelectValue placeholder="Select company" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {companies.map((c) => (
-                      <SelectItem key={c._id} value={c._id}>{c.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -470,8 +484,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
                       {/* Fields */}
                       <div className="p-4 space-y-3">
-                        {/* Row 1: qty, selling price */}
-                        <div className="grid grid-cols-2 gap-3">
+                        {/* Row 1: qty, selling price with gst */}
+                        <div className="grid grid-cols-2 gap-3 items-end">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">Qty <span className="text-destructive">*</span></Label>
                             <Input type="number" min={1} max={entry.machine.currentStock} className="h-8 text-sm" value={entry.quantity}
@@ -479,7 +493,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                           </div>
                           <div className="space-y-1">
                             <div className="flex items-center justify-between">
-                              <Label className="text-xs text-muted-foreground">Selling Price (GST Included) <span className="text-destructive">*</span></Label>
+                              <Label className="text-xs text-muted-foreground">Selling Price (GST Incl.) / Qty <span className="text-destructive">*</span></Label>
                               {totalGst !== null && (
                                 <span className="text-[10px] font-medium bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">GST {totalGst}%</span>
                               )}
@@ -488,6 +502,49 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                               onChange={(e) => updateEntry(mi, "sellingPriceWithGst", e.target.value)} />
                           </div>
                         </div>
+
+                        {/* Row 2: base price (auto), discount %, discount amount (auto), net price (auto) */}
+                        {entry.sellingPriceWithGst !== "" && totalGst !== null && (() => {
+                          const gstDivisor = 1 + totalGst / 100;
+                          const priceWithGst = Number(entry.sellingPriceWithGst) || 0;
+                          const priceBase = Math.round((priceWithGst / gstDivisor) * 100) / 100;
+                          const discPct = Number(entry.discountPercentage) || 0;
+                          const discountAmount = Math.round(priceBase * discPct / 100 * 100) / 100;
+                          const netPriceBase = Math.round((priceBase - discountAmount) * 100) / 100;
+                          const netPriceWithGst = Math.round(netPriceBase * (1 + totalGst / 100) * 100) / 100;
+                          return (
+                            <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Base Price <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Input className="h-8 text-sm bg-muted/40" value={`₹${priceBase.toLocaleString()}`} readOnly />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Discount %</Label>
+                                  <Input type="number" min={0} max={100} className="h-8 text-sm" placeholder="0"
+                                    value={entry.discountPercentage}
+                                    onChange={(e) => updateEntry(mi, "discountPercentage", e.target.value)} />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Discount Amount <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Input className="h-8 text-sm bg-muted/40" value={`₹${discountAmount.toLocaleString()}`} readOnly />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Net Price (Base) <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Input className="h-8 text-sm bg-muted/40" value={`₹${netPriceBase.toLocaleString()}`} readOnly />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Net Price (GST Incl.) <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Input className="h-8 text-sm bg-muted/40 font-medium" value={`₹${netPriceWithGst.toLocaleString()}`} readOnly />
+                                </div>
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-muted-foreground">Total (GST Incl.)</Label>
+                                  <Input className="h-8 text-sm bg-muted/40 font-semibold text-green-700" value={`₹${(Math.round(netPriceWithGst * (Number(entry.quantity) || 0) * 100) / 100).toLocaleString()}`} readOnly />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Inline unit rows */}
                         {entry.loadingCodes && (
@@ -613,16 +670,67 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
               </div>
             )}
 
-            {/* Footer */}
-            <div className="border-t px-4 py-3 flex items-center justify-between gap-4 shrink-0 bg-background">
-              <span className="text-sm font-medium">
-                Net Total: <span className="text-base font-bold text-green-600">₹{sellingTotal.toLocaleString()}</span>
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-                  <Plus className="h-4 w-4" />{submitting ? "Recording..." : "Record Sale"}
-                </Button>
+            {/* Footer — payment + actions */}
+            <div className="border-t shrink-0 bg-background">
+
+              {/* Payment section */}
+              <div className="px-4 pt-3 pb-2 space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Payment Status */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Status <span className="text-destructive">*</span></Label>
+                    <Select value={paymentStatus} onValueChange={(v: any) => { setPaymentStatus(v); if (v === "Unpaid") { setPaymentMethod("Cash"); setPaidAmount(""); } }}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Unpaid">Unpaid</SelectItem>
+                        <SelectItem value="Paid">Paid</SelectItem>
+                        <SelectItem value="Partial-Paid">Partial-Paid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Method {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
+                    <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} disabled={paymentStatus === "Unpaid"}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">Cash</SelectItem>
+                        <SelectItem value="Online">Online</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Payment Date */}
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Date {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
+                    <Input type="date" className="h-8 text-xs" value={paymentDate} disabled={paymentStatus === "Unpaid"}
+                      onChange={(e) => setPaymentDate(e.target.value)} />
+                  </div>
+
+                  {/* Paid Amount — only for Partial-Paid */}
+                  {paymentStatus === "Partial-Paid" && (
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Paid Amount <span className="text-destructive">*</span></Label>
+                      <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
+                        value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Grand total + actions */}
+              <div className="border-t px-4 py-3 flex items-center justify-between gap-4">
+                <span className="text-sm font-medium">
+                  Net Total: <span className="text-base font-bold text-green-600">₹{sellingTotal.toLocaleString()}</span>
+                </span>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
+                  <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
+                    <Plus className="h-4 w-4" />{submitting ? "Recording..." : "Record Sale"}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -675,7 +783,6 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const SellMachinesPage = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData] = useState<Sale[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -691,6 +798,9 @@ const SellMachinesPage = () => {
   const [exportDialog, setExportDialog] = useState(false);
   const [initialCustomerId, setInitialCustomerId] = useState("");
   const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
+  const [paymentDialog, setPaymentDialog] = useState<Sale | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] });
+  const [addingPayment, setAddingPayment] = useState(false);
   const [companies, setCompanies] = useState<ActiveCompany[]>([]);
   const [invoiceForm, setInvoiceForm] = useState({ companyId: "", cgst: "", sgst: "", igst: "" });
   const [generatingInvoice, setGeneratingInvoice] = useState(false);
@@ -714,6 +824,26 @@ const SellMachinesPage = () => {
       .then(r => setCompanies(r.data.data))
       .catch(() => { });
   }, []);
+
+  const handleAddPayment = async () => {
+    if (!paymentDialog) return;
+    if (!paymentForm.paidAmount || Number(paymentForm.paidAmount) <= 0) { toast.error("Enter a valid paid amount"); return; }
+    if (!paymentForm.paymentMethod) { toast.error("Select a payment method"); return; }
+    if (!paymentForm.paymentDate) { toast.error("Select a payment date"); return; }
+    setAddingPayment(true);
+    try {
+      await api.post(`/admin/sales/${paymentDialog._id}/add-payment`, {
+        paidAmount: Number(paymentForm.paidAmount),
+        paymentMethod: paymentForm.paymentMethod,
+        paymentDate: paymentForm.paymentDate,
+      });
+      toast.success("Payment recorded successfully");
+      setPaymentDialog(null);
+      setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] });
+      fetchSales(pagination.page);
+    } catch (err: any) { toast.error(err.response?.data?.message || "Failed to record payment"); }
+    finally { setAddingPayment(false); }
+  };
 
   const handleGenerateInvoice = async () => {
     if (!invoiceDialog) return;
@@ -783,6 +913,7 @@ const SellMachinesPage = () => {
       if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
+      if (filters.paymentStatus && filters.paymentStatus !== "all" && filters.paymentStatus !== "") p.paymentStatus = filters.paymentStatus;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate) p.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/sales", { params: p, signal: ctrl.signal });
@@ -851,6 +982,34 @@ const SellMachinesPage = () => {
             return (
               <div key={i}>
                 {cts.map((ct, j) => <div key={j} className="text-xs">{ct?.name || "—"}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "pagesCategories", label: "Pages Categories",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            if (isParts) return <div key={i}><span className="text-muted-foreground text-xs">—</span>{sep(i, s.machines.length)}</div>;
+            const sns = m.serialNumbers || [];
+            return (
+              <div key={i}>
+                {sns.map((sn, j) => {
+                  const isTss = sn.contractType?.contractTypeId === import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
+                  if (!isTss || !sn.pagesCategories?.length) return <div key={j} className="text-muted-foreground text-xs">—</div>;
+                  return (
+                    <div key={j} className="flex flex-col gap-0.5">
+                      {sn.pagesCategories.map((pc: any, pi: number) => (
+                        <span key={pi} className="text-xs"><span className="font-medium">{pc.pagesCategory}</span> <span className="text-muted-foreground">₹{pc.costPerPage}/pg</span></span>
+                      ))}
+                    </div>
+                  );
+                })}
                 {sep(i, s.machines.length)}
               </div>
             );
@@ -947,11 +1106,15 @@ const SellMachinesPage = () => {
     {
       key: "actions", label: "Actions", sticky: true, render: (s) => (
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => navigate(`/sell-machines/${s._id}`)}><Eye className="h-3 w-3" /></Button>
           {s.invoiceUrl
             ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
             : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
           }
+          {s.currentPaymentStatus !== "Paid" && (
+            <Button size="sm" variant="outline" className="text-xs h-7 text-blue-600 border-blue-300" onClick={() => { setPaymentDialog(s); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); }}>
+              <CreditCard className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       )
     },
@@ -1006,6 +1169,15 @@ const SellMachinesPage = () => {
             <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine: v }))} onSearchChange={fetchMachines} placeholder="Machine" searchPlaceholder="Search machines..." className="w-[160px] h-9 text-sm" />
+            <Select value={filters.paymentStatus ?? ""} onValueChange={(v) => setFilters(p => ({ ...p, paymentStatus: v }))}>
+              <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Payment Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+                <SelectItem value="Unpaid">Unpaid</SelectItem>
+                <SelectItem value="Partial-Paid">Partial-Paid</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />
@@ -1013,7 +1185,7 @@ const SellMachinesPage = () => {
         </>
       )}
 
-      <SellMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialCustomerId(""); navigate("/sell-machines", { replace: true }); }} onSuccess={() => fetchSales(1)} initialCustomerId={initialCustomerId} />
+      <SellMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialCustomerId(""); }} onSuccess={() => fetchSales(1)} initialCustomerId={initialCustomerId} />
 
       <Dialog open={!!invoiceDialog} onOpenChange={(o) => { if (!o) setInvoiceDialog(null); }}>
         <DialogContent className="max-w-sm">
@@ -1045,6 +1217,45 @@ const SellMachinesPage = () => {
             <Button variant="outline" onClick={() => setInvoiceDialog(null)} disabled={generatingInvoice}>Cancel</Button>
             <Button onClick={handleGenerateInvoice} disabled={generatingInvoice} className="gap-2">
               <FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!paymentDialog} onOpenChange={(o) => { if (!o) { setPaymentDialog(null); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Add Payment</DialogTitle></DialogHeader>
+          {paymentDialog && (
+            <div className="space-y-4 py-2">
+              <div className="rounded-md bg-muted/50 border px-3 py-2 text-sm space-y-1">
+                <p><span className="text-muted-foreground">Customer:</span> <span className="font-medium">{paymentDialog.customerInfo.name}</span></p>
+                <p><span className="text-muted-foreground">Remaining:</span> <span className="font-semibold text-red-500">₹{paymentDialog.remainingAmount.toLocaleString()}</span></p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Paid Amount <span className="text-destructive">*</span></Label>
+                <Input type="number" min={0} max={paymentDialog.remainingAmount} placeholder="0" className="h-9"
+                  value={paymentForm.paidAmount} onChange={(e) => setPaymentForm(p => ({ ...p, paidAmount: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Payment Method <span className="text-destructive">*</span></Label>
+                <Select value={paymentForm.paymentMethod} onValueChange={(v) => setPaymentForm(p => ({ ...p, paymentMethod: v }))}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Cash">Cash</SelectItem>
+                    <SelectItem value="Online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Payment Date <span className="text-destructive">*</span></Label>
+                <Input type="date" className="h-9" value={paymentForm.paymentDate} onChange={(e) => setPaymentForm(p => ({ ...p, paymentDate: e.target.value }))} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPaymentDialog(null); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); }} disabled={addingPayment}>Cancel</Button>
+            <Button onClick={handleAddPayment} disabled={addingPayment} className="gap-2">
+              <CreditCard className="h-4 w-4" />{addingPayment ? "Recording..." : "Record Payment"}
             </Button>
           </DialogFooter>
         </DialogContent>

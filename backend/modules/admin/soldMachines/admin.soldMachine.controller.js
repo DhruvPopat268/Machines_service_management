@@ -127,7 +127,7 @@ const getAvailableCodes = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, zoneId, category, division, machineId, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, paymentStatus, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -159,6 +159,9 @@ const getAll = async (req, res) => {
 
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (machineFilter) query.machines = machineFilter;
+
+    if (paymentStatus && ["Paid", "Unpaid", "Partial-Paid"].includes(paymentStatus))
+      query.currentPaymentStatus = paymentStatus;
 
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
@@ -319,6 +322,7 @@ const createSale = async (req, res) => {
       const netSellingPriceBase = Math.round((netSellingPriceWithGst / gstDivisor) * 100) / 100;
       const sellingTotalBase = Math.round(netSellingPriceBase * m.quantity * 100) / 100;
       const sellingTotalWithGst = Math.round(netSellingPriceWithGst * m.quantity * 100) / 100;
+      const discountAmountWithGst = Math.round((sellingPriceWithGst - netSellingPriceWithGst) * 100) / 100;
 
       grandTotalBase = Math.round((grandTotalBase + sellingTotalBase) * 100) / 100;
       grandTotalWithGst = Math.round((grandTotalWithGst + sellingTotalWithGst) * 100) / 100;
@@ -335,7 +339,7 @@ const createSale = async (req, res) => {
         quantity: m.quantity,
         sellingPriceWithGst,
         sellingPriceBase,
-        discountPercentage: discountPct,
+        discount: { percentage: discountPct, amount: discountAmountWithGst },
         netSellingPriceBase,
         netSellingPriceWithGst,
         sellingTotalBase,
@@ -458,13 +462,164 @@ const createSale = async (req, res) => {
     await session.commitTransaction();
     session.endSession();
 
-    // ── Generate payment receipt PDF (after commit, non-blocking) ──
-    if (transactionId && companyId) {
-      (async () => {
-        try {
-          const company = await Company.findById(companyId).lean();
-          if (!company) return;
+    let receiptUrl = null;
 
+    // ── Generate sales invoice PDF first (so invoiceNumber is available for receipt) ──
+    let saleInvoiceNumber = "";
+    if (companyId) {
+      try {
+        const company = await Company.findById(companyId).lean();
+        if (company) {
+          const cgstNum = gstConfig?.cgst || 0;
+          const sgstNum = gstConfig?.sgst || 0;
+          const igstNum = gstConfig?.igst || 0;
+
+          const invoiceCounter = await Counter.findByIdAndUpdate(
+            "salesInvoice",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          saleInvoiceNumber = `INV-${invoiceCounter.seq}`;
+
+          const companyInfo = {
+            companyId: company._id,
+            name: company.name,
+            tagline: company.tagline || "",
+            address: company.address,
+            phone: company.phone,
+            email: company.email,
+            gstNumber: company.gstNumber,
+            bankAccountNumber: company.bankAccountNumber || "",
+            bankName: company.bankName || "",
+            ifscCode: company.ifscCode || "",
+            bankBranch: company.bankBranch || "",
+            qrCode: company.qrCode || "",
+          };
+
+          const cgstAmount = parseFloat(((grandTotalBase * cgstNum) / 100).toFixed(2));
+          const sgstAmount = parseFloat(((grandTotalBase * sgstNum) / 100).toFixed(2));
+          const igstAmount = parseFloat(((grandTotalBase * igstNum) / 100).toFixed(2));
+          const invoiceGrandTotalWithGst = parseFloat((grandTotalBase + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+
+          const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+          const formatNum = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+          const d = new Date(sale.createdAt);
+          const invoiceDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+
+          const invoiceTemplatePath = path.join(__dirname, "../../../invoicesExamples/sales-invoice.html");
+          let invoiceHtml = await fs.readFile(invoiceTemplatePath, "utf-8");
+
+          invoiceHtml = invoiceHtml
+            .replace(/{{invoiceNumber}}/g, saleInvoiceNumber)
+            .replace(/{{invoiceDate}}/g, invoiceDate)
+            .replace(/{{companyName}}/g, company.name)
+            .replace(/{{companyTagline}}/g, company.tagline || "")
+            .replace(/{{companyAddress}}/g, company.address)
+            .replace(/{{companyPhone}}/g, company.phone)
+            .replace(/{{companyEmail}}/g, company.email)
+            .replace(/{{companyGst}}/g, company.gstNumber)
+            .replace(/{{bankAccountNumber}}/g, company.bankAccountNumber || "")
+            .replace(/{{bankName}}/g, company.bankName || "")
+            .replace(/{{ifscCode}}/g, company.ifscCode || "")
+            .replace(/{{bankBranch}}/g, company.bankBranch || "")
+            .replace(/{{qrCode}}/g, company.qrCode || "")
+            .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g, invoiceLogoText)
+            .replace(/{{customerName}}/g, customerInfo.name)
+            .replace(/{{customerAddress}}/g, customerInfo.address || "")
+            .replace(/{{customerUniqueId}}/g, customerInfo.customerUniqueId || "")
+            .replace(/{{customerZone}}/g, customerInfo.zone || "")
+            .replace(/{{customerGst}}/g, customerInfo.gstNumber || "")
+            .replace(/{{grandTotalBase}}/g, formatNum(grandTotalBase))
+            .replace(/{{cgstPercent}}/g, cgstNum)
+            .replace(/{{cgstAmount}}/g, formatNum(cgstAmount))
+            .replace(/{{sgstPercent}}/g, sgstNum)
+            .replace(/{{sgstAmount}}/g, formatNum(sgstAmount))
+            .replace(/{{igstPercent}}/g, igstNum)
+            .replace(/{{igstAmount}}/g, formatNum(igstAmount))
+            .replace(/{{grandTotalWithGst}}/g, formatNum(invoiceGrandTotalWithGst));
+
+          invoiceHtml = cgstNum > 0 ? invoiceHtml.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = sgstNum > 0 ? invoiceHtml.replace(/{{#if sgst}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if sgst}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = igstNum > 0 ? invoiceHtml.replace(/{{#if igst}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if igst}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = company.tagline ? invoiceHtml.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = company.qrCode ? invoiceHtml.replace(/{{#if qrCode}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if qrCode}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = invoiceLogoUrl ? invoiceHtml.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+          invoiceHtml = invoiceLogoText ? invoiceHtml.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1") : invoiceHtml.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+
+          const machineRowsMatch = invoiceHtml.match(/{{#each machines}}([\.\s\S]*?){{\/each}}/);
+          if (machineRowsMatch) {
+            const rowTemplate = machineRowsMatch[1];
+            const machineRows = machineEntries.map((m, idx) => {
+              const isParts = m.categoryId?.toString() === PARTS_CATEGORY_ID;
+              const serials = isParts
+                ? (m.partCodes || []).map(p => p.partCode)
+                : (m.serialNumbers || []).map(s => s.serialNumber);
+              const serialLabel = isParts ? "P/C" : "S/N";
+              let row = rowTemplate
+                .replace(/{{srNo}}/g, idx + 1)
+                .replace(/{{machineName}}/g, m.machineName)
+                .replace(/{{hsnCode}}/g, m.hsnCode || "")
+                .replace(/{{serialLabel}}/g, serialLabel)
+                .replace(/{{quantity}}/g, m.quantity)
+                .replace(/{{sellingPriceBase}}/g, formatNum(m.sellingPriceBase))
+                .replace(/{{discountPercentage}}/g, m.discount.percentage)
+                .replace(/{{discountAmount}}/g, formatNum(m.discount.amount))
+                .replace(/{{netSellingPriceBase}}/g, formatNum(m.netSellingPriceBase))
+                .replace(/{{sellingTotalBase}}/g, formatNum(m.sellingTotalBase));
+              row = m.modelNumber
+                ? row.replace(/{{#if modelNumber}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, m.modelNumber)
+                : row.replace(/{{#if modelNumber}}[\.\s\S]*?{{\/if}}/g, "");
+              const serialsStr = serials.join(", ");
+              row = serialsStr
+                ? row.replace(/{{#if serials}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{serials}}/g, serialsStr)
+                : row.replace(/{{#if serials}}[\.\s\S]*?{{\/if}}/g, "");
+              return row;
+            }).join("");
+            invoiceHtml = invoiceHtml.replace(/{{#each machines}}[\.\s\S]*?{{\/each}}/, machineRows);
+          }
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const invoiceFilename = `sales_invoice_${saleInvoiceNumber}_${Date.now()}.pdf`;
+          const invoiceFilepath = path.join(DOCS_DIR, invoiceFilename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const invoicePage = await browser.newPage();
+          await invoicePage.setContent(invoiceHtml, { waitUntil: "networkidle0" });
+          await invoicePage.pdf({ path: invoiceFilepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${invoiceFilename}`;
+          await SoldMachine.findByIdAndUpdate(sale._id, {
+            invoiceNumber: saleInvoiceNumber,
+            companyInfo,
+            invoiceUrl,
+            cgst: { percent: cgstNum, amount: cgstAmount },
+            sgst: { percent: sgstNum, amount: sgstAmount },
+            igst: { percent: igstNum, amount: igstAmount },
+          });
+        }
+      } catch (invoiceErr) {
+        console.error("Invoice generation failed (non-fatal):", invoiceErr.message);
+      }
+    }
+
+    // ── Generate payment receipt PDF (after invoice so invoiceNumber is available) ──
+    if (transactionId && companyId) {
+      try {
+        const company = await Company.findById(companyId).lean();
+        if (company) {
           const receiptCounter = await Counter.findByIdAndUpdate(
             "paymentReceipt",
             { $inc: { seq: 1 } },
@@ -490,7 +645,7 @@ const createSale = async (req, res) => {
             .replace(/{{amountInWords}}/g, numberToWords(paidAmount))
             .replace(/{{amountReceived}}/g, formatNum(paidAmount))
             .replace(/{{paymentMethod}}/g, paymentMethod || "")
-            .replace(/{{invoiceNumber}}/g, "")
+            .replace(/{{invoiceNumber}}/g, saleInvoiceNumber)
             .replace(/{{companyName}}/g, company.name || "")
             .replace(/{{companyTagline}}/g, company.tagline || "")
             .replace(/{{companyAddress}}/g, company.address || "")
@@ -508,6 +663,12 @@ const createSale = async (req, res) => {
           html = invoiceLogoText
             ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1")
             : html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+          html = currentPaymentStatus === "Paid"
+            ? html.replace(/{{#if isPaid}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if isPaid}}[\.\s\S]*?{{\/if}}/g, "");
+          html = currentPaymentStatus === "Partial-Paid"
+            ? html.replace(/{{#if isPartialPaid}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if isPartialPaid}}[\.\s\S]*?{{\/if}}/g, "");
 
           const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
             import("puppeteer"),
@@ -528,15 +689,15 @@ const createSale = async (req, res) => {
           await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
           await browser.close();
 
-          const receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
           await PaymentTransaction.findByIdAndUpdate(transactionId, { receiptNumber, receiptUrl });
-        } catch (receiptErr) {
-          console.error("Receipt generation failed (non-fatal):", receiptErr.message);
         }
-      })();
+      } catch (receiptErr) {
+        console.error("Receipt generation failed (non-fatal):", receiptErr.message);
+      }
     }
 
-    res.status(201).json({ success: true, data: { _id: sale._id, currentPaymentStatus: sale.currentPaymentStatus, paidAmount: sale.paidAmount, remainingAmount: sale.remainingAmount } });
+    res.status(201).json({ success: true, data: { _id: sale._id, currentPaymentStatus: sale.currentPaymentStatus, paidAmount: sale.paidAmount, remainingAmount: sale.remainingAmount, receiptUrl } });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -1057,4 +1218,138 @@ const sendContractExpiryAlerts = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus };
+const addPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid sale ID" });
+
+    const { paidAmount: rawPaidAmount, paymentMethod, paymentDate } = req.body;
+
+    if (!rawPaidAmount || isNaN(Number(rawPaidAmount)) || Number(rawPaidAmount) <= 0)
+      return res.status(400).json({ success: false, message: "paidAmount must be a positive number" });
+    if (!["Cash", "Online"].includes(paymentMethod))
+      return res.status(400).json({ success: false, message: "paymentMethod must be Cash or Online" });
+    if (!paymentDate)
+      return res.status(400).json({ success: false, message: "paymentDate is required" });
+
+    const sale = await SoldMachine.findById(id);
+    if (!sale) return res.status(404).json({ success: false, message: "Sale not found" });
+    if (sale.currentPaymentStatus === "Paid")
+      return res.status(400).json({ success: false, message: "Sale is already fully paid" });
+
+    const incomingAmount = Math.round(Number(rawPaidAmount) * 100) / 100;
+    if (incomingAmount > sale.remainingAmount)
+      return res.status(400).json({ success: false, message: `paidAmount cannot exceed remaining amount of ₹${sale.remainingAmount}` });
+
+    const newPaidAmount = Math.round((sale.paidAmount + incomingAmount) * 100) / 100;
+    const newRemainingAmount = Math.round((sale.remainingAmount - incomingAmount) * 100) / 100;
+    const newStatus = newRemainingAmount === 0 ? "Paid" : "Partial-Paid";
+
+    await SoldMachine.findByIdAndUpdate(id, {
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      currentPaymentStatus: newStatus,
+    });
+
+    const transaction = await PaymentTransaction.create({
+      soldMachineId: sale._id,
+      amount: incomingAmount,
+      paymentDate: new Date(paymentDate),
+      paymentMethod,
+    });
+
+    // ── Generate payment receipt PDF ──
+    let receiptUrl = null;
+    const companyId = sale.companyInfo?.companyId;
+    if (companyId) {
+      try {
+        const company = await Company.findById(companyId).lean();
+        if (company) {
+          const receiptCounter = await Counter.findByIdAndUpdate(
+            "paymentReceipt",
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+          );
+          const receiptNumber = `REC-${receiptCounter.seq}`;
+
+          const d = new Date(paymentDate);
+          const receiptDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+
+          const formatNum = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
+          const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
+
+          const templatePath = path.join(__dirname, "../../../invoicesExamples/payment-receipt.html");
+          let html = await fs.readFile(templatePath, "utf-8");
+
+          html = html
+            .replace(/{{receiptNumber}}/g, receiptNumber)
+            .replace(/{{receiptDate}}/g, receiptDate)
+            .replace(/{{customerName}}/g, sale.customerInfo.name || "")
+            .replace(/{{customerAddress}}/g, sale.customerInfo.address || "")
+            .replace(/{{amountInWords}}/g, numberToWords(incomingAmount))
+            .replace(/{{amountReceived}}/g, formatNum(incomingAmount))
+            .replace(/{{paymentMethod}}/g, paymentMethod || "")
+            .replace(/{{invoiceNumber}}/g, sale.invoiceNumber || "")
+            .replace(/{{companyName}}/g, company.name || "")
+            .replace(/{{companyTagline}}/g, company.tagline || "")
+            .replace(/{{companyAddress}}/g, company.address || "")
+            .replace(/{{companyPhone}}/g, company.phone || "")
+            .replace(/{{companyEmail}}/g, company.email || "")
+            .replace(/{{invoiceLogoUrl}}/g, invoiceLogoUrl)
+            .replace(/{{invoiceLogoText}}/g, invoiceLogoText);
+
+          html = company.tagline
+            ? html.replace(/{{#if companyTagline}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if companyTagline}}[\.\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoUrl
+            ? html.replace(/{{#if invoiceLogoUrl}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if invoiceLogoUrl}}[\.\s\S]*?{{\/if}}/g, "");
+          html = invoiceLogoText
+            ? html.replace(/{{#if invoiceLogoText}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if invoiceLogoText}}[\.\s\S]*?{{\/if}}/g, "");
+          html = newStatus === "Paid"
+            ? html.replace(/{{#if isPaid}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if isPaid}}[\.\s\S]*?{{\/if}}/g, "");
+          html = newStatus === "Partial-Paid"
+            ? html.replace(/{{#if isPartialPaid}}([\.\s\S]*?){{\/if}}/g, "$1")
+            : html.replace(/{{#if isPartialPaid}}[\.\s\S]*?{{\/if}}/g, "");
+
+          const [{ default: puppeteer }, { default: chromium }] = await Promise.all([
+            import("puppeteer"),
+            import("@sparticuz/chromium"),
+          ]);
+          const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
+          await fs.mkdir(DOCS_DIR, { recursive: true });
+          const filename = `payment_receipt_${receiptNumber}_${Date.now()}.pdf`;
+          const filepath = path.join(DOCS_DIR, filename);
+
+          const browser = await puppeteer.launch({
+            executablePath,
+            headless: true,
+            args: [...chromium.args, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: "networkidle0" });
+          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await browser.close();
+
+          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          await PaymentTransaction.findByIdAndUpdate(transaction._id, { receiptNumber, receiptUrl });
+        }
+      } catch (receiptErr) {
+        console.error("Receipt generation failed (non-fatal):", receiptErr.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: { currentPaymentStatus: newStatus, paidAmount: newPaidAmount, remainingAmount: newRemainingAmount, receiptUrl },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment };

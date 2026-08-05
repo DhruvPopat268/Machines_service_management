@@ -22,7 +22,7 @@ const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
 interface VendorInfo { vendorId: string | null; name: string; companyName: string; phone: string; email: string; gstNumber: string; }
 interface PurchaseMachine {
   machineId: string; machineName: string; modelNumber: string; category: string; categoryId: string; division: string;
-  quantity: number; buyingPriceWithGst: number; gstPercentage: number; buyingPriceBase: number;
+  quantity: number; buyingPriceWithGst: number; buyingPriceBase: number;
   sellingPriceWithGst: number | null; sellingPriceBase: number | null;
   buyingTotalWithGst: number; buyingTotalBase: number;
   serialNumbers?: { serialNumber: string; status: string }[];
@@ -37,7 +37,6 @@ interface MachineEntry {
   machine: Machine;
   quantity: string;
   buyingPriceWithGst: string;
-  gstPercentage: string;
   sellingPriceWithGst: string;
   serialNumbers: string[];
   partCodes: string[];
@@ -113,7 +112,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   const addMachine = (machine: Machine) => {
     if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Machine already added"); return; }
-    setEntries((prev) => [...prev, { machine, quantity: "", buyingPriceWithGst: "", gstPercentage: "", sellingPriceWithGst: "", serialNumbers: [], partCodes: [] }]);
+    setEntries((prev) => [...prev, { machine, quantity: "", buyingPriceWithGst: "", sellingPriceWithGst: "", serialNumbers: [], partCodes: [] }]);
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
 
@@ -167,7 +166,6 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
       if (!e.buyingPriceWithGst) { toast.error(`Enter buying price (with GST) for ${e.machine.name}`); return; }
-      if (!e.gstPercentage)       { toast.error(`Enter GST % for ${e.machine.name}`); return; }
       const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
       if (isParts) {
         if (e.partCodes.length !== Number(e.quantity)) { toast.error(`Enter ${e.quantity} part codes for ${e.machine.name}`); return; }
@@ -184,7 +182,6 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
           machineId:           e.machine._id,
           quantity:            Number(e.quantity),
           buyingPriceWithGst:  Number(e.buyingPriceWithGst),
-          gstPercentage:       Number(e.gstPercentage),
           sellingPriceWithGst: e.sellingPriceWithGst !== "" ? Number(e.sellingPriceWithGst) : null,
           ...(isParts ? { partCodes: e.partCodes } : { serialNumbers: e.serialNumbers }),
         };
@@ -369,11 +366,6 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                           <Label className="text-xs text-muted-foreground">Buying Price / Qty (with GST) <span className="text-destructive">*</span></Label>
                           <Input type="number" min={0} className="h-8 text-sm" placeholder="0" value={entry.buyingPriceWithGst}
                             onChange={(e) => updateEntry(mi, "buyingPriceWithGst", e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">GST % <span className="text-destructive">*</span></Label>
-                          <Input type="number" min={0} max={100} className="h-8 text-sm" placeholder="e.g. 18" value={entry.gstPercentage}
-                            onChange={(e) => updateEntry(mi, "gstPercentage", e.target.value)} />
                         </div>
                         {isParts && (
                           <div className="space-y-1">
@@ -596,7 +588,6 @@ const PurchaseMachinesPage = () => {
         </div>
       ),
     },
-    { key: "gstPercentage",      label: "GST %",            render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.gstPercentage}%{sep(i, p.machines.length)}</div>)}</div> },
     { key: "buyingPriceBase",    label: "Buying Base",      render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPriceBase.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "buyingPriceWithGst", label: "Buying (GST)",     render: (p) => <div>{p.machines.map((m, i) => <div key={i}>₹{m.buyingPriceWithGst.toLocaleString()}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "sellingPriceBase",   label: "Selling Base",     render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.sellingPriceBase    != null ? `₹${m.sellingPriceBase.toLocaleString()}`    : "—"}{sep(i, p.machines.length)}</div>)}</div> },

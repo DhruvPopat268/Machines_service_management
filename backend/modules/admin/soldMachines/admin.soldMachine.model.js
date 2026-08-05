@@ -54,7 +54,7 @@ const soldMachineEntrySchema = new mongoose.Schema(
     quantity:             { type: Number, required: true },
     sellingPriceWithGst:  { type: Number, required: true },
     sellingPriceBase:     { type: Number, required: true },
-    discountPercentage:   { type: Number, default: 0 },
+    discount:             { percentage: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
     netSellingPriceBase:  { type: Number, required: true },
     netSellingPriceWithGst: { type: Number, required: true },
     sellingTotalBase:     { type: Number, required: true },

@@ -10,7 +10,7 @@ const validateCreatePurchase = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, quantity, buyingPriceWithGst, gstPercentage, sellingPriceWithGst, serialNumbers, partCodes } = machines[mi];
+    const { machineId, quantity, buyingPriceWithGst, sellingPriceWithGst, serialNumbers, partCodes } = machines[mi];
     const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
@@ -23,11 +23,6 @@ const validateCreatePurchase = (body) => {
       return `${label}: buyingPriceWithGst is required`;
     const numBuyGst = Number(buyingPriceWithGst);
     if (isNaN(numBuyGst) || numBuyGst < 0) return `${label}: buyingPriceWithGst must be a non-negative number`;
-
-    if (gstPercentage == null || (typeof gstPercentage === "string" && gstPercentage.trim() === ""))
-      return `${label}: gstPercentage is required`;
-    const numGstPct = Number(gstPercentage);
-    if (isNaN(numGstPct) || numGstPct < 0) return `${label}: gstPercentage must be a non-negative number`;
 
     if (sellingPriceWithGst !== undefined && sellingPriceWithGst !== null) {
       const n = Number(sellingPriceWithGst);

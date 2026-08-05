@@ -19,6 +19,14 @@
     border-radius: 10px;
     padding: 25px 35px 20px 35px;
   }
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .header-left {
+    flex: 1;
+  }
   .company-name {
     text-align: center;
     font-size: 34px;
@@ -38,6 +46,29 @@
     font-family: Arial, Helvetica, sans-serif;
     font-size: 13px;
     margin: 2px 0 10px 0;
+  }
+  .header-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+    margin-left: 16px;
+  }
+  .header-logo img {
+    width: 110px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+  }
+  .header-logo .logo-text {
+    font-size: 10px;
+    color: #444;
+    text-align: right;
+    max-width: 120px;
+    line-height: 1.5;
+    font-style: italic;
+    font-family: Arial, Helvetica, sans-serif;
   }
   hr {
     border: none;
@@ -74,7 +105,7 @@
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    margin-right: 80px;
+    margin-right: 0;
   }
   .no-date-row .date-block .fill-short {
     border-bottom: 1px solid #000;
@@ -112,6 +143,9 @@
     align-items: flex-end;
     padding-bottom: 2px;
   }
+  .table-wrapper {
+    position: relative;
+  }
   table.amount-table {
     width: 100%;
     border-collapse: collapse;
@@ -131,6 +165,45 @@
     font-size: 16px;
     font-weight: 600;
   }
+  .payment-stamp {
+    position: absolute;
+    top: 50%;
+    right: 18px;
+    transform: translateY(-50%) rotate(-18deg);
+    border-radius: 50%;
+    width: 110px;
+    height: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: 900;
+    letter-spacing: 1px;
+    opacity: 0.82;
+    pointer-events: none;
+  }
+  .payment-stamp.paid {
+    border: 4px solid #16a34a;
+    color: #16a34a;
+  }
+  .payment-stamp.partial {
+    border: 4px solid #d97706;
+    color: #d97706;
+  }
+  .stamp-text {
+    font-size: 18px;
+    font-weight: 900;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+  .stamp-sub {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 3px;
+  }
   .footer-row {
     display: flex;
     justify-content: space-between;
@@ -139,17 +212,34 @@
     font-family: Arial, Helvetica, sans-serif;
     font-size: 16px;
   }
-  .footer-row .for-company {
-    font-weight: bold;
+  .footer-note {
+    text-align: center;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #555;
+    font-style: italic;
+    margin-top: 18px;
+    border-top: 1px dashed #bbb;
+    padding-top: 8px;
   }
 </style>
 </head>
 <body>
 
   <div class="receipt">
-    <h1 class="company-name">{{companyName}}</h1>
-    {{#if companyTagline}}<div class="company-sub">{{companyTagline}}</div>{{/if}}
-    <div class="company-address">{{companyAddress}} &nbsp;|&nbsp; Ph.: {{companyPhone}} &nbsp;|&nbsp; {{companyEmail}}</div>
+    <div class="header">
+      <div class="header-left">
+        <h1 class="company-name">{{companyName}}</h1>
+        {{#if companyTagline}}<div class="company-sub">{{companyTagline}}</div>{{/if}}
+        <div class="company-address">{{companyAddress}} &nbsp;|&nbsp; Ph.: {{companyPhone}} &nbsp;|&nbsp; {{companyEmail}}</div>
+      </div>
+      {{#if invoiceLogoUrl}}
+      <div class="header-logo">
+        <img src="{{invoiceLogoUrl}}" alt="Logo" />
+        {{#if invoiceLogoText}}<div class="logo-text">{{invoiceLogoText}}</div>{{/if}}
+      </div>
+      {{/if}}
+    </div>
 
     <hr>
     <div class="receipt-title">PAYMENT RECEIPT</div>
@@ -170,7 +260,6 @@
       <span>Received with thanks from</span>
       <div class="fill">{{customerName}}</div>
     </div>
-    <div class="blank-line">{{customerAddress}}</div>
 
     <div class="field-line">
       <span>The sum of Rs.</span>
@@ -178,25 +267,40 @@
     </div>
     <div class="blank-line"></div>
 
-    <table class="amount-table">
-      <tr>
-        <td class="label">Rs.</td>
-        <td class="value">{{amountReceived}}</td>
-      </tr>
-      <tr>
-        <td class="label">By Cash / Online</td>
-        <td class="value">{{paymentMethod}}</td>
-      </tr>
-      <tr>
-        <td class="label">against Bill No.</td>
-        <td class="value">{{invoiceNumber}}</td>
-      </tr>
-    </table>
+    <div class="table-wrapper">
+      <table class="amount-table">
+        <tr>
+          <td class="label">Rs.</td>
+          <td class="value">{{amountReceived}}</td>
+        </tr>
+        <tr>
+          <td class="label">By Cash / Online</td>
+          <td class="value">{{paymentMethod}}</td>
+        </tr>
+        <tr>
+          <td class="label">against Invoice No.</td>
+          <td class="value">{{invoiceNumber}}</td>
+        </tr>
+      </table>
+      {{#if isPaid}}
+      <div class="payment-stamp paid">
+        <div class="stamp-text">PAID</div>
+        <div class="stamp-sub">Payment Received</div>
+      </div>
+      {{/if}}
+      {{#if isPartialPaid}}
+      <div class="payment-stamp partial">
+        <div class="stamp-text">PARTIAL</div>
+        <div class="stamp-sub">Partially Paid</div>
+      </div>
+      {{/if}}
+    </div>
 
     <div class="footer-row">
       <span></span>
-      <span class="for-company">For {{companyName}}</span>
+      <span></span>
     </div>
+    <div class="footer-note">Computer generated receipt, no signature required.</div>
 
   </div>
 
