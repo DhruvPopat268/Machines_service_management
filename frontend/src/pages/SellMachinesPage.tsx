@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -91,6 +91,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [totalGst, setTotalGst] = useState<number | null>(null);
   const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [outstanding, setOutstanding] = useState<{ _id: string; invoiceNumber: string; grandTotalWithGst: number; paidAmount: number; remainingAmount: number; currentPaymentStatus: string }[]>([]);
+  const [outstandingTotal, setOutstandingTotal] = useState(0);
+  const [outstandingPopover, setOutstandingPopover] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<"Unpaid" | "Paid" | "Partial-Paid">("Unpaid");
   const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Online" | "">("Cash");
   const [paidAmount, setPaidAmount] = useState("");
@@ -144,6 +147,13 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     try { const r = await api.get("/admin/companies", { params: { status: "Active", limit: 100 } }); setCompanies(r.data.data); }
     catch { toast.error("Failed to load companies"); }
   };
+
+  useEffect(() => {
+    if (!customerId) { setOutstanding([]); setOutstandingTotal(0); return; }
+    api.get(`/admin/sales/customer/${customerId}/outstanding-due`)
+      .then(r => { setOutstanding(r.data.data); setOutstandingTotal(r.data.totalRemaining); })
+      .catch(() => {});
+  }, [customerId]);
 
   useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); fetchGstConfig(); fetchCompanies(); }, [open]);
 
@@ -328,7 +338,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -344,9 +354,68 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div>
-            <h2 className="text-lg font-semibold">Record Machine Sale</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Select a customer and add machines to record a sale</p>
+            <div>
+              <h2 className="text-lg font-semibold">Record Machine Sale</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Select a customer and add machines to record a sale</p>
+            </div>
           </div>
+          {customerId && outstandingTotal > 0 && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOutstandingPopover((p) => !p)}
+                className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                Outstanding: ₹{outstandingTotal.toLocaleString()}
+              </button>
+              {outstandingPopover && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setOutstandingPopover(false)} />
+                  <div className="absolute right-0 top-9 z-50 w-[480px] rounded-lg border bg-background shadow-xl">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                      <p className="text-sm font-semibold">Outstanding Dues</p>
+                      <button type="button" onClick={() => setOutstandingPopover(false)}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/50 sticky top-0">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice No</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Paid</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Remaining</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {outstanding.map((o, idx) => (
+                            <tr key={o._id} className="hover:bg-muted/20">
+                              <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                              <td className="px-3 py-2 font-mono">{o.invoiceNumber || "—"}</td>
+                              <td className="px-3 py-2 text-right">₹{o.grandTotalWithGst.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right text-green-600">₹{o.paidAmount.toLocaleString()}</td>
+                              <td className="px-3 py-2 text-right font-medium text-red-500">₹{o.remainingAmount.toLocaleString()}</td>
+                              <td className="px-3 py-2">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ o.currentPaymentStatus === "Partial-Paid" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700" }`}>
+                                  {o.currentPaymentStatus}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex items-center justify-between px-4 py-2.5 border-t bg-muted/30">
+                      <span className="text-xs text-muted-foreground">{outstanding.length} invoice{outstanding.length !== 1 ? "s" : ""}</span>
+                      <span className="text-xs font-semibold text-red-600">Total Due: ₹{outstandingTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Body: two-panel */}
@@ -799,6 +868,9 @@ const SellMachinesPage = () => {
   const [initialCustomerId, setInitialCustomerId] = useState("");
   const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
   const [paymentDialog, setPaymentDialog] = useState<Sale | null>(null);
+  const [receiptsDialog, setReceiptsDialog] = useState<Sale | null>(null);
+  const [receipts, setReceipts] = useState<{ _id: string; amount: number; paymentMethod: string; paymentDate: string; receiptNumber: string; receiptUrl: string }[]>([]);
+  const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] });
   const [addingPayment, setAddingPayment] = useState(false);
   const [companies, setCompanies] = useState<ActiveCompany[]>([]);
@@ -1115,6 +1187,16 @@ const SellMachinesPage = () => {
               <CreditCard className="h-3 w-3" />
             </Button>
           )}
+          <Button size="sm" variant="outline" className="text-xs h-7 text-purple-600 border-purple-300" onClick={async () => {
+            setReceiptsDialog(s); setReceipts([]); setLoadingReceipts(true);
+            try {
+              const r = await api.get(`/admin/sales/${s._id}/payment-receipts`);
+              setReceipts(r.data.data);
+            } catch { toast.error("Failed to load receipts"); }
+            finally { setLoadingReceipts(false); }
+          }}>
+            <Eye className="h-3 w-3" />
+          </Button>
         </div>
       )
     },
@@ -1258,6 +1340,50 @@ const SellMachinesPage = () => {
               <CreditCard className="h-4 w-4" />{addingPayment ? "Recording..." : "Record Payment"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!receiptsDialog} onOpenChange={(o) => { if (!o) { setReceiptsDialog(null); setReceipts([]); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader><DialogTitle>Payment Receipts — {receiptsDialog?.invoiceNumber || receiptsDialog?._id}</DialogTitle></DialogHeader>
+          {loadingReceipts ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">Loading...</p>
+          ) : receipts.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">No payment receipts found</p>
+          ) : (
+            <div className="max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">#</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Receipt No</th>
+                    <th className="text-right px-3 py-2 text-xs font-medium text-muted-foreground">Amount</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Method</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Payment Receipt</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {receipts.map((r, idx) => (
+                    <tr key={r._id} className="hover:bg-muted/20">
+                      <td className="px-3 py-2 text-muted-foreground text-xs">{idx + 1}</td>
+                      <td className="px-3 py-2 font-mono text-xs">{r.receiptNumber || "—"}</td>
+                      <td className="px-3 py-2 text-right font-medium">₹{r.amount.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs">{r.paymentMethod}</td>
+                      <td className="px-3 py-2 text-xs">{new Date(r.paymentDate).toLocaleDateString("en-IN")}</td>
+                      <td className="px-3 py-2">
+                        {r.receiptUrl
+                          ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300 gap-1" onClick={() => window.open(r.receiptUrl, "_blank")}><Eye className="h-3 w-3" /> View</Button>
+                          : <span className="text-xs text-muted-foreground">—</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => { setReceiptsDialog(null); setReceipts([]); }}>Close</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

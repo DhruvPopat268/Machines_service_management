@@ -1109,6 +1109,61 @@ const generateInvoice = async (req, res) => {
   }
 };
 
+const customerOutstandingDue = async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    if (!mongoose.isValidObjectId(customerId))
+      return res.status(400).json({ success: false, message: "Invalid customerId" });
+
+    const sales = await SoldMachine.find({
+      "customerInfo.customerId": customerId,
+      currentPaymentStatus: { $in: ["Unpaid", "Partial-Paid"] },
+    })
+      .select("invoiceNumber grandTotalWithGst paidAmount remainingAmount currentPaymentStatus createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalRemaining = sales.reduce((s, sale) => s + (sale.remainingAmount || 0), 0);
+
+    res.status(200).json({
+      success: true,
+      data: sales.map((s) => ({
+        _id: s._id,
+        invoiceNumber: s.invoiceNumber || "",
+        grandTotalWithGst: s.grandTotalWithGst,
+        paidAmount: s.paidAmount,
+        remainingAmount: s.remainingAmount,
+        currentPaymentStatus: s.currentPaymentStatus,
+        createdAt: s.createdAt,
+      })),
+      totalRemaining: Math.round(totalRemaining * 100) / 100,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const customerPaymentReceipts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid sale ID" });
+
+    const sale = await SoldMachine.findById(id).select("_id invoiceNumber").lean();
+    if (!sale)
+      return res.status(404).json({ success: false, message: "Sale not found" });
+
+    const transactions = await PaymentTransaction.find({ soldMachineId: id })
+      .select("amount paymentMethod paymentDate receiptNumber receiptUrl createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: transactions });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const getContractExpiryStatus = async (req, res) => {
   try {
     const now = new Date();
@@ -1352,4 +1407,4 @@ const addPayment = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment };
+module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts };
