@@ -101,7 +101,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [companies, setCompanies]           = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [assignEngineers, setAssignEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
-  const [assignForm, setAssignForm]         = useState({ companyId: "none", cgst: "", sgst: "", igst: "" });
+  const [assignForm, setAssignForm]         = useState({ companyId: "none" });
 
   const [cancelTarget, setCancelTarget] = useState<ServiceCall | null>(null);
   const [cancelling, setCancelling]     = useState(false);
@@ -267,7 +267,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const openAssignDialog = async (c: ServiceCall) => {
     setAssignDialog(c);
     setSelectedEngineerId(c.engineerInfo?._id || "");
-    setAssignForm({ companyId: (c as any).companyInfo?.companyId ?? "none", cgst: (c as any).cgst?.percent != null ? String((c as any).cgst.percent) : "", sgst: (c as any).sgst?.percent != null ? String((c as any).sgst.percent) : "", igst: (c as any).igst?.percent != null ? String((c as any).igst.percent) : "" });
+    setAssignForm({ companyId: (c as any).companyInfo?.companyId ?? "none" });
     setAssignDialogLoading(true);
     try {
       const [engData, compRes] = await Promise.all([
@@ -694,20 +694,6 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">CGST %</Label>
-                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.cgst} onChange={(e) => setAssignForm(p => ({ ...p, cgst: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">SGST %</Label>
-                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.sgst} onChange={(e) => setAssignForm(p => ({ ...p, sgst: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">IGST %</Label>
-                    <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignForm.igst} onChange={(e) => setAssignForm(p => ({ ...p, igst: e.target.value }))} />
-                  </div>
-                </div>
 
                 <div className="space-y-2">
                   <Label>Select Engineer</Label>
@@ -743,9 +729,6 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                         assignDialog._id,
                         selectedEngineerId,
                         assignForm.companyId !== "none" ? assignForm.companyId : undefined,
-                        assignForm.cgst !== "" ? Number(assignForm.cgst) : undefined,
-                        assignForm.sgst !== "" ? Number(assignForm.sgst) : undefined,
-                        assignForm.igst !== "" ? Number(assignForm.igst) : undefined,
                       );
                       toast.success(`Engineer assigned to ${assignDialog.callId}`);
                       setAssignDialog(null);

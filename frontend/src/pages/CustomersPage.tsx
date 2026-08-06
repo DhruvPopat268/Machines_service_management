@@ -352,14 +352,14 @@ const CustomersPage = () => {
         fd.append("phone", editForm.phone);
         fd.append("email", editForm.email);
         if (editForm.userLocation) fd.append("userLocation", JSON.stringify(editForm.userLocation));
-        fd.append("zone", editForm.zone || "");
+        if (editForm.zone) fd.append("zone", editForm.zone);
         if (editForm.gstNumber) fd.append("gstNumber", editForm.gstNumber.toUpperCase());
         fd.append("status", editForm.status);
         fd.append("profilePhoto", editForm.profilePhoto);
         payload = fd;
       } else {
         const { address: _a, profilePhoto: _p, ...rest } = editForm;
-        payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || null };
+        payload = { ...rest, gstNumber: rest.gstNumber ? rest.gstNumber.toUpperCase() : "", zone: rest.zone || null };
         if (!editForm.userLocation) delete payload.userLocation;
       }
       await api.patch(`/admin/customers/${editDialog._id}`, payload);

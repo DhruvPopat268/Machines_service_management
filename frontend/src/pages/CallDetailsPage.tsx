@@ -41,7 +41,6 @@ const CallDetailsPage = () => {
   const [priorityDialog, setPriorityDialog] = useState(false);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [assignGst, setAssignGst] = useState({ cgst: "", sgst: "", igst: "" });
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
@@ -64,7 +63,6 @@ const CallDetailsPage = () => {
   const openAssignDialog = async () => {
     setSelectedEngineerId(call.engineerInfo?._id || "");
     setSelectedCompanyId((call as any).companyInfo?.companyId || "");
-    setAssignGst({ cgst: (call as any).cgst?.percent != null ? String((call as any).cgst.percent) : "", sgst: (call as any).sgst?.percent != null ? String((call as any).sgst.percent) : "", igst: (call as any).igst?.percent != null ? String((call as any).igst.percent) : "" });
     setAssignDialog(true);
     setAssignDialogLoading(true);
     try {
@@ -784,32 +782,18 @@ const CallDetailsPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-sm">CGST %</Label>
-                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.cgst} onChange={(e) => setAssignGst(p => ({ ...p, cgst: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">SGST %</Label>
-                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.sgst} onChange={(e) => setAssignGst(p => ({ ...p, sgst: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-sm">IGST %</Label>
-                <Input type="number" min={0} max={100} placeholder="0" className="h-9" value={assignGst.igst} onChange={(e) => setAssignGst(p => ({ ...p, igst: e.target.value }))} />
-              </div>
-            </div>
             </>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAssignDialog(false)}>Cancel</Button>
             <Button
-              disabled={!selectedEngineerId || !selectedCompanyId || assignGst.cgst === "" || assignGst.sgst === "" || assignGst.igst === "" || saving || assignDialogLoading}
+              disabled={!selectedEngineerId || !selectedCompanyId || saving || assignDialogLoading}
               onClick={async () => {
                 if (!id) return;
                 setSaving(true);
                 try {
-                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId, Number(assignGst.cgst), Number(assignGst.sgst), Number(assignGst.igst));
+                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId);
                   toast.success(`Engineer assigned to ${call.callId}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setAssignDialog(false);

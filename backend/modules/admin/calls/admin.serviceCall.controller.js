@@ -132,7 +132,7 @@ const getCallDetail = async (req, res) => {
 const assignEngineer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { engineerId, companyId, cgst, sgst, igst } = req.body;
+    const { engineerId, companyId } = req.body;
 
     if (!mongoose.isValidObjectId(engineerId))
       return res.status(400).json({ success: false, message: "Invalid engineerId" });
@@ -169,10 +169,12 @@ const assignEngineer = async (req, res) => {
       }
     }
 
-    // Resolve GST
-    const cgstPercent = cgst !== undefined ? Number(cgst) : (call.cgst?.percent ?? 0);
-    const sgstPercent = sgst !== undefined ? Number(sgst) : (call.sgst?.percent ?? 0);
-    const igstPercent = igst !== undefined ? Number(igst) : (call.igst?.percent ?? 0);
+    // Resolve GST from GstConfig
+    const GstConfig = require("../gstConfig/admin.gstConfig.model");
+    const gstConfig = await GstConfig.findOne().lean();
+    const cgstPercent = gstConfig?.cgst || 0;
+    const sgstPercent = gstConfig?.sgst || 0;
+    const igstPercent = gstConfig?.igst || 0;
 
     const basicTotal = call.totalCharges ?? call.totalServiceCharges ?? 0;
     const cgstAmount = Math.round(basicTotal * cgstPercent / 100 * 100) / 100;
