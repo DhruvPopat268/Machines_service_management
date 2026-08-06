@@ -78,7 +78,7 @@ app.post("/upload/image", uploadImage.single("file"), (req, res) => {
 // POST /upload/document  — field: "file"
 app.post("/upload/document", uploadDoc.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
-  const url = `${process.env.BACKEND_URL}/app/cloud/Documents/${req.file.filename}`;
+  const url = `${process.env.BACKEND_URL}/app/cloud/documents/${req.file.filename}`;
   res.status(200).json({ success: true, url, filename: req.file.filename });
 });
 

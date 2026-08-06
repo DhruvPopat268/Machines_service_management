@@ -13,7 +13,7 @@ const Company = require("../companyManagement/admin.company.model");
 const Zone = require("../zoneManagement/admin.zone.model");
 const Counter = require("../auth/counter.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
-const { sendContractExpiryAlert } = require("../../../utils/emailService");
+const { sendContractExpiryAlert, sendSaleConfirmationEmail, sendPaymentReceivedEmail } = require("../../../utils/emailService");
 
 const GstConfig = require("../gstConfig/admin.gstConfig.model");
 const PaymentTransaction = require("../paymentTransactions/admin.paymentTransaction.model");
@@ -21,8 +21,8 @@ const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const DOCS_DIR = process.env.NODE_ENV === "production"
-  ? "/app/cloud/Documents"
-  : path.join(__dirname, "../../../cloud/Documents");
+  ? "/app/cloud/documents"
+  : path.join(__dirname, "../../../cloud/documents");
 
 const numberToWords = (amount) => {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -463,6 +463,11 @@ const createSale = async (req, res) => {
     session.endSession();
 
     let receiptUrl = null;
+    let invoiceFilePath = null;
+    let invoiceFileName = null;
+    let receiptFilePath = null;
+    let receiptFileName = null;
+    let receiptNumber = null;
 
     // ── Generate sales invoice PDF first (so invoiceNumber is available for receipt) ──
     let saleInvoiceNumber = "";
@@ -587,8 +592,10 @@ const createSale = async (req, res) => {
           ]);
           const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
           await fs.mkdir(DOCS_DIR, { recursive: true });
-          const invoiceFilename = `sales_invoice_${saleInvoiceNumber}_${Date.now()}.pdf`;
-          const invoiceFilepath = path.join(DOCS_DIR, invoiceFilename);
+          invoiceFileName = `sales_invoice_${saleInvoiceNumber}_${Date.now()}.pdf`;
+          invoiceFilePath = path.join(DOCS_DIR, invoiceFileName);
+          const invoiceFilename = invoiceFileName;
+          const invoiceFilepath = invoiceFilePath;
 
           const browser = await puppeteer.launch({
             executablePath,
@@ -600,7 +607,7 @@ const createSale = async (req, res) => {
           await invoicePage.pdf({ path: invoiceFilepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
           await browser.close();
 
-          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${invoiceFilename}`;
+          const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${invoiceFilename}`;
           await SoldMachine.findByIdAndUpdate(sale._id, {
             invoiceNumber: saleInvoiceNumber,
             companyInfo,
@@ -625,7 +632,7 @@ const createSale = async (req, res) => {
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const receiptNumber = `REC-${receiptCounter.seq}`;
+          receiptNumber = `REC-${receiptCounter.seq}`;
 
           const d = new Date(paymentDate);
           const receiptDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
@@ -676,8 +683,8 @@ const createSale = async (req, res) => {
           ]);
           const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || await chromium.executablePath();
           await fs.mkdir(DOCS_DIR, { recursive: true });
-          const filename = `payment_receipt_${receiptNumber}_${Date.now()}.pdf`;
-          const filepath = path.join(DOCS_DIR, filename);
+          receiptFileName = `payment_receipt_${receiptNumber}_${Date.now()}.pdf`;
+          receiptFilePath = path.join(DOCS_DIR, receiptFileName);
 
           const browser = await puppeteer.launch({
             executablePath,
@@ -686,14 +693,45 @@ const createSale = async (req, res) => {
           });
           const page = await browser.newPage();
           await page.setContent(html, { waitUntil: "networkidle0" });
-          await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
+          await page.pdf({ path: receiptFilePath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
           await browser.close();
 
-          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${receiptFileName}`;
           await PaymentTransaction.findByIdAndUpdate(transactionId, { receiptNumber, receiptUrl });
         }
       } catch (receiptErr) {
         console.error("Receipt generation failed (non-fatal):", receiptErr.message);
+      }
+    }
+
+    // ── Send sale confirmation email ──
+    if (customerInfo.email) {
+      try {
+        const d = new Date(sale.createdAt);
+        const saleDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+        const company = companyId ? await Company.findById(companyId).lean() : null;
+        await sendSaleConfirmationEmail({
+          customerName:    customerInfo.name,
+          customerEmail:   customerInfo.email,
+          invoiceNumber:   saleInvoiceNumber,
+          saleDate,
+          grandTotal:      grandTotalWithGst,
+          paidAmount,
+          remainingAmount,
+          paymentStatus:   currentPaymentStatus,
+          paymentMethod:   req.body.paymentMethod || "",
+          hasReceipt:      !!receiptUrl,
+          receiptNumber:   receiptNumber || "",
+          invoiceFileName,
+          invoiceFilePath,
+          receiptFileName,
+          receiptFilePath,
+          companyName:     company?.name || "",
+          companyEmail:    company?.email || "",
+          companyPhone:    company?.phone || "",
+        });
+      } catch (emailErr) {
+        console.error("Sale confirmation email failed (non-fatal):", emailErr.message);
       }
     }
 
@@ -1094,7 +1132,7 @@ const generateInvoice = async (req, res) => {
     await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
     await browser.close();
 
-    const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+    const invoiceUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${filename}`;
     await SoldMachine.findByIdAndUpdate(id, {
       invoiceNumber, companyInfo, invoiceUrl,
       cgst: { percent: cgstNum, amount: cgstAmount },
@@ -1390,11 +1428,39 @@ const addPayment = async (req, res) => {
           await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
           await browser.close();
 
-          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+          receiptUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${filename}`;
           await PaymentTransaction.findByIdAndUpdate(transaction._id, { receiptNumber, receiptUrl });
         }
       } catch (receiptErr) {
         console.error("Receipt generation failed (non-fatal):", receiptErr.message);
+      }
+    }
+
+    // ── Send payment received email ──
+    if (sale.customerInfo?.email) {
+      try {
+        const d = new Date(paymentDate);
+        const formattedPaymentDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+        const company = companyId ? await Company.findById(companyId).lean() : null;
+        const receiptFilename = receiptUrl ? receiptUrl.split("/").at(-1) : null;
+        await sendPaymentReceivedEmail({
+          customerName:    sale.customerInfo.name,
+          customerEmail:   sale.customerInfo.email,
+          receiptNumber:   receiptFilename ? receiptFilename.split("_").slice(2, -1).join("_") : "",
+          invoiceNumber:   sale.invoiceNumber || "",
+          paymentDate:     formattedPaymentDate,
+          paymentMethod,
+          paidAmount:      incomingAmount,
+          remainingAmount: newRemainingAmount,
+          paymentStatus:   newStatus,
+          receiptFileName: receiptFilename,
+          receiptFilePath: receiptFilename ? path.join(DOCS_DIR, receiptFilename) : null,
+          companyName:     company?.name || "",
+          companyEmail:    company?.email || "",
+          companyPhone:    company?.phone || "",
+        });
+      } catch (emailErr) {
+        console.error("Payment received email failed (non-fatal):", emailErr.message);
       }
     }
 

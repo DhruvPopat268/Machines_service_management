@@ -7,8 +7,8 @@ const Company = require("../companyManagement/admin.company.model");
 const Counter = require("../auth/counter.model");
 
 const DOCS_DIR = process.env.NODE_ENV === "production"
-  ? "/app/cloud/Documents"
-  : path.join(__dirname, "../../../cloud/Documents");
+  ? "/app/cloud/documents"
+  : path.join(__dirname, "../../../cloud/documents");
 
 const numberToWords = (amount) => {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -121,7 +121,7 @@ const generatePaymentReceipt = async (req, res) => {
     await page.pdf({ path: filepath, format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" } });
     await browser.close();
 
-    const receiptUrl = `${process.env.BACKEND_URL}/app/cloud/Documents/${filename}`;
+    const receiptUrl = `${process.env.BACKEND_URL}/app/cloud/documents/${filename}`;
     await PaymentTransaction.findByIdAndUpdate(id, { receiptNumber, receiptUrl });
 
     return res.status(200).json({ success: true, receiptUrl, receiptNumber });

@@ -442,6 +442,86 @@ const sendServiceCallInvoiceEmail = async (data) => {
   }
 };
 
+const sendSaleConfirmationEmail = async (data) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/saleConfirmation.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    html = html
+      .replace(/{{customerName}}/g,   data.customerName)
+      .replace(/{{invoiceNumber}}/g,   data.invoiceNumber || "N/A")
+      .replace(/{{saleDate}}/g,        data.saleDate)
+      .replace(/{{grandTotal}}/g,      fmt(data.grandTotal))
+      .replace(/{{paidAmount}}/g,      fmt(data.paidAmount))
+      .replace(/{{remainingAmount}}/g, fmt(data.remainingAmount))
+      .replace(/{{paymentStatus}}/g,   data.paymentStatus)
+      .replace(/{{paymentMethod}}/g,   data.paymentMethod || "")
+      .replace(/{{receiptNumber}}/g,   data.receiptNumber || "")
+      .replace(/{{companyName}}/g,     data.companyName || "")
+      .replace(/{{companyEmail}}/g,    data.companyEmail || "")
+      .replace(/{{companyPhone}}/g,    data.companyPhone || "");
+
+    html = data.hasReceipt
+      ? html.replace(/{{#if hasReceipt}}([\.\s\S]*?){{\/if}}/g, "$1")
+      : html.replace(/{{#if hasReceipt}}[\.\s\S]*?{{\/if}}/g, "");
+
+    const attachments = [];
+    if (data.invoiceFilePath) attachments.push({ filename: data.invoiceFileName, path: data.invoiceFilePath, contentType: "application/pdf" });
+    if (data.receiptFilePath) attachments.push({ filename: data.receiptFileName, path: data.receiptFilePath, contentType: "application/pdf" });
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: data.customerEmail,
+      subject: `Sale Confirmation — ${data.invoiceNumber || "New Purchase"}`,
+      html,
+      attachments,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Sale confirmation email error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
+const sendPaymentReceivedEmail = async (data) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/paymentReceived.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    html = html
+      .replace(/{{customerName}}/g,   data.customerName)
+      .replace(/{{receiptNumber}}/g,   data.receiptNumber || "")
+      .replace(/{{invoiceNumber}}/g,   data.invoiceNumber || "")
+      .replace(/{{paymentDate}}/g,     data.paymentDate)
+      .replace(/{{paymentMethod}}/g,   data.paymentMethod || "")
+      .replace(/{{paidAmount}}/g,      fmt(data.paidAmount))
+      .replace(/{{remainingAmount}}/g, fmt(data.remainingAmount))
+      .replace(/{{paymentStatus}}/g,   data.paymentStatus)
+      .replace(/{{companyName}}/g,     data.companyName || "")
+      .replace(/{{companyEmail}}/g,    data.companyEmail || "")
+      .replace(/{{companyPhone}}/g,    data.companyPhone || "");
+
+    const attachments = [];
+    if (data.receiptFilePath) attachments.push({ filename: data.receiptFileName, path: data.receiptFilePath, contentType: "application/pdf" });
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: data.customerEmail,
+      subject: `Payment Received — ${data.receiptNumber || ""}`,
+      html,
+      attachments,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Payment received email error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
 const sendContractExpiryAlert = async ({ customerName, customerEmail, expiredItems, expiringSoonItems }) => {
   try {
     const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/contractExpiryAlert.html");
@@ -497,4 +577,4 @@ const sendMail = async ({ to, subject, html }) => {
   });
 };
 
-module.exports = { sendMail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
+module.exports = { sendMail, sendSaleConfirmationEmail, sendPaymentReceivedEmail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
