@@ -2031,4 +2031,47 @@ const getCounterReadingHistoryCalls = async (req, res) => {
   }
 };
 
-module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo, buildServiceCallReadingInfo, getLifetimeCopies };
+const getCustomerOutstandingDue = async (req, res) => {
+  try {
+    const { callId } = req.params;
+
+    if (!mongoose.isValidObjectId(callId))
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+
+    const call = await ServiceCall.findById(callId).select("customerInfo.customerId");
+    if (!call)
+      return res.status(404).json({ success: false, message: "Call not found" });
+
+    const customerId = call.customerInfo?.customerId;
+    if (!customerId)
+      return res.status(400).json({ success: false, message: "Customer not found on this call" });
+
+    const sales = await SoldMachine.find({
+      "customerInfo.customerId": customerId,
+      currentPaymentStatus: { $in: ["Unpaid", "Partial-Paid"] },
+    })
+      .select("invoiceNumber grandTotalWithGst paidAmount remainingAmount currentPaymentStatus createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const totalRemaining = Math.round(sales.reduce((s, sale) => s + (sale.remainingAmount || 0), 0) * 100) / 100;
+
+    return res.status(200).json({
+      success: true,
+      data: sales.map((s) => ({
+        _id: s._id,
+        invoiceNumber: s.invoiceNumber || "",
+        grandTotalWithGst: s.grandTotalWithGst,
+        paidAmount: s.paidAmount,
+        remainingAmount: s.remainingAmount,
+        currentPaymentStatus: s.currentPaymentStatus,
+        createdAt: s.createdAt,
+      })),
+      totalRemaining,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, buildCounterReadingInfo, buildServiceCallReadingInfo, getLifetimeCopies, getCustomerOutstandingDue };

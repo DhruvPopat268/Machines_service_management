@@ -76,6 +76,7 @@ const toISTDateParam = (h: string) => { const [y, m, d] = h.split("-"); return `
 const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }: { open: boolean; onClose: () => void; onSuccess: () => void; initialCustomerId?: string }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState(initialCustomerId);
+  const customerAbortRef = useRef<AbortController | null>(null);
   const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
   const [machineSearch, setMachineSearch] = useState("");
   const [machineResults, setMachineResults] = useState<Machine[]>([]);
@@ -113,9 +114,15 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSearching(false); }
   };
 
-  const fetchCustomers = async () => {
-    try { const r = await api.get("/admin/customers", { params: { status: "Active", limit: 100 } }); setCustomers(r.data.data); }
-    catch { toast.error("Failed to load customers"); }
+  const fetchCustomers = async (q = "") => {
+    customerAbortRef.current?.abort();
+    const ctrl = new AbortController(); customerAbortRef.current = ctrl;
+    try {
+      const p: any = { status: "Active", limit: 100 };
+      if (q) p.search = q;
+      const r = await api.get("/admin/customers", { params: p, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) setCustomers(r.data.data);
+    } catch { }
   };
 
   const fetchContractTypes = useCallback(async (q = "") => {
@@ -448,21 +455,15 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                     <Plus className="h-3 w-3" /> New
                   </button>
                 </div>
-                <Select value={customerId} onValueChange={setCustomerId}>
-                  <SelectTrigger className="h-9 text-sm bg-background">
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((c) => (
-                      <SelectItem key={c._id} value={c._id}>
-                        <div>
-                          <p className="font-medium text-sm">{c.name}</p>
-                          <p className="text-xs text-muted-foreground">{c.phone}</p>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={customers.map((c) => ({ label: `${c.name} — ${c.phone}`, value: c._id }))}
+                  value={customerId}
+                  onChange={setCustomerId}
+                  onSearchChange={fetchCustomers}
+                  placeholder="Select customer"
+                  searchPlaceholder="Search by name or mobile..."
+                  className="h-9 text-sm bg-background"
+                />
               </div>
 
               {/* Divider */}

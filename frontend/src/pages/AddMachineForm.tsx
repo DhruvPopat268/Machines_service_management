@@ -164,8 +164,6 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     if (!form.name.trim()) return toast.error("Name is required");
     if (!form.category)    return toast.error("Category is required");
     if (!form.division)    return toast.error("Division is required");
-    if (allImages.length === 0) return toast.error("At least one image is required");
-
     setSubmitting(true);
     try {
       const fd = new FormData();

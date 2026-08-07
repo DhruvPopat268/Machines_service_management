@@ -50,8 +50,8 @@ const RaiseCallPage = () => {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDivision, setSelectedDivision] = useState("");
   const [selectedDisInstalled, setSelectedDisInstalled] = useState("");
-  const [serialSearch, setSerialSearch]         = useState("");
-  const [debouncedSerial, setDebouncedSerial]   = useState("");
+  const [search, setSearch]           = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Renew contract state
   const [renewDialog, setRenewDialog]           = useState<CustomerMachine | null>(null);
@@ -67,9 +67,9 @@ const RaiseCallPage = () => {
   const abortRef         = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSerial(serialSearch), 400);
+    const t = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(t);
-  }, [serialSearch]);
+  }, [search]);
 
   useEffect(() => {
     Promise.all([
@@ -124,7 +124,7 @@ const RaiseCallPage = () => {
     try {
       const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
       if (selectedCustomer) params.customerId = selectedCustomer;
-      if (debouncedSerial)  params.serialNumber = debouncedSerial;
+      if (debouncedSearch)  params.search = debouncedSearch;
       if (selectedCategory) params.category = selectedCategory;
       if (selectedDivision) params.division = selectedDivision;
       if (selectedDisInstalled) params.disInstalled = selectedDisInstalled;
@@ -140,18 +140,18 @@ const RaiseCallPage = () => {
     } finally {
       if (!ctrl.signal.aborted) setLoading(false);
     }
-  }, [selectedCustomer, debouncedSerial, selectedCategory, selectedDivision, selectedDisInstalled]);
+  }, [selectedCustomer, debouncedSearch, selectedCategory, selectedDivision, selectedDisInstalled]);
 
   useEffect(() => { fetchMachines(1); }, [fetchMachines]);
 
-  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedDisInstalled || serialSearch;
+  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedDisInstalled || search;
 
   const clearFilters = () => {
     setSelectedCustomer("");
     setSelectedCategory("");
     setSelectedDivision("");
     setSelectedDisInstalled("");
-    setSerialSearch("");
+    setSearch("");
   };
 
   const openRenewDialog = (m: CustomerMachine) => {
@@ -219,8 +219,9 @@ const RaiseCallPage = () => {
     {
       key: "contractType", label: "Contract Type",
       render: (m) => {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const isExpired = m.contractType?.validTo ? today > new Date(m.contractType.validTo) : false;
+        const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+        const validToIST = m.contractType?.validTo ? new Date(new Date(m.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+        const isExpired = validToIST ? nowIST > validToIST : false;
         return (
           <div>
             <span>{m.contractType?.name || "—"}</span>
@@ -252,8 +253,9 @@ const RaiseCallPage = () => {
     {
       key: "actions", label: "Actions",
       render: (m) => {
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const isExpired = m.contractType?.validTo ? today > new Date(m.contractType.validTo) : false;
+        const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+        const validToIST = m.contractType?.validTo ? new Date(new Date(m.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+        const isExpired = validToIST ? nowIST > validToIST : false;
         return (
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
@@ -283,9 +285,9 @@ const RaiseCallPage = () => {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by serial number..."
-            value={serialSearch}
-            onChange={(e) => setSerialSearch(e.target.value)}
+            placeholder="Search by serial no, name or mobile..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
           />
         </div>

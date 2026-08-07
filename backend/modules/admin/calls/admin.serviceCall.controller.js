@@ -276,7 +276,7 @@ const updateCall = async (req, res) => {
 
 const getCustomerMachines = async (req, res) => {
   try {
-    const { customerId, serialNumber, category, division, page = 1, limit = 10 } = req.query;
+    const { customerId, search, category, division, page = 1, limit = 10 } = req.query;
 
     if (customerId && !mongoose.isValidObjectId(customerId))
       return res.status(400).json({ success: false, message: "Invalid customerId" });
@@ -310,9 +310,13 @@ const getCustomerMachines = async (req, res) => {
       )
     );
 
-    if (serialNumber) {
-      const sn = serialNumber.toString().toLowerCase();
-      allData = allData.filter(m => m.serialNumber?.toLowerCase().includes(sn));
+    if (search) {
+      const s = search.toString().toLowerCase();
+      allData = allData.filter(m =>
+        m.serialNumber?.toLowerCase().includes(s) ||
+        m.customerInfo?.name?.toLowerCase().includes(s) ||
+        m.customerInfo?.phone?.toLowerCase().includes(s)
+      );
     }
     if (category && mongoose.isValidObjectId(category))
       allData = allData.filter(m => m.categoryId?.toString() === category);

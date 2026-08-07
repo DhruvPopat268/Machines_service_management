@@ -752,16 +752,53 @@ const renewContract = async (req, res) => {
     if (!mongoose.isValidObjectId(newContractTypeId))
       return res.status(400).json({ success: false, message: "Invalid newContractTypeId" });
 
-    const validFrom = new Date(newValidFrom);
-    const validTo = new Date(newValidTo);
+    // Parse date strings as IST midnight (input is YYYY-MM-DD from date input)
+    const toISTMidnight = (dateStr) => {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      // IST is UTC+5:30, so IST midnight = UTC 18:30 previous day
+      return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - (5.5 * 60 * 60 * 1000));
+    };
+
+    const validFrom = toISTMidnight(newValidFrom);
+    const validTo   = toISTMidnight(newValidTo);
     if (isNaN(validFrom.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidFrom" });
-    if (isNaN(validTo.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidTo" });
-    if (validTo <= validFrom) return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
+    if (isNaN(validTo.getTime()))   return res.status(400).json({ success: false, message: "Invalid newValidTo" });
+    if (validTo <= validFrom)       return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
+
+    // Today midnight in IST
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    nowIST.setHours(0, 0, 0, 0);
+    const todayISTMidnightUTC = new Date(nowIST.getTime() - (5.5 * 60 * 60 * 1000));
+
+    if (validFrom < todayISTMidnightUTC)
+      return res.status(400).json({ success: false, message: "newValidFrom cannot be a past date" });
 
     const ct = await ContractType.findOne({ _id: newContractTypeId, status: "Active" });
     if (!ct) return res.status(404).json({ success: false, message: "Active contract type not found" });
 
     const sn = serialNumber.trim();
+
+    // Check existing contract — block renewal if not expired in IST
+    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": sn });
+    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
+
+    let existingValidTo = null;
+    outer: for (const machine of soldRecord.machines) {
+      for (const entry of (machine.serialNumbers || [])) {
+        if (entry.serialNumber === sn) {
+          existingValidTo = entry.contractType?.validTo ? new Date(entry.contractType.validTo) : null;
+          break outer;
+        }
+      }
+    }
+
+    if (existingValidTo) {
+      const existingValidToIST = new Date(new Date(existingValidTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      existingValidToIST.setHours(0, 0, 0, 0);
+      if (nowIST <= existingValidToIST)
+        return res.status(400).json({ success: false, message: "Cannot renew an active contract" });
+    }
+
     const result = await SoldMachine.updateOne(
       { "machines.serialNumbers.serialNumber": sn },
       {
@@ -780,7 +817,7 @@ const renewContract = async (req, res) => {
       { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
     );
 
-    if (result.matchedCount === 0)
+    if (result.modifiedCount === 0)
       return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
 
     res.status(200).json({ success: true, message: "Contract renewed successfully" });

@@ -307,7 +307,9 @@ const CustomerMachineDetailPage = () => {
     .map((m, i) => ({ i, machine: m.detail.machine }))
     .filter(({ machine }) => {
       if (isInstallationType) return false;
-      const isExpired = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
+      const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+      const validToIST = machine.contractType?.validTo ? new Date(new Date(machine.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+      const isExpired = validToIST ? nowIST > validToIST : false;
       return isExpired || !machine.contractType?.freeService;
     })
     .map(({ i }) => i);
@@ -558,7 +560,9 @@ const CustomerMachineDetailPage = () => {
       {/* Machine Cards */}
       {machines.map((entry, idx) => {
         const { machine } = entry.detail;
-        const isExpired = machine.contractType?.validTo ? new Date() > new Date(machine.contractType.validTo) : false;
+        const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+        const validToIST = machine.contractType?.validTo ? new Date(new Date(machine.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+        const isExpired = validToIST ? nowIST > validToIST : false;
         const requiresCharge = isExpired || !machine.contractType?.freeService;
 
         return (
@@ -766,7 +770,9 @@ const CustomerMachineDetailPage = () => {
               </div>
               {chargeRequiredIndices.filter(i => machines[i].serviceCharge !== undefined).map(i => {
                 const { machine } = machines[i].detail;
-                const isExp = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
+                const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+                const validToIST = machine.contractType?.validTo ? new Date(new Date(machine.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+                const isExp = validToIST ? nowIST > validToIST : false;
                 return (
                   <div key={i} className="flex items-center justify-between">
                     <div>
@@ -798,7 +804,9 @@ const CustomerMachineDetailPage = () => {
           <div className="space-y-4 py-2">
             {chargeRequiredIndices.map(i => {
               const { machine } = machines[i].detail;
-              const isExp = machine.contractType?.validTo && new Date() > new Date(machine.contractType.validTo);
+              const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })); nowIST.setHours(0, 0, 0, 0);
+              const validToIST = machine.contractType?.validTo ? new Date(new Date(machine.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+              const isExp = validToIST ? nowIST > validToIST : false;
               return (
                 <div key={i} className="space-y-1.5">
                   <Label className="text-sm">
