@@ -15,6 +15,22 @@ const { sendServiceCallInvoiceEmail } = require("../../../utils/emailService");
 
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
+const toIST = (date) => {
+  const d = new Date(date);
+  // IST = UTC+5:30
+  return new Date(d.getTime() + (5 * 60 + 30) * 60 * 1000);
+};
+
+const resolveContractExpiry = (contractType) => {
+  if (!contractType) return contractType;
+  const nowIST      = toIST(new Date());
+  const validFromIST = contractType.validFrom ? toIST(contractType.validFrom) : null;
+  const validToIST   = contractType.validTo   ? toIST(contractType.validTo)   : null;
+  const isExpired = !validToIST || nowIST > validToIST || (validFromIST && nowIST < validFromIST);
+  if (!isExpired) return contractType;
+  return { ...contractType, freeService: false, freeParts: false };
+};
+
 // ── Reusable: compute lifetime copies for a serial number ─────────────────
 const getLifetimeCopies = async (serialNumber) => {
   const completedCalls = await ServiceCall.find(
@@ -72,7 +88,7 @@ const buildServiceCallReadingInfo = async (calls) => {
 
       const lifetimeCopies = m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0;
 
-      return { ...m, serviceCallReadingCategories, lifetimeCopies };
+      return { ...m, contractType: resolveContractExpiry(m.contractType), serviceCallReadingCategories, lifetimeCopies };
     }));
 
     return { ...callObj, machines };
@@ -151,8 +167,9 @@ const buildCounterReadingInfo = async (calls) => {
     // Merge categories into each matching machine
     const machines = await Promise.all(callObj.machines.map(async (m) => {
       const lifetimeCopies = m.serialNumber ? await getLifetimeCopies(m.serialNumber) : 0;
-      if (!snCategoriesMap.has(m.serialNumber)) return { ...m, lifetimeCopies };
-      return { ...m, counterReadingCategories: snCategoriesMap.get(m.serialNumber), counterReadingMinCopies: snMinCopiesMap.get(m.serialNumber) ?? 0, lifetimeCopies };
+      const resolvedContract = resolveContractExpiry(m.contractType);
+      if (!snCategoriesMap.has(m.serialNumber)) return { ...m, contractType: resolvedContract, lifetimeCopies };
+      return { ...m, contractType: resolvedContract, counterReadingCategories: snCategoriesMap.get(m.serialNumber), counterReadingMinCopies: snMinCopiesMap.get(m.serialNumber) ?? 0, lifetimeCopies };
     }));
 
     return { ...callObj, machines };
