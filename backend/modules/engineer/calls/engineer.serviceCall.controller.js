@@ -685,13 +685,13 @@ const getChargesSummary = async (req, res) => {
 
 const getPartsMachines = async (req, res) => {
   try {
-    const partsCategoryId = process.env.PARTS_CATEGORY_ID;
+    const productCategoryId = process.env.PRODUCT_CATEGORY_ID;
     const { search } = req.query;
 
     const escaped = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
     const purchaseRecords = await PurchasedMachine.find({
-      "machines.categoryId": new mongoose.Types.ObjectId(partsCategoryId),
+      "machines.categoryId": { $ne: new mongoose.Types.ObjectId(productCategoryId) },
       ...(search?.trim() && {
         $or: [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
@@ -703,7 +703,7 @@ const getPartsMachines = async (req, res) => {
     const machineIds = [...new Set(
       purchaseRecords.flatMap(record =>
         record.machines
-          .filter(m => m.categoryId?.toString() === partsCategoryId)
+          .filter(m => m.categoryId?.toString() !== productCategoryId)
           .map(m => m.machineId)
           .filter(Boolean)
       )
@@ -719,7 +719,7 @@ const getPartsMachines = async (req, res) => {
     const parts = [];
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
-        if (machine.categoryId?.toString() !== partsCategoryId) continue;
+        if (machine.categoryId?.toString() === productCategoryId) continue;
         if (!machine.machineId || !machineImagesMap.has(machine.machineId.toString())) continue;
 
         for (const entry of (machine.partCodes || [])) {

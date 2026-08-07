@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const PARTS_CATEGORY_ID    = process.env.PARTS_CATEGORY_ID;
+const PRODUCT_CATEGORY_ID  = process.env.PRODUCT_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const validateCreateSale = (body) => {
@@ -35,7 +35,7 @@ const validateCreateSale = (body) => {
       if (n > 100)    return `${label}: discountPercentage cannot exceed 100`;
     }
 
-    const isParts = categoryId && categoryId.toString() === PARTS_CATEGORY_ID;
+    const isParts = !categoryId || categoryId.toString() !== PRODUCT_CATEGORY_ID;
 
     if (isParts) {
       if (!Array.isArray(partCodes) || partCodes.length === 0)

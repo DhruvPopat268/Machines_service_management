@@ -9,7 +9,7 @@ const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
 const GstConfig = require("../gstConfig/admin.gstConfig.model");
 const { validateCreatePurchase } = require("./admin.purchasedMachine.validator");
 
-const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
+const PRODUCT_CATEGORY_ID = process.env.PRODUCT_CATEGORY_ID;
 
 const resolveStockStatus = (currentStock, lowStockThreshold) => {
   if (currentStock === 0) return "Out of Stock";
@@ -187,7 +187,7 @@ const createPurchase = async (req, res) => {
       if (!machine)                       return abort(404, `Machine "${m.machineId}" not found`);
       if (machine.status === "Inactive")  return abort(400, `Machine "${machine.name}" is inactive`);
 
-      const isParts    = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
+      const isParts    = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
       const buyBase          = Math.round((m.buyingPriceWithGst / gstDivisor) * 100) / 100;
       const sellBase          = m.sellingPriceWithGst != null ? Math.round((m.sellingPriceWithGst / gstDivisor) * 100) / 100 : null;
       const buyingTotalWithGst = Math.round(m.buyingPriceWithGst * m.quantity * 100) / 100;

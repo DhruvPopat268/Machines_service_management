@@ -33,7 +33,7 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const PRODUCT_CATEGORY_ID = import.meta.env.VITE_PRODUCT_CATEGORY_ID;
 
 const CallsPage = ({ statusFilter, title = "All Service Calls", description = "Manage and track all service calls" }: CallsPageProps) => {
   const navigate = useNavigate();
@@ -173,8 +173,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
         ]);
         setProblemTypes(ptRes.data.data);
         const allMachines = mRes.data.data;
-        setMachines(allMachines.filter((m: any) => m.categoryId?.toString() !== PARTS_CATEGORY_ID && m.category?._id?.toString() !== PARTS_CATEGORY_ID));
-        setParts(allMachines.filter((m: any) => m.categoryId?.toString() === PARTS_CATEGORY_ID || m.category?._id?.toString() === PARTS_CATEGORY_ID));
+        setMachines(allMachines.filter((m: any) => m.categoryId?.toString() === PRODUCT_CATEGORY_ID || m.category?._id?.toString() === PRODUCT_CATEGORY_ID));
+        setParts(allMachines.filter((m: any) => m.categoryId?.toString() !== PRODUCT_CATEGORY_ID && m.category?._id?.toString() !== PRODUCT_CATEGORY_ID));
         setCustomers(cRes.data.data);
         setCategories(catRes.data.data);
         setDivisions(divRes.data.data);
@@ -203,7 +203,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     machineAbortRef.current = controller;
     try {
       const res = await api.get("/admin/machines", { params: { limit: 100, search: q }, signal: controller.signal });
-      if (!controller.signal.aborted) setMachines(res.data.data.filter((m: any) => m.categoryId?.toString() !== PARTS_CATEGORY_ID && m.category?._id?.toString() !== PARTS_CATEGORY_ID));
+      if (!controller.signal.aborted) setMachines(res.data.data.filter((m: any) => m.categoryId?.toString() === PRODUCT_CATEGORY_ID || m.category?._id?.toString() === PRODUCT_CATEGORY_ID));
     } catch {}
   }, []);
 
@@ -212,8 +212,8 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     const controller = new AbortController();
     partsAbortRef.current = controller;
     try {
-      const res = await api.get("/admin/machines", { params: { limit: 100, search: q, category: PARTS_CATEGORY_ID }, signal: controller.signal });
-      if (!controller.signal.aborted) setParts(res.data.data);
+      const res = await api.get("/admin/machines", { params: { limit: 100, search: q }, signal: controller.signal });
+      if (!controller.signal.aborted) setParts(res.data.data.filter((m: any) => m.categoryId?.toString() !== PRODUCT_CATEGORY_ID && m.category?._id?.toString() !== PRODUCT_CATEGORY_ID));
     } catch {}
   }, []);
 

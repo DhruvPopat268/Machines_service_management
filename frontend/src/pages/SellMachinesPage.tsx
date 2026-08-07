@@ -15,7 +15,7 @@ import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
-const PARTS_CATEGORY_ID = import.meta.env.VITE_PARTS_CATEGORY_ID;
+const PRODUCT_CATEGORY_ID = import.meta.env.VITE_PRODUCT_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
   const handleQtyChange = async (mi: number, val: string) => {
     const entry = entries[mi];
-    const isParts = entry.machine.category?._id === PARTS_CATEGORY_ID;
+    const isParts = entry.machine.category?._id !== PRODUCT_CATEGORY_ID;
     const qty = Number(val) || 0;
 
     if (val !== "" && qty > entry.machine.currentStock) {
@@ -241,7 +241,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
       if (!e.sellingPriceWithGst) { toast.error(`Enter selling price for ${e.machine.name}`); return; }
-      const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
+      const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
       const qty = Number(e.quantity);
       if (e.units.length !== qty) { toast.error(`Codes not loaded for ${e.machine.name}`); return; }
       for (let i = 0; i < qty; i++) {
@@ -286,7 +286,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       ...(paymentStatus !== "Unpaid" && { paymentMethod, paymentDate }),
       ...(paymentStatus === "Partial-Paid" && { paidAmount: Number(paidAmount) }),
       machines: entries.map((e) => {
-        const isParts = e.machine.category?._id === PARTS_CATEGORY_ID;
+        const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
         return {
           machineId: e.machine._id,
           categoryId: e.machine.category?._id,
@@ -537,7 +537,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             ) : (
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {entries.map((entry, mi) => {
-                  const isParts = entry.machine.category?._id === PARTS_CATEGORY_ID;
+                  const isParts = entry.machine.category?._id !== PRODUCT_CATEGORY_ID;
                   const qty = Number(entry.quantity) || 0;
                   return (
                     <div key={entry.machine._id} className="rounded-xl border bg-background shadow-sm overflow-hidden">

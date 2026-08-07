@@ -17,7 +17,7 @@ const { sendContractExpiryAlert, sendSaleConfirmationEmail, sendPaymentReceivedE
 
 const GstConfig = require("../gstConfig/admin.gstConfig.model");
 const PaymentTransaction = require("../paymentTransactions/admin.paymentTransaction.model");
-const PARTS_CATEGORY_ID = process.env.PARTS_CATEGORY_ID;
+const PRODUCT_CATEGORY_ID = process.env.PRODUCT_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const DOCS_DIR = process.env.NODE_ENV === "production"
@@ -94,7 +94,7 @@ const getAvailableCodes = async (req, res) => {
     if (!machine)
       return res.status(404).json({ success: false, message: "Machine not found" });
 
-    const isParts = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
+    const isParts = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
 
     const allRecords = await PurchasedMachine.find(
       { "machines.machineId": new mongoose.Types.ObjectId(machineId) },
@@ -314,7 +314,7 @@ const createSale = async (req, res) => {
       if (!machine) return abort(404, `Machine "${m.machineId}" not found`);
       if (machine.status === "Inactive") return abort(400, `Machine "${machine.name}" is inactive`);
 
-      const isParts = machine.category?._id?.toString() === PARTS_CATEGORY_ID;
+      const isParts = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
       const discountPct = Number(m.discountPercentage) || 0;
       const sellingPriceWithGst = Math.round(m.sellingPriceWithGst * 100) / 100;
       const sellingPriceBase = Math.round((sellingPriceWithGst / gstDivisor) * 100) / 100;
@@ -558,7 +558,7 @@ const createSale = async (req, res) => {
           if (machineRowsMatch) {
             const rowTemplate = machineRowsMatch[1];
             const machineRows = machineEntries.map((m, idx) => {
-              const isParts = m.categoryId?.toString() === PARTS_CATEGORY_ID;
+              const isParts = m.categoryId?.toString() !== PRODUCT_CATEGORY_ID;
               const serials = isParts
                 ? (m.partCodes || []).map(p => p.partCode)
                 : (m.serialNumbers || []).map(s => s.serialNumber);
@@ -1125,7 +1125,7 @@ const generateInvoice = async (req, res) => {
       const rowTemplate = machineRowsMatch[1];
       const rows = sale.machines.map((m, idx) => {
         const rate = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
-        const isParts = m.categoryId?.toString() === PARTS_CATEGORY_ID;
+        const isParts = m.categoryId?.toString() !== PRODUCT_CATEGORY_ID;
         const serials = isParts
           ? (m.partCodes || []).map(p => p.partCode)
           : (m.serialNumbers || []).map(s => s.serialNumber);
