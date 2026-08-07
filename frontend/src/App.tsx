@@ -27,7 +27,6 @@ import CustomersPage from "./pages/CustomersPage";
 import ProblemTypesPage from "./pages/ProblemTypesPage";
 import PurchaseMachinesPage from "./pages/PurchaseMachinesPage";
 import SellMachinesPage from "./pages/SellMachinesPage";
-import SellMachineDetailPage from "./pages/SellMachineDetailPage";
 import ContractTypesPage from "./pages/ContractTypesPage";
 import PagesCategoriesPage from "./pages/PagesCategoriesPage";
 import ZonesPage from "./pages/ZonesPage";
@@ -83,7 +82,6 @@ const App = () => (
             <Route path="/purchase-machines"      element={<G k="purchase-machines"><PurchaseMachinesPage /></G>} />
 
             <Route path="/sell-machines"      element={<G k="sell-machines"><SellMachinesPage /></G>} />
-            <Route path="/sell-machines/:id"  element={<G k="sell-machines"><SellMachineDetailPage /></G>} />
 
             <Route path="/machine-divisions"  element={<G k="machine-divisions"><MachineDivisionsPage /></G>} />
             <Route path="/machine-categories" element={<G k="machine-categories"><MachineCategoriesPage /></G>} />

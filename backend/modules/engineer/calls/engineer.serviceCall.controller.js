@@ -596,6 +596,9 @@ const getChargesSummary = async (req, res) => {
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
+    if (call.status !== "In Progress")
+      return res.status(400).json({ success: false, message: "Call is not in In Progress status" });
+
     if (call.engineerInfo?._id?.toString() !== req.engineer.id)
       return res.status(403).json({ success: false, message: "You are not assigned to this call" });
 
@@ -609,7 +612,7 @@ const getChargesSummary = async (req, res) => {
       const cgstAmount = parseFloat(((serviceCharges * cgstPercent) / 100).toFixed(2));
       const sgstAmount = parseFloat(((serviceCharges * sgstPercent) / 100).toFixed(2));
       const igstAmount = parseFloat(((serviceCharges * igstPercent) / 100).toFixed(2));
-      const grandTotal = parseFloat((serviceCharges + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+      const grandTotal = Math.round(serviceCharges + cgstAmount + sgstAmount + igstAmount);
       return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, grandTotal } });
     }
 
@@ -627,13 +630,13 @@ const getChargesSummary = async (req, res) => {
 
     const purchaseRecords = await PurchasedMachine.find(
       { "machines.partCodes.partCode": { $in: partCodesList } },
-      { "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
+      { "machines.partCodes": 1, "machines.sellingPriceBase": 1 }
     );
 
     const priceMap = new Map();
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
-        const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
+        const unitPrice = machine.sellingPriceBase ?? 0;
         for (const entry of (machine.partCodes || [])) {
           if (partCodesList.includes(entry.partCode.trim()))
             priceMap.set(entry.partCode.trim(), unitPrice);
@@ -672,7 +675,7 @@ const getChargesSummary = async (req, res) => {
     const cgstAmount = parseFloat(((totalCharges * cgstPercent) / 100).toFixed(2));
     const sgstAmount = parseFloat(((totalCharges * sgstPercent) / 100).toFixed(2));
     const igstAmount = parseFloat(((totalCharges * igstPercent) / 100).toFixed(2));
-    const grandTotal = parseFloat((totalCharges + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+    const grandTotal = Math.round(totalCharges + cgstAmount + sgstAmount + igstAmount);
 
     return res.status(200).json({ success: true, data: { serviceCharges, partsCharges, totalCharges, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, grandTotal } });
   } catch (err) {
@@ -736,8 +739,7 @@ const getPartsMachines = async (req, res) => {
             category:               machine.category,
             divisionId:             machine.divisionId,
             division:               machine.division,
-            sellingPrice:           machine.sellingPrice ?? 0,
-            discountedSellingPrice: machine.discountedSellingPrice ?? null,
+            sellingPriceBase:       machine.sellingPriceBase ?? 0,
             images:                 machineImagesMap.get(machine.machineId.toString()) || [],
             partCode:               entry.partCode,
           });
@@ -976,7 +978,7 @@ const completeCall = async (req, res) => {
         { "machines.machineId": 1, "machines.machineName": 1,
           "machines.categoryId": 1, "machines.category": 1, "machines.divisionId": 1, "machines.division": 1,
           "machines.modelNumber": 1,
-          "machines.partCodes": 1, "machines.sellingPrice": 1, "machines.discountedSellingPrice": 1 }
+          "machines.partCodes": 1, "machines.sellingPriceBase": 1 }
       ).session(session);
 
       const partInfoMap = new Map();
@@ -988,7 +990,7 @@ const completeCall = async (req, res) => {
               if (entry.status === "sold")
                 return abort(400, `Part code "${entry.partCode}" is already sold`);
               partInfoMap.set(entry.partCode.trim(), {
-                unitPrice,
+                unitPrice:              machine.sellingPriceBase ?? 0,
                 machineId:              machine.machineId,
                 machineName:            machine.machineName,
                 modelNumber:            machine.modelNumber || "",
@@ -996,8 +998,7 @@ const completeCall = async (req, res) => {
                 category:               machine.category || "",
                 divisionId:             machine.divisionId,
                 division:               machine.division || "",
-                sellingPrice:           machine.sellingPrice ?? 0,
-                discountedSellingPrice: machine.discountedSellingPrice ?? 0,
+                sellingPriceBase:       machine.sellingPriceBase ?? 0,
               });
             }
           }
@@ -1041,8 +1042,7 @@ const completeCall = async (req, res) => {
           hsnCode:                info.hsnCode || "",
           categoryId:             info.categoryId,
           category:               info.category,
-          sellingPrice:           info.sellingPrice,
-          discountedSellingPrice: info.discountedSellingPrice,
+          sellingPriceBase:       info.sellingPriceBase,
           total:                  lineTotal,
         });
 
@@ -1321,7 +1321,7 @@ const completeCall = async (req, res) => {
     const cgstAmount        = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
     const sgstAmount        = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
     const igstAmount        = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-    const invoiceGrandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+    const invoiceGrandTotal = Math.round(basicTotal + cgstAmount + sgstAmount + igstAmount);
 
     await call.updateOne(
       {
@@ -1383,7 +1383,7 @@ const completeCall = async (req, res) => {
           const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
           const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
           const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+          const grandTotal  = Math.round(basicTotal + cgstAmount + sgstAmount + igstAmount);
 
           const invoiceDate   = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
           const completedDate = updatedCall.dates?.completed
@@ -1616,7 +1616,7 @@ const completeCall = async (req, res) => {
           const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
           const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
           const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+          const grandTotal  = Math.round(basicTotal + cgstAmount + sgstAmount + igstAmount);
 
           const invoiceDate   = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
           const completedDate = updatedCall.dates?.completed
@@ -1780,7 +1780,7 @@ const completeCall = async (req, res) => {
           const cgstAmount  = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
           const sgstAmount  = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
           const igstAmount  = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
-          const grandTotal  = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+          const grandTotal  = Math.round(basicTotal + cgstAmount + sgstAmount + igstAmount);
 
           const invoiceDate   = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
           const completedDate = updatedCall.dates?.completed
