@@ -87,7 +87,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         });
         setAllImages((m.images ?? []).map((url: string) => ({ preview: url })));
       } catch {
-        toast.error("Failed to load machine details");
+        toast.error("Failed to load item details");
       } finally {
         setLoadingData(false);
       }
@@ -188,10 +188,10 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
       if (isEdit) {
         fd.append("existingImages", JSON.stringify(existingImages));
         await api.patch(`/admin/machines/${id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
-        toast.success("Machine updated successfully");
+        toast.success("Item updated successfully");
       } else {
         await api.post("/admin/machines", fd, { headers: { "Content-Type": "multipart/form-data" } });
-        toast.success("Machine added successfully");
+        toast.success("Item added successfully");
       }
       navigate("/machines");
     } catch (err: any) {
@@ -209,8 +209,8 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ArrowLeft className="h-4 w-4" /></Button>
           <PageHeader
-            title={isEdit ? (form.name || "Edit Machine") : isView ? (form.name || "Machine Details") : `Add ${type}`}
-            description={isEdit ? "Update machine details" : isView ? "View machine details" : `Add a new ${type.toLowerCase()} to inventory`}
+            title={isEdit ? (form.name || "Edit Item") : isView ? (form.name || "Item Details") : `Add ${type}`}
+            description={isEdit ? "Update item details" : isView ? "View item details" : `Add a new ${type.toLowerCase()} to inventory`}
           />
         </div>
         {isView && (
@@ -226,7 +226,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
           <CardContent className="pt-6 space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Basic Information</p>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Machine name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
+              <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Item name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>Model Number <span className="text-destructive">*</span></Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={form.hsnCode} onChange={(e) => setField("hsnCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2">
@@ -305,7 +305,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
             <div className="flex gap-4">
               <div className="space-y-2 w-3/4">
                 <Label>Notes</Label>
-                <Textarea placeholder="Any additional notes about this machine" value={form.notes} onChange={(e) => setField("notes", e.target.value)} disabled={isReadOnly} />
+                <Textarea placeholder="Any additional notes about this item" value={form.notes} onChange={(e) => setField("notes", e.target.value)} disabled={isReadOnly} />
               </div>
               <div className="space-y-2 w-1/4">
                 <Label>Status</Label>

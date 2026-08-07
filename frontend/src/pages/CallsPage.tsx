@@ -380,13 +380,13 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     },
     {
       key: "modelNumber",
-      label: <span className="whitespace-normal leading-tight">Machine<br />Model</span>,
+      label: <span className="whitespace-normal leading-tight">Item<br />Model</span>,
       className: "w-[112px] max-w-[112px] whitespace-normal",
       render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i}>{m.modelNumber}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
     },
     {
       key: "serialNumber",
-      label: <span className="whitespace-normal leading-tight">Machine<br />Serial&nbsp;No</span>,
+      label: <span className="whitespace-normal leading-tight">Item<br />Serial&nbsp;No</span>,
       className: "w-[170px] max-w-[170px] whitespace-normal",
       render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => <div key={i} className="whitespace-nowrap">{highlightText(m.serialNumber, serialNumber)}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>) : "—",
     },
@@ -593,7 +593,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
             )}
             <SearchableSelect options={customers.map(c => ({ label: c.name, value: c.name }))} value={pendingFilters.customerName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, customerName: v }))} onSearchChange={fetchCustomerOptions} placeholder="Customer" searchPlaceholder="Search customers..." className="w-full h-9 text-sm" />
             <SearchableSelect options={engineers.map(e => ({ label: e.name, value: e.name }))} value={pendingFilters.engineerName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, engineerName: v }))} onSearchChange={fetchEngineers} placeholder="Engineer" searchPlaceholder="Search engineers..." className="w-full h-9 text-sm" />
-            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={pendingFilters.machineName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Machine" searchPlaceholder="Search machines..." className="w-full h-9 text-sm" />
+            <SearchableSelect options={machines.map(m => ({ label: m.name, value: m.name }))} value={pendingFilters.machineName ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, machineName: v }))} onSearchChange={fetchMachineOptions} placeholder="Item" searchPlaceholder="Search items..." className="w-full h-9 text-sm" />
             <SearchableSelect options={parts.map(p => ({ label: p.name, value: p._id }))} value={pendingFilters.partId ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, partId: v }))} onSearchChange={fetchPartsOptions} placeholder="Part" searchPlaceholder="Search parts..." className="w-full h-9 text-sm" />
             <Input placeholder="Serial number..." value={pendingSerial} onChange={(e) => setPendingSerial(e.target.value)} className="w-full h-9 text-sm" />
             <SearchableSelect options={categories.map(c => ({ label: c.name, value: c._id }))} value={pendingFilters.category ?? ""} onChange={(v) => setPendingFilters(prev => ({ ...prev, category: v }))} onSearchChange={fetchCategoryOptions} placeholder="Category" searchPlaceholder="Search categories..." className="w-full h-9 text-sm" />

@@ -93,8 +93,8 @@ export function AppSidebar() {
 
   // Inventory machine items filtered by permission
   const machineItems = [
-    ...(hasPermission("machines-add")  ? [{ title: "Add Machine",   url: "/machines/add", icon: HardDrive }] : []),
-    ...(hasPermission("machines-list") ? [{ title: "Machine List",  url: "/machines",     icon: HardDrive }] : []),
+    ...(hasPermission("machines-add")  ? [{ title: "Add Item",   url: "/machines/add", icon: HardDrive }] : []),
+    ...(hasPermission("machines-list") ? [{ title: "Item List",  url: "/machines",     icon: HardDrive }] : []),
   ];
 
   const showInventorySection =
@@ -220,10 +220,10 @@ export function AppSidebar() {
               <div className="space-y-0.5">
                 <SidebarMenu>
                   {hasPermission("machine-divisions") && (
-                    <SidebarLink to="/machine-divisions" icon={Layers} label="Machine Divisions" collapsed={collapsed} />
+                    <SidebarLink to="/machine-divisions" icon={Layers} label="Item Divisions" collapsed={collapsed} />
                   )}
                   {hasPermission("machine-categories") && (
-                    <SidebarLink to="/machine-categories" icon={Tag} label="Machine Categories" collapsed={collapsed} />
+                    <SidebarLink to="/machine-categories" icon={Tag} label="Item Categories" collapsed={collapsed} />
                   )}
                 </SidebarMenu>
                 {machineItems.length > 0 && (
@@ -241,7 +241,7 @@ export function AppSidebar() {
                     </SidebarMenu>
                   ) : (
                     <NestedCollapsible
-                      label="Machines" icon={HardDrive}
+                      label="Items" icon={HardDrive}
                       urls={["/machines", "/machines/add"]}
                       items={machineItems}
                       collapsed={false}
@@ -276,7 +276,7 @@ export function AppSidebar() {
             {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/purchase-machines" icon={ShoppingBag} label="Purchase Machines" collapsed={collapsed} />
+                <SidebarLink to="/purchase-machines" icon={ShoppingBag} label="Purchase Items" collapsed={collapsed} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -288,7 +288,7 @@ export function AppSidebar() {
             {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Sells Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/sell-machines" icon={ShoppingCart} label="Sell Machines" collapsed={collapsed} />
+                <SidebarLink to="/sell-machines" icon={ShoppingCart} label="Sell Items" collapsed={collapsed} />
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

@@ -148,7 +148,7 @@ const MachinesPage = () => {
       });
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
-        toast.error("Failed to fetch machines");
+        toast.error("Failed to fetch items");
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
@@ -230,12 +230,12 @@ const MachinesPage = () => {
     setSubmitting(true);
     try {
       await api.delete(`/admin/machines/${deleteDialog._id}`);
-      toast.success("Machine deleted successfully");
+      toast.success("Item deleted successfully");
       setDeleteDialog(null);
       const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
       fetchMachines(newPage);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to delete machine");
+      toast.error(err.response?.data?.message || "Failed to delete item");
     } finally {
       setSubmitting(false);
     }
@@ -315,7 +315,7 @@ const MachinesPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Machines" description="Manage machine inventory" actionLabel="Add Machine" actionIcon={Plus} onAction={() => navigate("/machines/add")}>
+          <PageHeader title="Items" description="Manage item inventory" actionLabel="Add Item" actionIcon={Plus} onAction={() => navigate("/machines/add")}>
             <Button variant="outline" className="gap-2" onClick={() => { setImportStep("menu"); setImportFile(null); setImportDialog(true); }}><Upload className="h-4 w-4" /> Import</Button>
             <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
@@ -384,7 +384,7 @@ const MachinesPage = () => {
       <Dialog open={!!deleteDialog} onOpenChange={(open) => { if (!open) setDeleteDialog(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Machine</DialogTitle>
+            <DialogTitle>Delete Item</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.
             </DialogDescription>
@@ -400,7 +400,7 @@ const MachinesPage = () => {
         <DialogContent>
           {importStep === "menu" && (
             <>
-              <DialogHeader><DialogTitle>Import Machines</DialogTitle><DialogDescription>Download the sample file, fill in your data, then upload.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Import Items</DialogTitle><DialogDescription>Download the sample file, fill in your data, then upload.</DialogDescription></DialogHeader>
               <div className="flex flex-col gap-3 py-4">
                 <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}><Download className="h-4 w-4" /> Download Sample File</Button>
                 <Button className="gap-2 w-full" onClick={() => setImportStep("confirm")}><Upload className="h-4 w-4" /> Upload File</Button>
@@ -410,9 +410,9 @@ const MachinesPage = () => {
           )}
           {importStep === "confirm" && (
             <>
-              <DialogHeader><DialogTitle>Upload Machines</DialogTitle><DialogDescription>Please confirm you have checked the sample file and your file matches the required format before uploading.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Upload Items</DialogTitle><DialogDescription>Please confirm you have checked the sample file and your file matches the required format before uploading.</DialogDescription></DialogHeader>
               <div className="flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2 mt-2">
-                <span className="text-blue-600 text-sm">Import covers basic machine data only. After import, go to each machine's detail page to upload images.</span>
+                <span className="text-blue-600 text-sm">Import covers basic item data only. After import, go to each item's detail page to upload images.</span>
               </div>
               <DialogFooter className="pt-4">
                 <Button variant="outline" onClick={() => setImportStep("menu")}>Back</Button>
@@ -422,7 +422,7 @@ const MachinesPage = () => {
           )}
           {importStep === "upload" && (
             <>
-              <DialogHeader><DialogTitle>Select File</DialogTitle><DialogDescription>Select a .xlsx file to import machines.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Select File</DialogTitle><DialogDescription>Select a .xlsx file to import items.</DialogDescription></DialogHeader>
               <div className="py-4">
                 <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
                 <div
@@ -454,8 +454,8 @@ const MachinesPage = () => {
       <Dialog open={exportDialog} onOpenChange={setExportDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Export Machines</DialogTitle>
-            <DialogDescription>Do you want to download all machines as an Excel file?</DialogDescription>
+            <DialogTitle>Export Items</DialogTitle>
+            <DialogDescription>Do you want to download all items as an Excel file?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>

@@ -316,7 +316,7 @@ const InventoryLogsPage = () => {
       },
     },
     {
-      key: "machineName", label: "Machine",
+      key: "machineName", label: "Item",
       render: (l) => <div>{l.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, l.machines.length)}</div>)}</div>,
     },
     {
@@ -390,7 +390,7 @@ const InventoryLogsPage = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by machine, vendor, customer, phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder="Search by item, vendor, customer, phone..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
@@ -449,7 +449,7 @@ const InventoryLogsPage = () => {
             />
             <SearchableSelect options={categories} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisions}  value={filters.division  ?? ""} onChange={(v) => setFilters(p => ({ ...p, division:  v }))} onSearchChange={fetchDivisions}  placeholder="Division"  searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machines}   value={filters.machine   ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:   v }))} onSearchChange={fetchMachines}   placeholder="Machine"   searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machines}   value={filters.machine   ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:   v }))} onSearchChange={fetchMachines}   placeholder="Item"   searchPlaceholder="Search items..."   className="w-[160px] h-9 text-sm" />
           </div>
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination

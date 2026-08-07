@@ -106,7 +106,7 @@ const MachineCategoriesPage = () => {
       });
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
-        toast.error("Failed to fetch machine categories");
+        toast.error("Failed to fetch item categories");
       }
     } finally {
       if (!controller.signal.aborted) setLoading(false);
@@ -288,8 +288,8 @@ const MachineCategoriesPage = () => {
       {loading ? <Spinner /> : (
         <>
           <PageHeader
-            title="Machine Categories"
-            description="Manage machine categories for classifying inventory"
+            title="Item Categories"
+            description="Manage item categories for classifying inventory"
             actionLabel="Add Category"
             actionIcon={Plus}
             onAction={() => { setAddForm(emptyForm); setAddDialog(true); }}
@@ -329,7 +329,7 @@ const MachineCategoriesPage = () => {
       {/* Add Dialog */}
       <Dialog open={addDialog} onOpenChange={(open) => { if (!open) { setAddDialog(false); setAddForm(emptyForm); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Add Machine Category</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add Item Category</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label htmlFor="add-cat-name">Category Name</Label><Input id="add-cat-name" placeholder="e.g. Heavy Machinery" value={addForm.name} onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label htmlFor="add-cat-desc">Description</Label><Textarea id="add-cat-desc" placeholder="Types of machines in this category" value={addForm.description} onChange={(e) => setAddForm((p) => ({ ...p, description: e.target.value }))} /></div>
@@ -354,7 +354,7 @@ const MachineCategoriesPage = () => {
       {/* Edit Dialog */}
       <Dialog open={!!editDialog} onOpenChange={(open) => !open && setEditDialog(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Machine Category</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Item Category</DialogTitle></DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2"><Label htmlFor="edit-cat-name">Category Name</Label><Input id="edit-cat-name" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} /></div>
             <div className="space-y-2"><Label htmlFor="edit-cat-desc">Description</Label><Textarea id="edit-cat-desc" value={editForm.description} onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))} /></div>
@@ -379,7 +379,7 @@ const MachineCategoriesPage = () => {
       <Dialog open={!!deleteDialog} onOpenChange={(open) => { if (!open) { setDeleteDialog(null); setDeleteAttributeCount(null); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Machine Category</DialogTitle>
+            <DialogTitle>Delete Item Category</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete <span className="font-semibold text-foreground">{deleteDialog?.name}</span>? This action cannot be undone.
             </DialogDescription>
@@ -407,7 +407,7 @@ const MachineCategoriesPage = () => {
         <DialogContent>
           {importStep === "menu" && (
             <>
-              <DialogHeader><DialogTitle>Import Machine Categories</DialogTitle><DialogDescription>Download the sample file, fill in your data, then upload.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Import Item Categories</DialogTitle><DialogDescription>Download the sample file, fill in your data, then upload.</DialogDescription></DialogHeader>
               <div className="flex flex-col gap-3 py-4">
                 <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}><Download className="h-4 w-4" /> Download Sample File</Button>
                 <Button className="gap-2 w-full" onClick={() => setImportStep("confirm")}><Upload className="h-4 w-4" /> Upload File</Button>
@@ -417,7 +417,7 @@ const MachineCategoriesPage = () => {
           )}
           {importStep === "confirm" && (
             <>
-              <DialogHeader><DialogTitle>Upload Machine Categories</DialogTitle><DialogDescription>Please confirm you have checked the sample file and your file matches the required format before uploading.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Upload Item Categories</DialogTitle><DialogDescription>Please confirm you have checked the sample file and your file matches the required format before uploading.</DialogDescription></DialogHeader>
               <DialogFooter className="pt-4">
                 <Button variant="outline" onClick={() => setImportStep("menu")}>Back</Button>
                 <Button onClick={() => setImportStep("upload")}>Yes, I Checked — Continue</Button>
@@ -426,7 +426,7 @@ const MachineCategoriesPage = () => {
           )}
           {importStep === "upload" && (
             <>
-              <DialogHeader><DialogTitle>Select File</DialogTitle><DialogDescription>Select a .xlsx file to import machine categories.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Select File</DialogTitle><DialogDescription>Select a .xlsx file to import item categories.</DialogDescription></DialogHeader>
               <div className="py-4">
                 <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
                 <div
@@ -463,8 +463,8 @@ const MachineCategoriesPage = () => {
       <Dialog open={exportDialog} onOpenChange={setExportDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Export Machine Categories</DialogTitle>
-            <DialogDescription>Do you want to download all machine categories as an Excel file?</DialogDescription>
+            <DialogTitle>Export Item Categories</DialogTitle>
+            <DialogDescription>Do you want to download all item categories as an Excel file?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button>

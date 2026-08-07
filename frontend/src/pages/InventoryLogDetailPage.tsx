@@ -107,7 +107,7 @@ const InventoryLogDetailPage = () => {
             : isDisInstalled ? "bg-orange-100 text-orange-700"
                              : "bg-blue-100 text-blue-700"
           }`}>{isPurchased ? "Purchased" : isDisInstalled ? "Dis-Installed" : "Sold"}</span> },
-          { label: "Machines", value: log.machinesCount },
+          { label: "Items", value: log.machinesCount },
           { label: "Date",     value: formatDateTime(log.createdAt) },
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">

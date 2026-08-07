@@ -87,7 +87,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       if (search.trim()) params.search = search.trim();
       const r = await api.get("/admin/machines", { params });
       setMachineResults(r.data.data);
-    } catch { toast.error("Failed to load machines"); }
+    } catch { toast.error("Failed to load items"); }
     finally { setSearching(false); }
   };
 
@@ -111,7 +111,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
   }, []);
 
   const addMachine = (machine: Machine) => {
-    if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Machine already added"); return; }
+    if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Item already added"); return; }
     setEntries((prev) => [...prev, { machine, quantity: "", buyingPriceWithGst: "", sellingPriceWithGst: "", serialNumbers: [], partCodes: [] }]);
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
@@ -161,7 +161,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
   const handleSubmit = async () => {
     if (!vendorId)           { toast.error("Please select a vendor"); return; }
-    if (entries.length === 0) { toast.error("Please add at least one machine"); return; }
+    if (entries.length === 0) { toast.error("Please add at least one item"); return; }
 
     for (const e of entries) {
       if (!e.quantity || Number(e.quantity) <= 0) { toast.error(`Enter quantity for ${e.machine.name}`); return; }
@@ -224,8 +224,8 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div>
-            <h2 className="text-lg font-semibold">Record Machine Purchase</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Select a vendor and add machines to record a purchase</p>
+            <h2 className="text-lg font-semibold">Record Item Purchase</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Select a vendor and add items to record a purchase</p>
           </div>
         </div>
 
@@ -266,7 +266,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
 
               {/* Machine search */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Machine</Label>
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Item</Label>
                 <div className="relative" ref={wrapperRef}>
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   <Input ref={machineInputRef} className="pl-8 h-9 text-sm bg-background" placeholder="Search by name..." value={machineSearch}
@@ -276,7 +276,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                       {searching
                         ? <p className="text-xs text-muted-foreground px-3 py-2.5">Loading...</p>
                         : machineResults.length === 0
-                          ? <p className="text-xs text-muted-foreground px-3 py-2.5">No machines found</p>
+                          ? <p className="text-xs text-muted-foreground px-3 py-2.5">No items found</p>
                           : machineResults.map((m) => (
                               <button key={m._id} type="button"
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
@@ -323,8 +323,8 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
             {entries.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
                 <Package className="h-12 w-12 mb-3 opacity-20" />
-                <p className="text-sm font-medium">No machines added yet</p>
-                <p className="text-xs mt-1">Search and select machines from the left panel</p>
+                <p className="text-sm font-medium">No items added yet</p>
+                <p className="text-xs mt-1">Search and select items from the left panel</p>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -561,7 +561,7 @@ const PurchaseMachinesPage = () => {
   const columns: Column<Purchase>[] = [
     { key: "_id",         label: "No.",      render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
-    { key: "machineName", label: "Machine",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
+    { key: "machineName", label: "Item",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "category",    label: "Category",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "division",    label: "Division",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "modelNumber", label: "Model No",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, p.machines.length)}</div>)}</div> },
@@ -604,7 +604,7 @@ const PurchaseMachinesPage = () => {
     <div className="space-y-6">
       {loading ? <Spinner /> : (
         <>
-          <PageHeader title="Purchase Machines" description="Record and manage machine purchases from vendors" actionLabel="Purchase Machine" actionIcon={ShoppingBag} onAction={() => { setInitialVendorId(""); setDialogOpen(true); }}>
+          <PageHeader title="Purchase Items" description="Record and manage item purchases from vendors" actionLabel="Purchase Item" actionIcon={ShoppingBag} onAction={() => { setInitialVendorId(""); setDialogOpen(true); }}>
             <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
 
@@ -612,7 +612,7 @@ const PurchaseMachinesPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
                 { label: "Total Purchased",          value: `₹${stats.totalPurchased.toLocaleString()}`,        icon: ShoppingBag, color: "blue" },
-                { label: "Total Machines Purchased", value: stats.totalMachinesPurchased,                       icon: Package,     color: "green" },
+                { label: "Total Items Purchased", value: stats.totalMachinesPurchased,                       icon: Package,     color: "green" },
                 { label: "Avg Purchase Value",       value: `₹${stats.avgPurchaseValue.toLocaleString()}`,      icon: ShoppingBag, color: "orange" },
               ].map((s) => (
                 <Card key={s.label} className="border-0 shadow-sm">
@@ -632,7 +632,7 @@ const PurchaseMachinesPage = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by vendor, machine, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder="Search by vendor, item, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
@@ -647,7 +647,7 @@ const PurchaseMachinesPage = () => {
             <SearchableSelect options={vendorOptions}   value={filters.vendor   ?? ""} onChange={(v) => setFilters(p => ({ ...p, vendor:   v }))} onSearchChange={fetchVendors}    placeholder="Vendor"    searchPlaceholder="Search vendors..."    className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Machine"  searchPlaceholder="Search machines..."   className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Item"  searchPlaceholder="Search items..."   className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={[{ label: "Available", value: "available" }, { label: "Sold", value: "sold" }]} value={filters.inventoryStatus ?? ""} onChange={(v) => setFilters(p => ({ ...p, inventoryStatus: v }))} placeholder="Inventory Status" className="w-[160px] h-9 text-sm" />
           </div>
 
