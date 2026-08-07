@@ -120,7 +120,9 @@ const raiseServiceCall = async (req, res) => {
       if (!foundMachine)
         return res.status(404).json({ success: false, message: `Serial number "${sn}" not found in your sold machines` });
 
-      if (foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date())
+      const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      const validToIST = foundEntry.contractType?.validTo ? new Date(new Date(foundEntry.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+      if (validToIST && nowIST > validToIST)
         return res.status(400).json({ success: false, message: `Serial number "${sn}" has an expired contract` });
 
       if (!foundEntry.contractType?.freeService)

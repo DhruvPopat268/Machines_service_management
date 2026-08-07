@@ -26,7 +26,7 @@ const resolveContractExpiry = (contractType) => {
   const nowIST      = toIST(new Date());
   const validFromIST = contractType.validFrom ? toIST(contractType.validFrom) : null;
   const validToIST   = contractType.validTo   ? toIST(contractType.validTo)   : null;
-  const isExpired = !validToIST || nowIST > validToIST || (validFromIST && nowIST < validFromIST);
+  const isExpired = !validToIST || nowIST > validToIST;
   if (!isExpired) return contractType;
   return { ...contractType, freeService: false, freeParts: false };
 };
@@ -660,11 +660,12 @@ const getChargesSummary = async (req, res) => {
     if (alreadySold.length > 0)
       return res.status(400).json({ success: false, message: `Part code(s) already sold: ${alreadySold.join(", ")}` });
 
-    const now = new Date();
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
     let partsCharges = 0;
     for (const p of usedParts) {
       const contract  = contractMap.get(p.serialNumber);
-      const isExpired = !contract?.validTo || now > new Date(contract.validTo);
+      const validToIST = contract?.validTo ? new Date(new Date(contract.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+      const isExpired = !validToIST || now > validToIST;
       const unitPrice = priceMap.get(p.partCode.trim()) ?? 0;
       const charge    = (!isExpired && contract?.freeParts) ? 0 : unitPrice;
       partsCharges    = Math.round((partsCharges + charge) * 100) / 100;
@@ -1022,13 +1023,14 @@ const completeCall = async (req, res) => {
       const contractMap = new Map();
       for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
 
-      const now = new Date();
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
       // Each part code = 1 unit, deduct stock and build log
       for (const p of parsedUsedParts) {
         const info      = partInfoMap.get(p.partCode.trim());
         const contract  = contractMap.get(p.serialNumber);
-        const isExpired = !contract?.validTo || now > new Date(contract.validTo);
+        const validToIST = contract?.validTo ? new Date(new Date(contract.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+        const isExpired = !validToIST || now > validToIST;
         const lineTotal = (!isExpired && contract?.freeParts) ? 0 : info.unitPrice;
         partsCharges    = Math.round((partsCharges + lineTotal) * 100) / 100;
 

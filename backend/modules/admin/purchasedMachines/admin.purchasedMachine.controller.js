@@ -84,8 +84,20 @@ const getAll = async (req, res) => {
 
     const allPurchases      = await PurchasedMachine.find(query).lean();
     const totalPurchased     = allPurchases.reduce((s, p) => s + p.grandTotalBase, 0);
-    const totalMachines      = allPurchases.reduce((s, p) => s + p.machines.length, 0);
+    const totalMachines      = allPurchases.reduce((s, p) => s + p.machines.reduce((ms, m) => ms + m.quantity, 0), 0);
     const avgValue           = allPurchases.length > 0 ? Math.round(totalPurchased / allPurchases.length) : 0;
+
+    let totalAvailable = 0;
+    let totalSold = 0;
+    for (const p of allPurchases) {
+      for (const m of p.machines) {
+        const codes = m.serialNumbers?.length ? m.serialNumbers : (m.partCodes || []);
+        for (const c of codes) {
+          if (c.status === "available") totalAvailable++;
+          else if (c.status === "sold") totalSold++;
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -94,6 +106,8 @@ const getAll = async (req, res) => {
       stats: {
         totalPurchased:        Math.round(totalPurchased * 100) / 100,
         totalMachinesPurchased: totalMachines,
+        totalAvailable,
+        totalSold,
         avgPurchaseValue:      avgValue,
       },
     });

@@ -546,7 +546,9 @@ const raiseServiceCall = async (req, res) => {
       if (foundEntry.disInstalled)
         return res.status(400).json({ success: false, message: `Serial number "${sn}" has already been dis-installed and cannot be used for a new call` });
 
-      const isExpired = foundEntry.contractType?.validTo && new Date(foundEntry.contractType.validTo) < new Date();
+      const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+      const validToIST = foundEntry.contractType?.validTo ? new Date(new Date(foundEntry.contractType.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
+      const isExpired = !validToIST || nowIST > validToIST;
       const notFreeService = !foundEntry.contractType?.freeService;
       const isInstallationType = callType === "Installation" || callType === "Dis-Installation";
       const requiresCharge = isInstallationType || callType === "Others" || isExpired || notFreeService;

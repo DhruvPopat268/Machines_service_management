@@ -29,7 +29,7 @@ interface PurchaseMachine {
   partCodes?: { partCode: string; status: string }[];
 }
 interface Purchase { _id: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; createdAt: string; }
-interface Stats { totalPurchased: number; totalMachinesPurchased: number; avgPurchaseValue: number; }
+interface Stats { totalPurchased: number; totalMachinesPurchased: number; totalAvailable: number; totalSold: number; avgPurchaseValue: number; }
 interface Vendor { _id: string; name: string; companyName: string; phone: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
 
@@ -609,11 +609,41 @@ const PurchaseMachinesPage = () => {
           </PageHeader>
 
           {stats && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
               {[
-                { label: "Total Purchased",          value: `₹${stats.totalPurchased.toLocaleString()}`,        icon: ShoppingBag, color: "blue" },
-                { label: "Total Items Purchased", value: stats.totalMachinesPurchased,                       icon: Package,     color: "green" },
-                { label: "Avg Purchase Value",       value: `₹${stats.avgPurchaseValue.toLocaleString()}`,      icon: ShoppingBag, color: "orange" },
+                { label: "Total Purchased",       value: `₹${stats.totalPurchased.toLocaleString()}`,   icon: ShoppingBag, color: "blue" },
+                { label: "Total Units Purchased", value: stats.totalMachinesPurchased,                  icon: Package,     color: "slate" },
+              ].map((s) => (
+                <Card key={s.label} className="border-0 shadow-sm">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div><p className="text-sm text-muted-foreground">{s.label}</p><p className="text-2xl font-bold mt-1">{s.value}</p></div>
+                      <div className={`h-12 w-12 rounded-full bg-${s.color}-100 flex items-center justify-center`}>
+                        <s.icon className={`h-6 w-6 text-${s.color}-600`} />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-muted-foreground">Available Units</p>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700">Available</span>
+                      </div>
+                      <p className="text-2xl font-bold mt-1">{stats.totalAvailable}</p>
+                    </div>
+                    <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
+                      <Package className="h-6 w-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              {[
+                { label: "Sold Units",            value: stats.totalSold,                               icon: ShoppingBag, color: "red" },
+                { label: "Avg Purchase Value",    value: `₹${stats.avgPurchaseValue.toLocaleString()}`, icon: ShoppingBag, color: "orange" },
               ].map((s) => (
                 <Card key={s.label} className="border-0 shadow-sm">
                   <CardContent className="pt-6">

@@ -185,7 +185,7 @@ const getAll = async (req, res) => {
 
     const allSales = await SoldMachine.find(query).lean();
     const totalSales = allSales.reduce((s, sale) => s + (sale.grandTotalWithGst || 0), 0);
-    const totalMachines = allSales.reduce((s, sale) => s + sale.machines.length, 0);
+    const totalMachines = allSales.reduce((s, sale) => s + sale.machines.reduce((ms, m) => ms + m.quantity, 0), 0);
     const avgValue = allSales.length > 0 ? Math.round((totalSales / allSales.length) * 100) / 100 : 0;
 
     res.status(200).json({
@@ -1241,8 +1241,8 @@ const customerPaymentReceipts = async (req, res) => {
 
 const getContractExpiryStatus = async (req, res) => {
   try {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const today = new Date(nowIST.getFullYear(), nowIST.getMonth(), nowIST.getDate());
     const days = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
     const inNDays = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
@@ -1260,7 +1260,7 @@ const getContractExpiryStatus = async (req, res) => {
         for (const sn of (machine.serialNumbers || [])) {
           const ct = sn.contractType;
           if (!ct?.validTo) continue;
-          const validTo = new Date(ct.validTo);
+          const validToIST = new Date(new Date(ct.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
           const item = {
             machineName: machine.machineName,
             modelNumber: machine.modelNumber,
@@ -1269,8 +1269,8 @@ const getContractExpiryStatus = async (req, res) => {
             validFrom: ct.validFrom,
             validTo: ct.validTo,
           };
-          if (validTo < today) customerMap[key].expired.push(item);
-          else if (validTo <= inNDays) customerMap[key].expiringSoon.push(item);
+          if (validToIST < today) customerMap[key].expired.push(item);
+          else if (validToIST <= inNDays) customerMap[key].expiringSoon.push(item);
         }
       }
     }
@@ -1288,8 +1288,8 @@ const sendContractExpiryAlerts = async (req, res) => {
     if (!cronKey || cronKey !== process.env.CRON_JOB_KEY)
       return res.status(403).json({ success: false, message: "Access denied" });
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // start of today, no time
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const today = new Date(nowIST.getFullYear(), nowIST.getMonth(), nowIST.getDate());
     const days = parseInt(process.env.CONTRACT_EXPIRY_SOON_DAYS) || 30;
     const in30Days = new Date(today.getTime() + days * 24 * 60 * 60 * 1000);
 
@@ -1313,7 +1313,7 @@ const sendContractExpiryAlerts = async (req, res) => {
         for (const sn of (machine.serialNumbers || [])) {
           const ct = sn.contractType;
           if (!ct?.validTo) continue;
-          const validTo = new Date(ct.validTo);
+          const validToIST = new Date(new Date(ct.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
           const item = {
             machineName: machine.machineName,
             serialNumber: sn.serialNumber,
@@ -1321,9 +1321,9 @@ const sendContractExpiryAlerts = async (req, res) => {
             validFrom: ct.validFrom,
             validTo: ct.validTo,
           };
-          if (validTo < today) {
+          if (validToIST < today) {
             customerMap[key].expired.push(item);
-          } else if (validTo <= in30Days) {
+          } else if (validToIST <= in30Days) {
             customerMap[key].expiringSoon.push(item);
           }
         }

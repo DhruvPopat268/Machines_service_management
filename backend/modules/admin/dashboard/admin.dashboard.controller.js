@@ -59,11 +59,11 @@ const getStats = async (req, res) => {
       Machine.countDocuments({ stockStatus: { $in: ["Low Stock", "Out of Stock"] } }),
       PurchasedMachine.aggregate([
         { $match: dateCreated },
-        { $group: { _id: null, totalAmount: { $sum: "$grandTotal" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
+        { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
       ]),
       SoldMachine.aggregate([
         { $match: dateCreated },
-        { $group: { _id: null, totalAmount: { $sum: "$grandTotal" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
+        { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
       ]),
     ]);
 
@@ -287,7 +287,7 @@ const getAccountCharts = async (req, res) => {
         { $match: accountFilter },
         { $unwind: "$machines" },
         { $match: { "machines.category": { $nin: [null, ""] } } },
-        { $group: { _id: "$machines.category", purchaseAmount: { $sum: "$machines.buyingTotal" } } },
+        { $group: { _id: "$machines.category", purchaseAmount: { $sum: "$machines.buyingTotalBase" } } },
         { $project: { _id: 0, category: "$_id", purchaseAmount: 1 } },
       ]),
       // Category-wise Sale
@@ -295,7 +295,7 @@ const getAccountCharts = async (req, res) => {
         { $match: accountFilter },
         { $unwind: "$machines" },
         { $match: { "machines.category": { $nin: [null, ""] } } },
-        { $group: { _id: "$machines.category", saleAmount: { $sum: "$machines.sellingTotal" } } },
+        { $group: { _id: "$machines.category", saleAmount: { $sum: "$machines.sellingTotalBase" } } },
         { $project: { _id: 0, category: "$_id", saleAmount: 1 } },
       ]),
       // Division-wise Purchase
@@ -303,7 +303,7 @@ const getAccountCharts = async (req, res) => {
         { $match: accountFilter },
         { $unwind: "$machines" },
         { $match: { "machines.division": { $nin: [null, ""] } } },
-        { $group: { _id: "$machines.division", purchaseAmount: { $sum: "$machines.buyingTotal" } } },
+        { $group: { _id: "$machines.division", purchaseAmount: { $sum: "$machines.buyingTotalBase" } } },
         { $project: { _id: 0, division: "$_id", purchaseAmount: 1 } },
       ]),
       // Division-wise Sale
@@ -311,7 +311,7 @@ const getAccountCharts = async (req, res) => {
         { $match: accountFilter },
         { $unwind: "$machines" },
         { $match: { "machines.division": { $nin: [null, ""] } } },
-        { $group: { _id: "$machines.division", saleAmount: { $sum: "$machines.sellingTotal" } } },
+        { $group: { _id: "$machines.division", saleAmount: { $sum: "$machines.sellingTotalBase" } } },
         { $project: { _id: 0, division: "$_id", saleAmount: 1 } },
       ]),
       // Top 5 Vendors
@@ -319,7 +319,7 @@ const getAccountCharts = async (req, res) => {
         { $match: accountFilter },
         { $addFields: { vendorLabel: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$vendorInfo.companyName", ""] } }, 0] }, "$vendorInfo.companyName", "$vendorInfo.name"] } } },
         { $match: { vendorLabel: { $nin: [null, ""] } } },
-        { $group: { _id: "$vendorLabel", totalAmount: { $sum: "$grandTotal" } } },
+        { $group: { _id: "$vendorLabel", totalAmount: { $sum: "$grandTotalBase" } } },
         { $sort: { totalAmount: -1 } },
         { $limit: 5 },
         { $project: { _id: 0, vendor: "$_id", totalAmount: 1 } },
@@ -327,7 +327,7 @@ const getAccountCharts = async (req, res) => {
       // Top 5 Customers
       SoldMachine.aggregate([
         { $match: { ...accountFilter, "customerInfo.customerId": { $nin: [null, ""] } } },
-        { $group: { _id: "$customerInfo.customerId", totalAmount: { $sum: "$grandTotal" } } },
+        { $group: { _id: "$customerInfo.customerId", totalAmount: { $sum: "$grandTotalBase" } } },
         { $sort: { totalAmount: -1 } },
         { $limit: 5 },
         { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "cust" } },
@@ -336,12 +336,12 @@ const getAccountCharts = async (req, res) => {
       // Monthly Purchase Trend
       PurchasedMachine.aggregate([
         { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
-        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, purchaseAmount: { $sum: "$grandTotal" } } },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, purchaseAmount: { $sum: "$grandTotalBase" } } },
       ]),
       // Monthly Sale Trend
       SoldMachine.aggregate([
         { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
-        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, saleAmount: { $sum: "$grandTotal" } } },
+        { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, saleAmount: { $sum: "$grandTotalBase" } } },
       ]),
       // Contract Type-wise Sales
       SoldMachine.aggregate([
@@ -351,7 +351,7 @@ const getAccountCharts = async (req, res) => {
         { $match: { "machines.serialNumbers.contractType.name": { $nin: [null, ""] } } },
         { $group: {
           _id: { docId: "$_id", machineId: "$machines.machineId", contractType: "$machines.serialNumbers.contractType.name" },
-          sellingTotal: { $first: "$machines.sellingTotal" },
+          sellingTotal: { $first: "$machines.sellingTotalBase" },
         }},
         { $group: { _id: "$_id.contractType", totalAmount: { $sum: "$sellingTotal" } } },
         { $project: { _id: 0, name: "$_id", totalAmount: 1 } },
