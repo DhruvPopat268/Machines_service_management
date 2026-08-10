@@ -1471,7 +1471,7 @@ const completeCall = async (req, res) => {
                 ...(minCopies ? [`Min Required: <strong>${minCopies.minCopies}</strong>`] : []),
                 ...(minCopies ? [`Remaining: <strong>${minCopies.diff}</strong> &nbsp;@&nbsp; ₹${fmt(minCopies.costPerPage)}/copy = <strong>₹${fmt(minCopies.chargesInRupees)}</strong>`] : []),
               ].join(' &nbsp;|&nbsp; ');
-              rows.push(`<tr class="machine-summary-row"><td colspan="7" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-size:11px;color:#333;">${summaryParts}</td><td class="right" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-weight:700;font-size:12px;border-left:1px solid #ddd;">₹${fmt(machineTotal)}</td></tr>`);
+              rows.push(`<tr class="machine-summary-row"><td colspan="7" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-size:11px;color:#333;">${summaryParts}</td><td class="right" style="padding:6px 10px;background:#f5f5f5;border-top:1px solid #ccc;font-weight:700;font-size:12px;border-left:1px solid #ddd;">${minCopies ? `₹${fmt(minCopies.chargesInRupees)}` : `-`}</td></tr>`);
               rows.push(`<tr><td colspan="8" style="height:6px;border-bottom:2px solid #111;"></td></tr>`);
             }
             html = html.replace("{{tableRows}}", rows.join(""));

@@ -1029,8 +1029,8 @@ const getCounterReadingInvoice = async (req, res) => {
         ` : ''
         }
         <tr style="border-top:1px solid #ddd;">
-          <td style="font-weight:700;padding:2px 12px 0 0;font-size:11px;">Total Charges</td>
-          <td style="text-align:right;font-weight:700;font-size:12px;padding:2px 0 0 0;">&#8377;${fmt(machineTotal)}</td>
+          <td style="font-weight:700;padding:2px 12px 0 0;font-size:11px;">Remaining Charges</td>
+          <td style="text-align:right;font-weight:700;font-size:12px;padding:2px 0 0 0;">${minCopies ? `&#8377;${fmt(minCopies.chargesInRupees)}` : `-`}</td>
         </tr>
       </table>
     </div>
