@@ -25,5 +25,6 @@ router.use("/expenses", require("./expenseCategoriesManagement/admin.expenseCate
 router.use("/add-expenses", require("./addExpense/admin.expense.routes"));
 router.use("/gst-config", require("./gstConfig/admin.gstConfig.routes"));
 router.use("/payment-transactions", require("./paymentTransactions/admin.paymentTransaction.routes"));
+router.use("/flow-shortcut", require("./flowShortcut/admin.flowShortcut.routes"));
 
 module.exports = router;
