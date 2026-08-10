@@ -294,6 +294,8 @@ const getReimbursementPreview = async (req, res) => {
     const engineerId = req.engineer.id;
     const { callId, purpose = "Service Call", currentLocation } = req.body;
 
+    console.log(`[getReimbursementPreview] engineerId: ${engineerId}, callId: ${callId}, purpose: ${purpose}, currentLocation: ${JSON.stringify(currentLocation)}`);
+
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
 
