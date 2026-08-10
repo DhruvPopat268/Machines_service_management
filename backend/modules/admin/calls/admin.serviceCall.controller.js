@@ -883,7 +883,7 @@ const getCounterReadingInvoice = async (req, res) => {
 
     const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const basicTotal = call.totalCounterReadingCharges ?? call.totalCharges ?? 0;
+    const basicTotal = Math.round(((call.totalServiceCharges ?? 0) + (call.totalCounterReadingCharges ?? 0)) * 100) / 100;
     const cgstPercent = call.cgst?.percent ?? 0;
     const sgstPercent = call.sgst?.percent ?? 0;
     const igstPercent = call.igst?.percent ?? 0;
@@ -946,6 +946,10 @@ const getCounterReadingInvoice = async (req, res) => {
     // Build table rows
     const rows = [];
     for (const machine of call.machines) {
+      const sc = machine.serviceCharge ?? 0;
+      if (sc > 0) {
+        rows.push(`<tr><td colspan="2" style="font-weight:600;">${machine.machineName}${machine.serialNumber ? ` <span style="font-size:10px;font-weight:400;color:#555;">(S/N: ${machine.serialNumber})</span>` : ""}</td><td>Service Charge</td><td class="right">-</td><td class="right">-</td><td class="right">-</td><td class="right">-</td><td class="right">${fmt(sc)}</td></tr>`);
+      }
       const cr = machine.counterReadings?.[0];
       if (!cr || !cr.categories?.length) continue;
 

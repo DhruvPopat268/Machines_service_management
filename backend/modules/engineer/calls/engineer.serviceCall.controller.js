@@ -1318,7 +1318,7 @@ const completeCall = async (req, res) => {
     const cgstPercent       = call.cgst?.percent ?? 0;
     const sgstPercent       = call.sgst?.percent ?? 0;
     const igstPercent       = call.igst?.percent ?? 0;
-    const basicTotal        = isCounterReading ? totalCounterReadingCharges : totalCharges;
+    const basicTotal        = isCounterReading ? Math.round((totalServiceCharges + totalCounterReadingCharges) * 100) / 100 : totalCharges;
     const cgstAmount        = parseFloat(((basicTotal * cgstPercent) / 100).toFixed(2));
     const sgstAmount        = parseFloat(((basicTotal * sgstPercent) / 100).toFixed(2));
     const igstAmount        = parseFloat(((basicTotal * igstPercent) / 100).toFixed(2));
@@ -1377,7 +1377,7 @@ const completeCall = async (req, res) => {
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-          const basicTotal  = isCR ? (updatedCall.totalCounterReadingCharges ?? updatedCall.totalCharges ?? 0) : (updatedCall.totalCharges ?? 0);
+          const basicTotal  = isCR ? Math.round(((updatedCall.totalServiceCharges ?? 0) + (updatedCall.totalCounterReadingCharges ?? 0)) * 100) / 100 : (updatedCall.totalCharges ?? 0);
           const cgstPercent = updatedCall.cgst?.percent ?? 0;
           const sgstPercent = updatedCall.sgst?.percent ?? 0;
           const igstPercent = updatedCall.igst?.percent ?? 0;
@@ -1448,6 +1448,10 @@ const completeCall = async (req, res) => {
           if (isCR) {
             const rows = [];
             for (const machine of updatedCall.machines) {
+              const sc = machine.serviceCharge ?? 0;
+              if (sc > 0) {
+                rows.push(`<tr><td colspan="2" style="font-weight:600;">${machine.machineName}${machine.serialNumber ? ` <span style="font-size:10px;font-weight:400;color:#555;">(S/N: ${machine.serialNumber})</span>` : ""}</td><td>Service Charge</td><td class="right">-</td><td class="right">-</td><td class="right">-</td><td class="right">-</td><td class="right">${fmt(sc)}</td></tr>`);
+              }
               const cr = machine.counterReadings?.[0];
               if (!cr || !cr.categories?.length) continue;
               const categories   = cr.categories;
