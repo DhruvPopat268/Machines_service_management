@@ -985,7 +985,7 @@ const completeCall = async (req, res) => {
       const partInfoMap = new Map();
       for (const record of purchaseRecords) {
         for (const machine of record.machines) {
-          const unitPrice = machine.discountedSellingPrice ?? machine.sellingPrice ?? 0;
+          const unitPrice = machine.sellingPriceBase ?? 0;
           for (const entry of (machine.partCodes || [])) {
             if (partCodesList.includes(entry.partCode.trim())) {
               if (entry.status === "sold")
@@ -1045,7 +1045,6 @@ const completeCall = async (req, res) => {
           categoryId:             info.categoryId,
           category:               info.category,
           sellingPriceBase:       info.sellingPriceBase,
-          total:                  lineTotal,
         });
 
         // Deduct 1 unit of stock
@@ -1309,7 +1308,7 @@ const completeCall = async (req, res) => {
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
       const mParts       = variantPartsMap.get(m.serialNumber) || [];
-      const mPartsCharge = Math.round(mParts.reduce((s, p) => s + p.total, 0) * 100) / 100;
+      const mPartsCharge = Math.round(mParts.reduce((s, p) => s + (p.sellingPriceBase ?? 0), 0) * 100) / 100;
       machineSetFields[`machines.${idx}.partsCharge`]         = mPartsCharge;
       machineSetFields[`machines.${idx}.usedParts`]           = mParts;
       machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(m.serialNumber) ? [counterReadingsMap.get(m.serialNumber)] : [];
@@ -1495,9 +1494,9 @@ const completeCall = async (req, res) => {
                   rows.push(row);
                 }
                 for (const part of (machine.usedParts || [])) {
-                  const qty    = part.quantity ?? 1;
-                  const rate   = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
-                  const amount = part.total ?? (qty * rate);
+                  const qty    = 1;
+                  const rate   = part.sellingPriceBase ?? 0;
+                  const amount = rate;
                   let row = rowTemplate
                     .replace(/{{srNo}}/g,        srNo++)
                     .replace(/{{machineName}}/g, part.machineName || "")

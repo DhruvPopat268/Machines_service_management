@@ -800,9 +800,9 @@ const getServiceCallInvoice = async (req, res) => {
       // Rows: one per used part across all machines
       for (const machine of call.machines) {
         for (const part of (machine.usedParts || [])) {
-          const qty = part.quantity ?? 1;
-          const rate = part.sellingPrice ?? part.discountedSellingPrice ?? 0;
-          const amount = part.total ?? (qty * rate);
+          const qty = 1;
+          const rate = part.sellingPriceBase ?? 0;
+          const amount = rate;
           let row = rowTemplate
             .replace(/{{srNo}}/g, srNo++)
             .replace(/{{machineName}}/g, part.machineName || "")

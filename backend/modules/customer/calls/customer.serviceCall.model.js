@@ -67,9 +67,7 @@ const usedPartSchema = new mongoose.Schema(
     hsnCode:                { type: String, trim: true, default: "" },
     categoryId:             { type: mongoose.Schema.Types.ObjectId, default: null },
     category:               { type: String, trim: true, default: "" },
-    sellingPrice:           { type: Number, default: 0 },
-    discountedSellingPrice: { type: Number, default: 0 },
-    total:                  { type: Number, default: 0 },
+    sellingPriceBase:       { type: Number, default: 0 },
   },
   { _id: false }
 );
