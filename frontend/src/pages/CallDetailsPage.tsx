@@ -442,16 +442,22 @@ const CallDetailsPage = () => {
             </div>
             <div className="flex justify-end px-6 py-4 border-t">
               <div className="w-64 text-sm space-y-2">
+                {(call as any).totalServiceCharges > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Service Charges</span>
+                    <span className="font-medium text-green-600">₹{(call as any).totalServiceCharges}</span>
+                  </div>
+                )}
                 {(call as any).totalCounterReadingCharges !== undefined && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Counter Reading Charges</span>
                     <span className="font-medium text-blue-600">₹{(call as any).totalCounterReadingCharges}</span>
                   </div>
                 )}
-                {(call as any).totalCharges !== undefined && (
+                {(call as any).totalCounterReadingCharges !== undefined && (
                   <div className="flex justify-between border-t pt-2">
                     <span className="text-muted-foreground">Basic Total</span>
-                    <span className="font-medium">₹{(call as any).totalCharges}</span>
+                    <span className="font-medium">₹{((call as any).totalServiceCharges ?? 0) + ((call as any).totalCounterReadingCharges ?? 0)}</span>
                   </div>
                 )}
                 {(call as any).cgst?.percent > 0 && (

@@ -1396,17 +1396,8 @@ const completeCall = async (req, res) => {
           const invoiceLogoUrl  = process.env.INVOICE_LOGO_URL  || "";
           const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
 
-          const templatePath = path.join(__dirname, `../../../invoicesExamples/${isCR ? "counter-reading-invoice" : "sales-invoice"}.html`);
+          const templatePath = path.join(__dirname, `../../../invoicesExamples/${isCR ? "counter-reading-invoice" : "service-call-invoice"}.html`);
           let html = await fs.readFile(templatePath, "utf-8");
-
-          if (!isCR) {
-            html = html
-              .replace(`<th>Description</th>`, `<th>Description</th>\n          <th style="width:120px;">Machine S/N</th>`)
-              .replace(
-                `<td>\n            <div class="item-name">{{machineName}}</div>\n            {{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}\n            {{#if serials}}<div class="item-serials">{{serialLabel}}: {{serials}}</div>{{/if}}\n          </td>`,
-                `<td><div class="item-name">{{machineName}}</div>{{#if modelNumber}}<div class="item-model">Model: {{modelNumber}}</div>{{/if}}{{#if partCode}}<div class="item-serials">P/C: {{partCode}}</div>{{/if}}</td>\n          <td style="font-size:11px;">{{machineSN}}</td>`
-              );
-          }
 
           html = html
             .replace(/{{invoiceNumber}}/g,     invoiceNumber)
@@ -1476,51 +1467,39 @@ const completeCall = async (req, res) => {
             }
             html = html.replace("{{tableRows}}", rows.join(""));
           } else {
-            const machineRowsMatch = html.match(/{{#each machines}}([\s\S]*?){{\/each}}/);
-            if (machineRowsMatch) {
-              const rowTemplate = machineRowsMatch[1];
-              const rows = [];
-              let srNo = 1;
-              for (const machine of updatedCall.machines) {
-                const sc = machine.serviceCharge ?? 0;
-                if (sc > 0) {
-                  let row = rowTemplate
-                    .replace(/{{srNo}}/g,        srNo++)
-                    .replace(/{{machineName}}/g, "Service Charge")
-                    .replace(/{{hsnCode}}/g,     machine.hsnCode || "-")
-                    .replace(/{{quantity}}/g,    "-")
-                    .replace(/{{rate}}/g,        fmt(sc))
-                    .replace(/{{amount}}/g,      fmt(sc))
-                    .replace(/{{machineSN}}/g,   machine.serialNumber || "-");
-                  row = row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
-                  row = row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
-                  row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
-                  rows.push(row);
-                }
-                for (const part of (machine.usedParts || [])) {
-                  const qty    = 1;
-                  const rate   = part.sellingPriceBase ?? 0;
-                  const amount = rate;
-                  let row = rowTemplate
-                    .replace(/{{srNo}}/g,        srNo++)
-                    .replace(/{{machineName}}/g, part.machineName || "")
-                    .replace(/{{hsnCode}}/g,     part.hsnCode || "")
-                    .replace(/{{quantity}}/g,    qty)
-                    .replace(/{{rate}}/g,        fmt(rate))
-                    .replace(/{{amount}}/g,      fmt(amount))
-                    .replace(/{{machineSN}}/g,   machine.serialNumber || "");
-                  row = part.modelNumber
-                    ? row.replace(/{{#if modelNumber}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, part.modelNumber)
-                    : row.replace(/{{#if modelNumber}}[\s\S]*?{{\/if}}/g, "");
-                  row = part.partCode
-                    ? row.replace(/{{#if partCode}}([\s\S]*?){{\/if}}/g, "$1").replace(/{{partCode}}/g, part.partCode)
-                    : row.replace(/{{#if partCode}}[\s\S]*?{{\/if}}/g, "");
-                  row = row.replace(/{{#if serials}}[\s\S]*?{{\/if}}/g, "");
-                  rows.push(row);
-                }
+            const rows = [];
+            let srNo = 1;
+            for (const machine of updatedCall.machines) {
+              const sc = machine.serviceCharge ?? 0;
+              if (sc > 0) {
+                rows.push(`<tr>
+                  <td>${srNo++}</td>
+                  <td><div class="item-name">Service Charge</div></td>
+                  <td style="font-size:11px;">${machine.serialNumber || "-"}</td>
+                  <td>${machine.hsnCode || "-"}</td>
+                  <td class="right">-</td>
+                  <td class="right">${fmt(sc)}</td>
+                  <td class="right">${fmt(sc)}</td>
+                </tr>`);
               }
-              html = html.replace(/{{#each machines}}[\s\S]*?{{\/each}}/, rows.join(""));
+              for (const part of (machine.usedParts || [])) {
+                const rate = part.sellingPriceBase ?? 0;
+                rows.push(`<tr>
+                  <td>${srNo++}</td>
+                  <td>
+                    <div class="item-name">${part.machineName || ""}</div>
+                    ${part.modelNumber ? `<div class="item-model">Model: ${part.modelNumber}</div>` : ""}
+                    ${part.partCode ? `<div class="item-partcode">P/C: ${part.partCode}</div>` : ""}
+                  </td>
+                  <td style="font-size:11px;">${machine.serialNumber || ""}</td>
+                  <td>${part.hsnCode || ""}</td>
+                  <td class="right">1</td>
+                  <td class="right">${fmt(rate)}</td>
+                  <td class="right">${fmt(rate)}</td>
+                </tr>`);
+              }
             }
+            html = html.replace("{{tableRows}}", rows.join(""));
           }
 
           const DOCS_DIR = process.env.NODE_ENV === "production"
