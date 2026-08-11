@@ -127,7 +127,7 @@ const getAvailableCodes = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, zoneId, category, division, machineId, paymentStatus, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, paymentStatus, processedBy, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -163,6 +163,11 @@ const getAll = async (req, res) => {
     if (paymentStatus && ["Paid", "Unpaid", "Partial-Paid"].includes(paymentStatus))
       query.currentPaymentStatus = paymentStatus;
 
+    if (processedBy) {
+      const ids = String(processedBy).split(",").filter(id => mongoose.isValidObjectId(id.trim())).map(id => new mongoose.Types.ObjectId(id.trim()));
+      if (ids.length > 0) query.processedBy = { $in: ids };
+    }
+
     if (fromDate || toDate) {
       const parseIST = (ddmmyy, endOfDay = false) => {
         const [dd, mm, yy] = ddmmyy.split("/");
@@ -179,7 +184,7 @@ const getAll = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const [sales, total] = await Promise.all([
-      SoldMachine.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+      SoldMachine.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).populate("processedBy", "name"),
       SoldMachine.countDocuments(query),
     ]);
 
@@ -209,7 +214,7 @@ const getById = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid sale ID" });
 
-    const sale = await SoldMachine.findById(id);
+    const sale = await SoldMachine.findById(id).populate("processedBy", "name");
     if (!sale)
       return res.status(404).json({ success: false, message: "Sale not found" });
 
@@ -305,6 +310,7 @@ const createSale = async (req, res) => {
     const machineEntries = [];
     let grandTotalBase = 0;
     let grandTotalWithGst = 0;
+    let cogsTotalBase = 0;
 
     for (const m of machines) {
       const machine = await Machine.findById(m.machineId)
@@ -346,13 +352,35 @@ const createSale = async (req, res) => {
         sellingTotalWithGst,
       };
 
+      const purchaseDocs = await PurchasedMachine.find(
+        { "machines.machineId": machine._id },
+        { "machines": 1 }
+      ).session(session).lean();
+
+      const getMachineEntry = (code, field) => {
+        for (const doc of purchaseDocs) {
+          for (const me of doc.machines) {
+            if (me.machineId?.toString() !== machine._id.toString()) continue;
+            const found = (me[field] || []).find(e =>
+              (field === "serialNumbers" ? e.serialNumber : e.partCode)?.toUpperCase() === code.toUpperCase()
+            );
+            if (found) return me.buyingPriceBase ?? 0;
+          }
+        }
+        return 0;
+      };
+
       if (isParts) {
-        entryData.partCodes = (m.partCodes || []).map(c => ({ partCode: c.trim(), contractType: null }));
+        entryData.partCodes = (m.partCodes || []).map(c => {
+          const bp = getMachineEntry(c.trim(), "partCodes");
+          cogsTotalBase = Math.round((cogsTotalBase + bp) * 100) / 100;
+          return { partCode: c.trim(), buyingPriceBase: bp, contractType: null };
+        });
       } else {
         entryData.serialNumbers = await Promise.all((m.serialNumbers || []).map(async (sEntry) => {
           const ct = await ContractType.findById(sEntry.contractTypeId).session(session);
-          if (!ct) throw new Error(`Contract type "${sEntry.contractTypeId}" not found`);
-          if (ct.status === "Inactive") throw new Error(`Contract type "${ct.name}" is inactive`);
+          if (!ct) throw new Error(`Contract type \"${sEntry.contractTypeId}\" not found`);
+          if (ct.status === "Inactive") throw new Error(`Contract type \"${ct.name}\" is inactive`);
           const validFrom = new Date(sEntry.validFrom);
           const validTo = new Date(sEntry.validTo);
           if (isNaN(validFrom.getTime())) throw new Error(`Invalid validFrom for serial ${sEntry.serialNumber}`);
@@ -363,8 +391,8 @@ const createSale = async (req, res) => {
           if (TSS_CONTRACT_TYPE_ID && ct._id.toString() === TSS_CONTRACT_TYPE_ID) {
             pagesCategories = await Promise.all((sEntry.pagesCategories || []).map(async (pc) => {
               const cat = await PagesCategory.findById(pc.pagesCategoryId).session(session);
-              if (!cat) throw new Error(`Pages category "${pc.pagesCategoryId}" not found`);
-              if (cat.status === "Inactive") throw new Error(`Pages category "${cat.name}" is inactive`);
+              if (!cat) throw new Error(`Pages category \"${pc.pagesCategoryId}\" not found`);
+              if (cat.status === "Inactive") throw new Error(`Pages category \"${cat.name}\" is inactive`);
               return {
                 pagesCategoryId: cat._id,
                 pagesCategory: cat.name,
@@ -373,8 +401,12 @@ const createSale = async (req, res) => {
             }));
           }
 
+          const bp = getMachineEntry(sEntry.serialNumber, "serialNumbers");
+          cogsTotalBase = Math.round((cogsTotalBase + bp) * 100) / 100;
+
           return {
             serialNumber: sEntry.serialNumber.trim(),
+            buyingPriceBase: bp,
             minCopies: Number(sEntry.minCopies) || 0,
             contractType: {
               contractTypeId: ct._id,
@@ -393,7 +425,7 @@ const createSale = async (req, res) => {
       machineEntries.push(entryData);
     }
 
-    const { currentPaymentStatus, paidAmount: rawPaidAmount, paymentDate, paymentMethod, companyId } = req.body;
+    const { currentPaymentStatus, paidAmount: rawPaidAmount, paymentDate, paymentMethod, companyId, processedBy } = req.body;
     let paidAmount = 0;
     let remainingAmount = grandTotalWithGst;
 
@@ -406,7 +438,7 @@ const createSale = async (req, res) => {
       remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
     }
 
-    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, currentPaymentStatus, paidAmount, remainingAmount }], { session });
+    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, cogsTotalBase, currentPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
 
     let transactionId = null;
     if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {

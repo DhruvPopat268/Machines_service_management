@@ -25,6 +25,7 @@ const pagesCategoryEntrySchema = new mongoose.Schema(
 const serialNumberEntrySchema = new mongoose.Schema(
   {
     serialNumber:    { type: String, trim: true, required: true },
+    buyingPriceBase: { type: Number, default: 0 },
     minCopies:       { type: Number, default: 0 },
     contractType:    { type: contractTypeSnapshotSchema, default: null },
     pagesCategories: { type: [pagesCategoryEntrySchema], default: [] },
@@ -35,8 +36,9 @@ const serialNumberEntrySchema = new mongoose.Schema(
 
 const partCodeEntrySchema = new mongoose.Schema(
   {
-    partCode:     { type: String, trim: true, required: true },
-    contractType: { type: contractTypeSnapshotSchema, default: null },
+    partCode:        { type: String, trim: true, required: true },
+    buyingPriceBase: { type: Number, default: 0 },
+    contractType:    { type: contractTypeSnapshotSchema, default: null },
   },
   { _id: false }
 );
@@ -84,6 +86,7 @@ const soldMachineSchema = new mongoose.Schema(
     },
     grandTotalBase:    { type: Number, default: 0 },
     grandTotalWithGst: { type: Number, default: 0 },
+    cogsTotalBase:     { type: Number, default: 0 },
     cgst:             { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
     sgst:             { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
     igst:             { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
@@ -99,6 +102,7 @@ const soldMachineSchema = new mongoose.Schema(
       gstNumber:  { type: String, trim: true, uppercase: true, default: "" },
     },
     machines:             { type: [soldMachineEntrySchema], required: true },
+    processedBy:          { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" }], default: [] },
     currentPaymentStatus: { type: String, enum: ["Paid", "Unpaid", "Partial-Paid"], default: "Unpaid" },
     paidAmount:           { type: Number, default: 0 },
     remainingAmount:      { type: Number, default: 0 },

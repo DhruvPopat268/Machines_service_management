@@ -93,6 +93,29 @@ const CustomerMachineDetailPage = () => {
   const [liveAddress, setLiveAddress] = useState<string | null>(null);
   const displayAddress = customerLocation?.address || liveAddress || customerInfo?.address || "—";
 
+  // Customer info override
+  const [customerInfoDialog, setCustomerInfoDialog] = useState(false);
+  const [customerInfoOverride, setCustomerInfoOverride] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const [customerInfoDraft, setCustomerInfoDraft] = useState({ name: "", phone: "", email: "" });
+
+  const openCustomerInfoDialog = () => {
+    const base = customerInfoOverride || { name: customerInfo?.name || "", phone: customerInfo?.phone || "", email: customerInfo?.email || "" };
+    setCustomerInfoDraft({ ...base });
+    setCustomerInfoDialog(true);
+  };
+
+  const confirmCustomerInfo = () => {
+    if (!customerInfoDraft.name.trim()) { toast.error("Name is required"); return; }
+    if (!/^[0-9]{10}$/.test(customerInfoDraft.phone.trim())) { toast.error("Phone must be exactly 10 digits"); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerInfoDraft.email.trim())) { toast.error("Invalid email"); return; }
+    const isChanged =
+      customerInfoDraft.name.trim()                !== customerInfo?.name ||
+      customerInfoDraft.phone.trim()               !== customerInfo?.phone ||
+      customerInfoDraft.email.trim().toLowerCase() !== customerInfo?.email;
+    setCustomerInfoOverride(isChanged ? { name: customerInfoDraft.name.trim(), phone: customerInfoDraft.phone.trim(), email: customerInfoDraft.email.trim().toLowerCase() } : null);
+    setCustomerInfoDialog(false);
+  };
+
   // Load problem types once
   useEffect(() => {
     api.get("/admin/problem-types", { params: { limit: 100, status: "Active" } })
@@ -360,6 +383,10 @@ const CustomerMachineDetailPage = () => {
     fd.append("customerId", customerInfo!.customerId);
     fd.append("callType", callType);
     if (customerLocation) fd.append("customerLocation", JSON.stringify(customerLocation));
+    if (customerInfoOverride) {
+      fd.append("isCustomerInfoChanged", "true");
+      fd.append("customerInfo", JSON.stringify(customerInfoOverride));
+    }
 
     const machinesPayload = machines.map((m, i) => ({
       serialNumber:     m.detail.machine.serialNumber,
@@ -446,6 +473,10 @@ const CustomerMachineDetailPage = () => {
     fd.append("customerId", customerInfo!.customerId);
     fd.append("callType", callType);
     if (customerLocation) fd.append("customerLocation", JSON.stringify(customerLocation));
+    if (customerInfoOverride) {
+      fd.append("isCustomerInfoChanged", "true");
+      fd.append("customerInfo", JSON.stringify(customerInfoOverride));
+    }
 
     const machinesPayload = machines.map((m, i) => ({
       serialNumber:     m.detail.machine.serialNumber,
@@ -484,13 +515,50 @@ const CustomerMachineDetailPage = () => {
       {/* Customer Info (visible after first machine is added) */}
       {customerInfo && (
         <Card className="border-0 shadow-sm bg-muted/40">
-          <CardContent className="pt-4 pb-4 px-0">
-            <p className="text-xs text-muted-foreground mb-1">Customer</p>
-            <p className="font-semibold">{customerInfo.name}</p>
-            <p className="text-sm text-muted-foreground">{customerInfo.phone}</p>
+          <CardContent className="pt-4 pb-4 px-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Customer</p>
+                <p className="font-semibold">{customerInfoOverride?.name || customerInfo.name}</p>
+                <p className="text-sm text-muted-foreground">{customerInfoOverride?.phone || customerInfo.phone}</p>
+                <p className="text-sm text-muted-foreground">{customerInfoOverride?.email || customerInfo.email}</p>
+                {customerInfoOverride && (
+                  <p className="text-xs text-orange-600 mt-1 font-medium">Info overridden for this call</p>
+                )}
+              </div>
+              <Button variant="outline" size="sm" className="h-7 text-xs shrink-0" onClick={openCustomerInfoDialog}>Change</Button>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Customer Info Dialog */}
+      <Dialog open={customerInfoDialog} onOpenChange={setCustomerInfoDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Customer Info</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Changes here only apply to this service call, not the customer's profile.</p>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={customerInfoDraft.name} onChange={e => setCustomerInfoDraft(p => ({ ...p, name: e.target.value }))} placeholder="Customer name" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone</Label>
+              <Input value={customerInfoDraft.phone} onChange={e => setCustomerInfoDraft(p => ({ ...p, phone: e.target.value }))} placeholder="10 digit phone" maxLength={10} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input value={customerInfoDraft.email} onChange={e => setCustomerInfoDraft(p => ({ ...p, email: e.target.value }))} placeholder="Email address" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCustomerInfoDialog(false)}>Cancel</Button>
+            <Button onClick={confirmCustomerInfo}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Location Dialog */}
       <Dialog open={locationDialogOpen} onOpenChange={setLocationDialogOpen}>

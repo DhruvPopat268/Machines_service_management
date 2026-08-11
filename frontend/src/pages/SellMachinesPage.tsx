@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -49,6 +49,8 @@ interface UnitRow {
   minCopies: string;
   pagesCategories: PagesCategoryEntry[];
 }
+
+interface Engineer { _id: string; name: string; engineerId?: string; }
 
 interface MachineEntry {
   machine: Machine;
@@ -92,6 +94,11 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [totalGst, setTotalGst] = useState<number | null>(null);
   const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [processedByDialog, setProcessedByDialog] = useState(false);
+  const [engineers, setEngineers] = useState<Engineer[]>([]);
+  const [selectedEngineers, setSelectedEngineers] = useState<string[]>([]);
+  const [engineerSearch, setEngineerSearch] = useState("");
+  const [loadingEngineers, setLoadingEngineers] = useState(false);
   const [outstanding, setOutstanding] = useState<{ _id: string; invoiceNumber: string; grandTotalWithGst: number; paidAmount: number; remainingAmount: number; currentPaymentStatus: string }[]>([]);
   const [outstandingTotal, setOutstandingTotal] = useState(0);
   const [outstandingPopover, setOutstandingPopover] = useState(false);
@@ -161,6 +168,17 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       .then(r => { setOutstanding(r.data.data); setOutstandingTotal(r.data.totalRemaining); })
       .catch(() => {});
   }, [customerId]);
+
+  const fetchEngineers = async (q = "") => {
+    setLoadingEngineers(true);
+    try {
+      const p: any = { limit: 100, status: "Active" };
+      if (q) p.search = q;
+      const r = await api.get("/admin/engineers", { params: p });
+      setEngineers(r.data.data);
+    } catch { toast.error("Failed to load engineers"); }
+    finally { setLoadingEngineers(false); }
+  };
 
   useEffect(() => { if (!open) return; fetchCustomers(); fetchContractTypes(); fetchMachines(); fetchActivePagesCats(); fetchZones(); fetchGstConfig(); fetchCompanies(); }, [open]);
 
@@ -307,6 +325,41 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       }),
     };
 
+    // open engineer selection dialog instead of submitting directly
+    setProcessedByDialog(true);
+    fetchEngineers();
+  };
+
+  const handleSaveAndSale = async () => {
+    const payload: any = {
+      customerId,
+      companyId,
+      currentPaymentStatus: paymentStatus,
+      ...(paymentStatus !== "Unpaid" && { paymentMethod, paymentDate }),
+      ...(paymentStatus === "Partial-Paid" && { paidAmount: Number(paidAmount) }),
+      processedBy: selectedEngineers,
+      machines: entries.map((e) => {
+        const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
+        return {
+          machineId: e.machine._id,
+          categoryId: e.machine.category?._id,
+          quantity: Number(e.quantity),
+          sellingPriceWithGst: Number(e.sellingPriceWithGst),
+          discountPercentage: e.discountPercentage !== "" ? Number(e.discountPercentage) : undefined,
+          ...(isParts
+            ? { partCodes: e.units.map(u => u.value.trim()) }
+            : { serialNumbers: e.units.map(u => ({
+                serialNumber: u.value.trim(),
+                contractTypeId: u.contractTypeId,
+                validFrom: u.validFrom,
+                validTo: u.validTo,
+                minCopies: Number(u.minCopies) || 0,
+                pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
+              })) }),
+        };
+      }),
+    };
+
     setSubmitting(true);
     try {
       await api.post("/admin/sales", payload);
@@ -345,7 +398,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); setProcessedByDialog(false); setSelectedEngineers([]); setEngineerSearch(""); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -798,7 +851,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={handleClose} disabled={submitting}>Cancel</Button>
                   <Button onClick={handleSubmit} disabled={submitting} className="gap-2">
-                    <Plus className="h-4 w-4" />{submitting ? "Recording..." : "Record Sale"}
+                    <Plus className="h-4 w-4" />Record Sale
                   </Button>
                 </div>
               </div>
@@ -806,6 +859,61 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </div>
         </div>
       </DialogContent>
+
+      {/* Processed By — Engineer Selection Dialog */}
+      <Dialog open={processedByDialog} onOpenChange={(o) => { if (!o) { setProcessedByDialog(false); setEngineerSearch(""); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Users className="h-4 w-4" /> Processed By</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">Select engineers who processed this sale (optional)</p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-8 h-9 text-sm"
+                placeholder="Search engineers..."
+                value={engineerSearch}
+                onChange={(e) => { setEngineerSearch(e.target.value); fetchEngineers(e.target.value); }}
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
+              {loadingEngineers ? (
+                <p className="text-xs text-muted-foreground px-3 py-4 text-center">Loading...</p>
+              ) : engineers.length === 0 ? (
+                <p className="text-xs text-muted-foreground px-3 py-4 text-center">No engineers found</p>
+              ) : engineers.map((eng) => {
+                const checked = selectedEngineers.includes(eng._id);
+                return (
+                  <button
+                    key={eng._id}
+                    type="button"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
+                    onClick={() => setSelectedEngineers((prev) => checked ? prev.filter((id) => id !== eng._id) : [...prev, eng._id])}
+                  >
+                    <div className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                      {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{eng.name}</p>
+                      {eng.engineerId && <p className="text-xs text-muted-foreground">{eng.engineerId}</p>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {selectedEngineers.length > 0 && (
+              <p className="text-xs text-primary font-medium">{selectedEngineers.length} engineer{selectedEngineers.length > 1 ? "s" : ""} selected</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setProcessedByDialog(false); setEngineerSearch(""); }} disabled={submitting}>Back</Button>
+            <Button onClick={handleSaveAndSale} disabled={submitting} className="gap-2">
+              <ShoppingCart className="h-4 w-4" />{submitting ? "Recording..." : "Save & Sale"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Customer Dialog */}
       <Dialog open={createCustomerDialog} onOpenChange={(o) => { if (!o) { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null }); } }}>
@@ -882,6 +990,11 @@ const SellMachinesPage = () => {
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
   const [machineOptions, setMachineOptions] = useState<{ label: string; value: string }[]>([]);
+  const [filterEngineers, setFilterEngineers] = useState<{ _id: string; name: string; engineerId?: string }[]>([]);
+  const [selectedFilterEngineers, setSelectedFilterEngineers] = useState<string[]>([]);
+  const [engineerFilterSearch, setEngineerFilterSearch] = useState("");
+  const [engineerFilterOpen, setEngineerFilterOpen] = useState(false);
+  const engineerFilterRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const customerAbortRef = useRef<AbortController | null>(null);
   const zoneAbortRef = useRef<AbortController | null>(null);
@@ -896,6 +1009,22 @@ const SellMachinesPage = () => {
     api.get("/admin/companies", { params: { status: "Active", limit: 100 } })
       .then(r => setCompanies(r.data.data))
       .catch(() => { });
+  }, []);
+
+  const fetchFilterEngineers = async (q = "") => {
+    try {
+      const p: any = { limit: 100, status: "Active" };
+      if (q) p.search = q;
+      const r = await api.get("/admin/engineers", { params: p });
+      setFilterEngineers(r.data.data);
+    } catch { }
+  };
+
+  useEffect(() => { fetchFilterEngineers(); }, []);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (engineerFilterRef.current && !engineerFilterRef.current.contains(e.target as Node)) setEngineerFilterOpen(false); };
+    document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h);
   }, []);
 
   const handleAddPayment = async () => {
@@ -987,6 +1116,7 @@ const SellMachinesPage = () => {
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
       if (filters.paymentStatus && filters.paymentStatus !== "all" && filters.paymentStatus !== "") p.paymentStatus = filters.paymentStatus;
+      if (selectedFilterEngineers.length > 0) p.processedBy = selectedFilterEngineers.join(",");
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate) p.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/sales", { params: p, signal: ctrl.signal });
@@ -994,7 +1124,7 @@ const SellMachinesPage = () => {
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
     } catch (err: any) { if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") toast.error("Failed to fetch sales"); }
     finally { if (!ctrl.signal.aborted) setLoading(false); }
-  }, [debouncedSearch, filters, fromDate, toDate, pageSize]);
+  }, [debouncedSearch, filters, fromDate, toDate, pageSize, selectedFilterEngineers]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
 
@@ -1008,6 +1138,7 @@ const SellMachinesPage = () => {
       if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
+      if (selectedFilterEngineers.length > 0) p.processedBy = selectedFilterEngineers.join(",");
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate) p.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/sales/export", { params: p, responseType: "blob" });
@@ -1176,6 +1307,11 @@ const SellMachinesPage = () => {
     { key: "paidAmount", label: "Paid", render: (s) => <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
     { key: "remainingAmount", label: "Remaining", render: (s) => <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
     { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    { key: "processedBy", label: "Processed By", render: (s) => {
+      const list = (s as any).processedBy as { _id: string; name: string }[] | undefined;
+      if (!list?.length) return <span className="text-muted-foreground text-xs">—</span>;
+      return <div className="flex flex-col gap-0.5">{list.map((e) => <span key={e._id} className="text-xs">{e.name}</span>)}</div>;
+    }},
     {
       key: "actions", label: "Actions", sticky: true, render: (s) => (
         <div className="flex items-center gap-1">
@@ -1240,8 +1376,8 @@ const SellMachinesPage = () => {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
-              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
+              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all") || selectedFilterEngineers.length > 0) && (
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); setSelectedFilterEngineers([]); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
               )}
             </div>
           </div>
@@ -1261,6 +1397,64 @@ const SellMachinesPage = () => {
                 <SelectItem value="Partial-Paid">Partial-Paid</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Processed By multi-select filter */}
+            <div className="relative" ref={engineerFilterRef}>
+              <button
+                type="button"
+                onClick={() => { setEngineerFilterOpen(p => !p); if (!engineerFilterOpen) { setEngineerFilterSearch(""); fetchFilterEngineers(""); } }}
+                className="flex items-center justify-between w-[160px] h-9 px-3 rounded-md border border-input text-sm bg-background text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <span className="truncate">{selectedFilterEngineers.length > 0 ? `Processed By (${selectedFilterEngineers.length})` : "Processed By"}</span>
+                <svg className="h-4 w-4 opacity-50 shrink-0 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {engineerFilterOpen && (
+                <div className="absolute right-0 top-10 z-50 w-64 rounded-lg border bg-background shadow-xl">
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        className="w-full pl-7 pr-2 py-1.5 text-xs border rounded-md bg-background outline-none focus:ring-1 focus:ring-primary"
+                        placeholder="Search engineers..."
+                        value={engineerFilterSearch}
+                        onChange={(e) => { setEngineerFilterSearch(e.target.value); fetchFilterEngineers(e.target.value); }}
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto divide-y">
+                    {filterEngineers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-3 py-3 text-center">No engineers found</p>
+                    ) : filterEngineers.map((eng) => {
+                      const checked = selectedFilterEngineers.includes(eng._id);
+                      return (
+                        <button
+                          key={eng._id}
+                          type="button"
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
+                          onClick={() => setSelectedFilterEngineers(prev => checked ? prev.filter(id => id !== eng._id) : [...prev, eng._id])}
+                        >
+                          <div className={`h-3.5 w-3.5 rounded border-2 flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                            {checked && <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium">{eng.name}</p>
+                            {eng.engineerId && <p className="text-[10px] text-muted-foreground">{eng.engineerId}</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedFilterEngineers.length > 0 && (
+                    <div className="px-3 py-2 border-t flex items-center justify-between">
+                      <span className="text-xs text-primary font-medium">{selectedFilterEngineers.length} selected</span>
+                      <button type="button" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => setSelectedFilterEngineers([])}>
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />

@@ -455,7 +455,7 @@ const _uploadImage = async (buffer, filename) => {
 
 const raiseServiceCall = async (req, res) => {
   try {
-    const { customerId, callType = "Service-Call", machines: machinesRaw, customerLocation: customerLocationRaw } = req.body;
+    const { customerId, callType = "Service-Call", machines: machinesRaw, customerLocation: customerLocationRaw, isCustomerInfoChanged, customerInfo: customerInfoOverride } = req.body;
 
     const validCallTypes = ["Service-Call", "Installation", "Dis-Installation", "Counter-Reading", "Others"];
     if (!validCallTypes.includes(callType))
@@ -500,6 +500,26 @@ const raiseServiceCall = async (req, res) => {
     const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
     if (!customer)
       return res.status(404).json({ success: false, message: "Customer not found or inactive" });
+
+    // Validate customerInfoOverride if isCustomerInfoChanged is true
+    let parsedCustomerInfoOverride = null;
+    if (isCustomerInfoChanged === true || isCustomerInfoChanged === "true") {
+      try {
+        parsedCustomerInfoOverride = typeof customerInfoOverride === "string" ? JSON.parse(customerInfoOverride) : customerInfoOverride;
+      } catch (_) {
+        return res.status(400).json({ success: false, message: "Invalid customerInfo format" });
+      }
+      if (!parsedCustomerInfoOverride?.name?.trim())
+        return res.status(400).json({ success: false, message: "customerInfo.name is required" });
+      if (!parsedCustomerInfoOverride?.phone?.trim())
+        return res.status(400).json({ success: false, message: "customerInfo.phone is required" });
+      if (!/^[0-9]{10}$/.test(parsedCustomerInfoOverride.phone.trim()))
+        return res.status(400).json({ success: false, message: "customerInfo.phone must be exactly 10 digits" });
+      if (!parsedCustomerInfoOverride?.email?.trim())
+        return res.status(400).json({ success: false, message: "customerInfo.email is required" });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsedCustomerInfoOverride.email.trim()))
+        return res.status(400).json({ success: false, message: "customerInfo.email is invalid" });
+    }
 
     const serialNumbers = parsedMachines.map(m => m.serialNumber.trim());
     const soldRecords = await SoldMachine.find({
@@ -641,9 +661,9 @@ const raiseServiceCall = async (req, res) => {
       customerInfo: {
         customerId: customer._id,
         customerUniqueId: customer.customerId || "",
-        name: customer.name,
-        phone: customer.phone,
-        email: customer.email,
+        name:      parsedCustomerInfoOverride ? parsedCustomerInfoOverride.name.trim()                    : customer.name,
+        phone:     parsedCustomerInfoOverride ? parsedCustomerInfoOverride.phone.trim()                   : customer.phone,
+        email:     parsedCustomerInfoOverride ? parsedCustomerInfoOverride.email.trim().toLowerCase()     : customer.email,
         address: customerAddress,
         zone: customer.zone?.name || "",
         gstNumber: customer.gstNumber || "",

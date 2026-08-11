@@ -5,6 +5,7 @@ const AdminUser   = require("../auth/admin.user.model");
 const Machine     = require("../inventoryManagement/admin.machine.model");
 const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.model");
 const SoldMachine      = require("../soldMachines/admin.soldMachine.model");
+const Expense          = require("../addExpense/admin.expense.model");
 
 const getStats = async (req, res) => {
   try {
@@ -46,6 +47,8 @@ const getStats = async (req, res) => {
       lowStockMachines,
       purchaseAgg,
       saleAgg,
+      expenseAgg,
+      serviceChargesAgg,
     ] = await Promise.all([
       ServiceCall.countDocuments(callFilter),
       ServiceCall.countDocuments({ ...callFilter, status: "Completed" }),
@@ -63,7 +66,20 @@ const getStats = async (req, res) => {
       ]),
       SoldMachine.aggregate([
         { $match: dateCreated },
-        { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
+        { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } }, totalCogs: { $sum: "$cogsTotalBase" } } },
+      ]),
+      Expense.aggregate([
+        { $match: from || to ? {
+            date: {
+              ...(from ? { $gte: new Date(from) } : {}),
+              ...(to   ? { $lte: (() => { const d = new Date(to); d.setHours(23,59,59,999); return d; })() } : {}),
+            },
+          } : {} },
+        { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
+      ]),
+      ServiceCall.aggregate([
+        { $match: { ...dateCreated, totalCharges: { $gt: 0 } } },
+        { $group: { _id: null, totalAmount: { $sum: "$totalCharges" } } },
       ]),
     ]);
 
@@ -71,7 +87,10 @@ const getStats = async (req, res) => {
     const totalUnitsPurchased  = purchaseAgg[0]?.totalUnits  ?? 0;
     const totalSaleAmount      = saleAgg[0]?.totalAmount     ?? 0;
     const totalUnitsSold       = saleAgg[0]?.totalUnits      ?? 0;
-
+    const totalCogs            = saleAgg[0]?.totalCogs       ?? 0;
+    const totalExpenses        = expenseAgg[0]?.totalAmount  ?? 0;
+    const totalServiceCharges  = serviceChargesAgg[0]?.totalAmount ?? 0;
+    const netProfit            = totalSaleAmount + totalServiceCharges - totalCogs - totalExpenses;
 
     return res.status(200).json({
       success: true,
@@ -90,6 +109,10 @@ const getStats = async (req, res) => {
         totalUnitsPurchased,
         totalSaleAmount,
         totalUnitsSold,
+        totalCogs,
+        totalExpenses,
+        totalServiceCharges,
+        netProfit,
       },
     });
   } catch (err) {

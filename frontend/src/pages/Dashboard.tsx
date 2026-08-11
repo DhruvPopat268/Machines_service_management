@@ -26,6 +26,7 @@ interface DashboardStats {
   activeEngineers: number; activeCustomers: number; lowStockMachines: number;
   totalPurchaseAmount: number; totalUnitsPurchased: number;
   totalSaleAmount: number; totalUnitsSold: number;
+  totalExpenses: number; totalServiceCharges: number; totalCogs: number; netProfit: number;
 }
 
 interface FreePart { machineId: string; machineName: string; modelNumber: string; freeCount: number; percentage: number; }
@@ -198,6 +199,14 @@ const serviceStats = [
     { label: "Units Purchased",    value: stats?.totalUnitsPurchased ?? 0,             icon: Package,      colorClass: "text-primary bg-accent" },
     { label: "Total Sale Amt",     value: fmtAmount(stats?.totalSaleAmount ?? 0),      icon: TrendingUp,   colorClass: "text-success bg-success/10" },
     { label: "Units Sold",         value: stats?.totalUnitsSold ?? 0,                  icon: Package,      colorClass: "text-success bg-success/10" },
+  ];
+
+  const profitStats = [
+    { label: "Total COGS",          value: fmtAmount(stats?.totalCogs ?? 0),                                          icon: ShoppingCart, colorClass: "text-warning bg-warning/10" },
+    { label: "Total Expenses",      value: fmtAmount(stats?.totalExpenses ?? 0),                                      icon: AlertCircle,  colorClass: "text-destructive bg-destructive/10" },
+    { label: "Total Call Charges",  value: fmtAmount(stats?.totalServiceCharges ?? 0),                                icon: PhoneCall,    colorClass: "text-primary bg-accent" },
+    { label: "Stock Value",         value: fmtAmount((stats?.totalPurchaseAmount ?? 0) - (stats?.totalCogs ?? 0)),    icon: Package,      colorClass: "text-primary bg-accent" },
+    { label: "Net Profit",          value: fmtAmount(stats?.netProfit ?? 0),                                          icon: TrendingUp,   colorClass: (stats?.netProfit ?? 0) >= 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10" },
   ];
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -396,6 +405,15 @@ const serviceStats = [
             {statsLoading
               ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
               : accountStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+            }
+          </div>
+        )}
+
+        {(viewMode === "both" || viewMode === "account") && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {statsLoading
+              ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+              : profitStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
             }
           </div>
         )}
