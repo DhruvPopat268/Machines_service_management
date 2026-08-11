@@ -981,7 +981,7 @@ const completeCall = async (req, res) => {
         { "machines.machineId": 1, "machines.machineName": 1,
           "machines.categoryId": 1, "machines.category": 1, "machines.divisionId": 1, "machines.division": 1,
           "machines.modelNumber": 1,
-          "machines.partCodes": 1, "machines.sellingPriceBase": 1 }
+          "machines.partCodes": 1, "machines.sellingPriceBase": 1, "machines.buyingPriceBase": 1 }
       ).session(session);
 
       const partInfoMap = new Map();
@@ -1002,6 +1002,7 @@ const completeCall = async (req, res) => {
                 divisionId:             machine.divisionId,
                 division:               machine.division || "",
                 sellingPriceBase:       machine.sellingPriceBase ?? 0,
+                buyingPriceBase:        machine.buyingPriceBase ?? 0,
               });
             }
           }
@@ -1047,6 +1048,8 @@ const completeCall = async (req, res) => {
           categoryId:             info.categoryId,
           category:               info.category,
           sellingPriceBase:       info.sellingPriceBase,
+          buyingPriceBase:        info.buyingPriceBase,
+          total:                  lineTotal,
         });
 
         // Deduct 1 unit of stock
@@ -1310,7 +1313,7 @@ const completeCall = async (req, res) => {
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
       const mParts       = variantPartsMap.get(m.serialNumber) || [];
-      const mPartsCharge = Math.round(mParts.reduce((s, p) => s + (p.sellingPriceBase ?? 0), 0) * 100) / 100;
+      const mPartsCharge = Math.round(mParts.reduce((s, p) => s + (p.total ?? 0), 0) * 100) / 100;
       machineSetFields[`machines.${idx}.partsCharge`]         = mPartsCharge;
       machineSetFields[`machines.${idx}.usedParts`]           = mParts;
       machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(m.serialNumber) ? [counterReadingsMap.get(m.serialNumber)] : [];

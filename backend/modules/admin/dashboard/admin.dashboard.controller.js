@@ -49,6 +49,8 @@ const getStats = async (req, res) => {
       saleAgg,
       expenseAgg,
       serviceChargesAgg,
+      freeMaterialCostAgg,
+      stockValueAgg,
     ] = await Promise.all([
       ServiceCall.countDocuments(callFilter),
       ServiceCall.countDocuments({ ...callFilter, status: "Completed" }),
@@ -81,6 +83,38 @@ const getStats = async (req, res) => {
         { $match: { ...dateCreated, totalCharges: { $gt: 0 } } },
         { $group: { _id: null, totalAmount: { $sum: "$totalCharges" } } },
       ]),
+      ServiceCall.aggregate([
+        { $match: { ...callFilter, status: "Completed", callType: "Service-Call" } },
+        { $unwind: "$machines" },
+        { $unwind: "$machines.usedParts" },
+        { $match: { "machines.usedParts.total": 0 } },
+        { $group: { _id: null, totalCost: { $sum: "$machines.usedParts.buyingPriceBase" } } },
+      ]),
+      PurchasedMachine.aggregate([
+        { $unwind: "$machines" },
+        { $project: {
+          buyingPriceBase: "$machines.buyingPriceBase",
+          availableSerialCount: {
+            $size: {
+              $filter: { input: { $ifNull: ["$machines.serialNumbers", []] }, as: "s", cond: { $eq: ["$$s.status", "available"] } }
+            }
+          },
+          availablePartCount: {
+            $size: {
+              $filter: { input: { $ifNull: ["$machines.partCodes", []] }, as: "p", cond: { $eq: ["$$p.status", "available"] } }
+            }
+          },
+        }},
+        { $project: {
+          availableValue: {
+            $multiply: [
+              { $add: ["$availableSerialCount", "$availablePartCount"] },
+              "$buyingPriceBase"
+            ]
+          }
+        }},
+        { $group: { _id: null, totalStockValue: { $sum: "$availableValue" } } },
+      ]),
     ]);
 
     const totalPurchaseAmount  = purchaseAgg[0]?.totalAmount ?? 0;
@@ -90,7 +124,9 @@ const getStats = async (req, res) => {
     const totalCogs            = saleAgg[0]?.totalCogs       ?? 0;
     const totalExpenses        = expenseAgg[0]?.totalAmount  ?? 0;
     const totalServiceCharges  = serviceChargesAgg[0]?.totalAmount ?? 0;
-    const netProfit            = totalSaleAmount + totalServiceCharges - totalCogs - totalExpenses;
+    const freeMaterialCost     = freeMaterialCostAgg[0]?.totalCost ?? 0;
+    const netProfit            = totalSaleAmount + totalServiceCharges - totalCogs - freeMaterialCost - totalExpenses;
+    const stockValue           = Math.round((stockValueAgg[0]?.totalStockValue ?? 0) * 100) / 100;
 
     return res.status(200).json({
       success: true,
@@ -112,6 +148,8 @@ const getStats = async (req, res) => {
         totalCogs,
         totalExpenses,
         totalServiceCharges,
+        freeMaterialCost,
+        stockValue,
         netProfit,
       },
     });

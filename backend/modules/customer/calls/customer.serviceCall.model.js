@@ -68,6 +68,8 @@ const usedPartSchema = new mongoose.Schema(
     categoryId:             { type: mongoose.Schema.Types.ObjectId, default: null },
     category:               { type: String, trim: true, default: "" },
     sellingPriceBase:       { type: Number, default: 0 },
+    buyingPriceBase:        { type: Number, default: 0 },
+    total:                  { type: Number, default: 0 },
   },
   { _id: false }
 );

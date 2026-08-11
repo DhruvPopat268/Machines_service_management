@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatsCard } from "@/components/StatsCard";
-import { PhoneCall, AlertCircle, UserCog, Package, ChevronLeft, ChevronRight, ShoppingCart, TrendingUp } from "lucide-react";
+import { PhoneCall, AlertCircle, UserCog, Package, ChevronLeft, ChevronRight, ShoppingCart, TrendingUp, Info, CalendarIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
 import Spinner from "@/components/Spinner";
 import api from "@/lib/axiosInterceptor";
 
@@ -26,7 +29,8 @@ interface DashboardStats {
   activeEngineers: number; activeCustomers: number; lowStockMachines: number;
   totalPurchaseAmount: number; totalUnitsPurchased: number;
   totalSaleAmount: number; totalUnitsSold: number;
-  totalExpenses: number; totalServiceCharges: number; totalCogs: number; netProfit: number;
+  totalExpenses: number; totalServiceCharges: number; totalCogs: number;
+  freeMaterialCost: number; stockValue: number; netProfit: number;
 }
 
 interface FreePart { machineId: string; machineName: string; modelNumber: string; freeCount: number; percentage: number; }
@@ -37,8 +41,10 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [dateMode, setDateMode] = useState<"all" | "custom">("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
+  const [toDate, setToDate]     = useState<Date | undefined>(undefined);
+  const [appliedFrom, setAppliedFrom] = useState<Date | undefined>(undefined);
+  const [appliedTo, setAppliedTo]     = useState<Date | undefined>(undefined);
   const [viewMode, setViewMode] = useState<"both" | "service" | "account">("both");
 
   const [expiryData, setExpiryData]       = useState<ExpiryCustomer[]>([]);
@@ -66,6 +72,7 @@ const Dashboard = () => {
   const [monthlyStats, setMonthlyStats]       = useState<{ month: string; total: number; completed: number }[]>([]);
   const [chartsLoading, setChartsLoading]         = useState(true);
   const [accountChartsLoading, setAccountChartsLoading] = useState(true);
+  const [profitBreakupOpen, setProfitBreakupOpen] = useState(false);
 
   const now = new Date();
   const [monthlyEndYear,  setMonthlyEndYear]  = useState(now.getFullYear());
@@ -83,13 +90,13 @@ const Dashboard = () => {
   useEffect(() => {
     setStatsLoading(true);
     const params: Record<string, string> = {};
-    if (dateMode === "custom" && fromDate) params.from = fromDate;
-    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    if (dateMode === "custom" && appliedFrom) params.from = format(appliedFrom, "yyyy-MM-dd");
+    if (dateMode === "custom" && appliedTo)   params.to   = format(appliedTo, "yyyy-MM-dd");
     api.get("/admin/dashboard/stats", { params })
       .then(r => setStats(r.data.data))
       .catch(() => {})
       .finally(() => setStatsLoading(false));
-  }, [dateMode, fromDate, toDate]);
+  }, [dateMode, appliedFrom, appliedTo]);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600);
@@ -109,8 +116,8 @@ const Dashboard = () => {
       mYear:  String(monthlyEndYear),
       mMonth: String(monthlyEndMonth),
     };
-    if (dateMode === "custom" && fromDate) params.from = fromDate;
-    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    if (dateMode === "custom" && appliedFrom) params.from = format(appliedFrom, "yyyy-MM-dd");
+    if (dateMode === "custom" && appliedTo)   params.to   = format(appliedTo, "yyyy-MM-dd");
     api.get("/admin/dashboard/charts", { params })
       .then(r => {
         const d = r.data.data;
@@ -126,7 +133,7 @@ const Dashboard = () => {
       })
       .catch(() => {})
       .finally(() => setChartsLoading(false));
-  }, [dateMode, fromDate, toDate, monthlyEndYear, monthlyEndMonth]);
+  }, [dateMode, appliedFrom, appliedTo, monthlyEndYear, monthlyEndMonth]);
 
   useEffect(() => {
     setAccountChartsLoading(true);
@@ -134,8 +141,8 @@ const Dashboard = () => {
       mYear:  String(monthlyEndYear),
       mMonth: String(monthlyEndMonth),
     };
-    if (dateMode === "custom" && fromDate) params.from = fromDate;
-    if (dateMode === "custom" && toDate)   params.to   = toDate;
+    if (dateMode === "custom" && appliedFrom) params.from = format(appliedFrom, "yyyy-MM-dd");
+    if (dateMode === "custom" && appliedTo)   params.to   = format(appliedTo, "yyyy-MM-dd");
     api.get("/admin/dashboard/account-charts", { params })
       .then(r => {
         const d = r.data.data;
@@ -148,7 +155,7 @@ const Dashboard = () => {
       })
       .catch(() => {})
       .finally(() => setAccountChartsLoading(false));
-  }, [dateMode, fromDate, toDate, monthlyEndYear, monthlyEndMonth]);
+  }, [dateMode, appliedFrom, appliedTo, monthlyEndYear, monthlyEndMonth]);
 
 
 
@@ -199,14 +206,15 @@ const serviceStats = [
     { label: "Units Purchased",    value: stats?.totalUnitsPurchased ?? 0,             icon: Package,      colorClass: "text-primary bg-accent" },
     { label: "Total Sale Amt",     value: fmtAmount(stats?.totalSaleAmount ?? 0),      icon: TrendingUp,   colorClass: "text-success bg-success/10" },
     { label: "Units Sold",         value: stats?.totalUnitsSold ?? 0,                  icon: Package,      colorClass: "text-success bg-success/10" },
+    { label: "Current Stock Value", value: fmtAmount(stats?.stockValue ?? 0),          icon: Package,      colorClass: "text-primary bg-accent" },
   ];
 
   const profitStats = [
-    { label: "Total COGS",          value: fmtAmount(stats?.totalCogs ?? 0),                                          icon: ShoppingCart, colorClass: "text-warning bg-warning/10" },
-    { label: "Total Expenses",      value: fmtAmount(stats?.totalExpenses ?? 0),                                      icon: AlertCircle,  colorClass: "text-destructive bg-destructive/10" },
-    { label: "Total Call Charges",  value: fmtAmount(stats?.totalServiceCharges ?? 0),                                icon: PhoneCall,    colorClass: "text-primary bg-accent" },
-    { label: "Stock Value",         value: fmtAmount((stats?.totalPurchaseAmount ?? 0) - (stats?.totalCogs ?? 0)),    icon: Package,      colorClass: "text-primary bg-accent" },
-    { label: "Net Profit",          value: fmtAmount(stats?.netProfit ?? 0),                                          icon: TrendingUp,   colorClass: (stats?.netProfit ?? 0) >= 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10" },
+    { label: "Total COGS",           value: fmtAmount(stats?.totalCogs ?? 0),                                          icon: ShoppingCart, colorClass: "text-warning bg-warning/10" },
+    { label: "Total Expenses",       value: fmtAmount(stats?.totalExpenses ?? 0),                                      icon: AlertCircle,  colorClass: "text-destructive bg-destructive/10" },
+    { label: "Free Material Cost",   value: fmtAmount(stats?.freeMaterialCost ?? 0),                                   icon: Package,      colorClass: "text-warning bg-warning/10" },
+    { label: "Total Call Charges",   value: fmtAmount(stats?.totalServiceCharges ?? 0),                                icon: PhoneCall,    colorClass: "text-primary bg-accent" },
+    { label: "Net Profit",           value: fmtAmount(stats?.netProfit ?? 0),                                          icon: TrendingUp,   colorClass: (stats?.netProfit ?? 0) >= 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10" },
   ];
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -353,7 +361,7 @@ const serviceStats = [
           <div className="flex flex-col items-start sm:items-end gap-3">
             <div className="flex items-center bg-muted rounded-lg p-1">
               <button
-                onClick={() => setDateMode("all")}
+                onClick={() => { setDateMode("all"); setFromDate(undefined); setToDate(undefined); setAppliedFrom(undefined); setAppliedTo(undefined); }}
                 className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${dateMode === "all" ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground"
                   }`}
               >
@@ -371,12 +379,50 @@ const serviceStats = [
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label>
-                  <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-8 text-sm w-36" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-36 h-8 text-sm font-normal justify-start gap-2 text-foreground">
+                        <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {fromDate ? format(fromDate, "dd/MM/yyyy") : "Pick date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="flex items-center gap-2">
                   <Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label>
-                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-8 text-sm w-36" />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-36 h-8 text-sm font-normal justify-start gap-2 text-foreground">
+                        <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        {toDate ? format(toDate, "dd/MM/yyyy") : "Pick date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar mode="single" selected={toDate} onSelect={setToDate} initialFocus />
+                    </PopoverContent>
+                  </Popover>
                 </div>
+                <Button
+                  size="sm"
+                  className="h-8"
+                  disabled={!fromDate && !toDate}
+                  onClick={() => { setAppliedFrom(fromDate); setAppliedTo(toDate); }}
+                >
+                  Apply
+                </Button>
+                {(appliedFrom || appliedTo) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => { setFromDate(undefined); setToDate(undefined); setAppliedFrom(undefined); setAppliedTo(undefined); }}
+                  >
+                    Clear
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -401,9 +447,9 @@ const serviceStats = [
         )}
 
         {(viewMode === "both" || viewMode === "account") && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {statsLoading
-              ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+              ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
               : accountStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
             }
           </div>
@@ -413,10 +459,96 @@ const serviceStats = [
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {statsLoading
               ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
-              : profitStats.map((stat) => <StatsCard key={stat.label} {...stat} />)
+              : profitStats.map((stat) =>
+                  stat.label === "Net Profit" ? (
+                    <Card key={stat.label} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                      <CardContent className="p-5 flex items-center gap-4">
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.colorClass}`}>
+                          <TrendingUp className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xl font-bold text-foreground truncate">{stat.value}</p>
+                          <p className="text-xs text-muted-foreground">{stat.label}</p>
+                        </div>
+                        <button
+                          onClick={() => setProfitBreakupOpen(true)}
+                          className="shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
+                          title="View breakup"
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <StatsCard key={stat.label} {...stat} />
+                  )
+                )
             }
           </div>
         )}
+
+        {/* Net Profit Breakup Dialog */}
+        <Dialog open={profitBreakupOpen} onOpenChange={setProfitBreakupOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Net Profit Breakup</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              {/* Revenue */}
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Revenue</p>
+              <div className="rounded-lg border divide-y">
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Total Sale Amount</span>
+                  <span className="font-medium text-green-600">+ {fmtAmount(stats?.totalSaleAmount ?? 0)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Total Call Charges</span>
+                  <span className="font-medium text-green-600">+ {fmtAmount(stats?.totalServiceCharges ?? 0)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold bg-muted/30">
+                  <span>Total Revenue</span>
+                  <span className="text-green-600">{fmtAmount((stats?.totalSaleAmount ?? 0) + (stats?.totalServiceCharges ?? 0))}</span>
+                </div>
+              </div>
+
+              {/* Costs */}
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-1">Costs</p>
+              <div className="rounded-lg border divide-y">
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Cost of Goods Sold (COGS)</span>
+                  <span className="font-medium text-red-500">- {fmtAmount(stats?.totalCogs ?? 0)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Free Material Cost</span>
+                  <span className="font-medium text-red-500">- {fmtAmount(stats?.freeMaterialCost ?? 0)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Total Expenses</span>
+                  <span className="font-medium text-red-500">- {fmtAmount(stats?.totalExpenses ?? 0)}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold bg-muted/30">
+                  <span>Total Costs</span>
+                  <span className="text-red-500">- {fmtAmount((stats?.totalCogs ?? 0) + (stats?.freeMaterialCost ?? 0) + (stats?.totalExpenses ?? 0))}</span>
+                </div>
+              </div>
+
+              {/* Net Profit */}
+              <div className={`flex items-center justify-between px-4 py-3 rounded-lg border-2 ${(stats?.netProfit ?? 0) >= 0 ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}`}>
+                <span className="font-bold text-sm">Net Profit</span>
+                <span className={`font-bold text-base ${(stats?.netProfit ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  {fmtAmount(stats?.netProfit ?? 0)}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground text-center">
+                Net Profit = (Sale Amount + Call Charges) − (COGS + Free Material Cost + Expenses)
+              </p>
+            </div>
+            <div className="flex justify-end pt-1 border-t">
+              <Button variant="outline" onClick={() => setProfitBreakupOpen(false)}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 xl:[grid-template-columns:30%_1fr_1fr]">
           {/* Calls by Call Type */}

@@ -189,7 +189,7 @@ const getAll = async (req, res) => {
     ]);
 
     const allSales = await SoldMachine.find(query).lean();
-    const totalSales = allSales.reduce((s, sale) => s + (sale.grandTotalWithGst || 0), 0);
+    const totalSales = allSales.reduce((s, sale) => s + (sale.grandTotalBase || 0), 0);
     const totalMachines = allSales.reduce((s, sale) => s + sale.machines.reduce((ms, m) => ms + m.quantity, 0), 0);
     const avgValue = allSales.length > 0 ? Math.round((totalSales / allSales.length) * 100) / 100 : 0;
 
