@@ -691,10 +691,15 @@ const getPartsMachines = async (req, res) => {
     const productCategoryId = process.env.PRODUCT_CATEGORY_ID;
     const { search } = req.query;
 
+    console.log("[getPartsMachines] Request received");
+    console.log("[getPartsMachines] Search term:", search || "(none)");
+    console.log("[getPartsMachines] Product category ID to exclude:", productCategoryId);
+
     const escaped = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+    // Remove database-level category filter — it excludes documents with mixed categories
+    // The in-memory filter below handles category exclusion per machine
     const purchaseRecords = await PurchasedMachine.find({
-      "machines.categoryId": { $ne: new mongoose.Types.ObjectId(productCategoryId) },
       ...(search?.trim() && {
         $or: [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
@@ -702,6 +707,8 @@ const getPartsMachines = async (req, res) => {
         ],
       }),
     });
+
+    console.log("[getPartsMachines] Purchase records found:", purchaseRecords.length);
 
     const machineIds = [...new Set(
       purchaseRecords.flatMap(record =>
@@ -712,9 +719,12 @@ const getPartsMachines = async (req, res) => {
       )
     )];
 
+    console.log("[getPartsMachines] Unique machine IDs extracted:", machineIds.length);
+
     const machineImagesMap = new Map();
     if (machineIds.length > 0) {
       const machines = await Machine.find({ _id: { $in: machineIds }, status: "Active" }).select("_id images");
+      console.log("[getPartsMachines] Active machines with images found:", machines.length);
       machines.forEach(m => machineImagesMap.set(m._id.toString(), m.images));
     }
 
@@ -750,8 +760,13 @@ const getPartsMachines = async (req, res) => {
       }
     }
 
+    console.log("[getPartsMachines] Total parts to return:", parts.length);
+    console.log("[getPartsMachines] Response sent successfully");
+
     return res.status(200).json({ success: true, data: parts });
   } catch (err) {
+    console.error("[getPartsMachines] ERROR:", err.message);
+    console.error("[getPartsMachines] Stack trace:", err.stack);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
