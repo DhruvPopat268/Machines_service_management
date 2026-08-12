@@ -639,7 +639,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                             <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
                               <div className="grid grid-cols-2 gap-3">
                                 <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Base Price <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Label className="text-xs text-muted-foreground">Selling Price (Base) / Qty</Label>
                                   <Input className="h-8 text-sm bg-muted/40" value={`₹${priceBase.toLocaleString()}`} readOnly />
                                 </div>
                                 <div className="space-y-1">
@@ -653,11 +653,11 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   <Input className="h-8 text-sm bg-muted/40" value={`₹${discountAmount.toLocaleString()}`} readOnly />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Net Price (Base) <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Label className="text-xs text-muted-foreground">Selling Net Price (Base) / Qty</Label>
                                   <Input className="h-8 text-sm bg-muted/40" value={`₹${netPriceBase.toLocaleString()}`} readOnly />
                                 </div>
                                 <div className="space-y-1">
-                                  <Label className="text-xs text-muted-foreground">Net Price (GST Incl.) <span className="text-[10px] text-muted-foreground/60">/ Qty</span></Label>
+                                  <Label className="text-xs text-muted-foreground">Selling Net Price (GST Incl.) / Qty</Label>
                                   <Input className="h-8 text-sm bg-muted/40 font-medium" value={`₹${netPriceWithGst.toLocaleString()}`} readOnly />
                                 </div>
                                 <div className="space-y-1">
@@ -1289,10 +1289,38 @@ const SellMachinesPage = () => {
         </div>
       ),
     },
-    { key: "sellingPriceWithGst", label: "Price (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "sellingPriceBase", label: "Price (Base)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    {
+      key: "buyingPriceBase", label: "Buying Price (Base) / Qty",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!m.partCodes?.length;
+            const prices = isParts 
+              ? (m.partCodes || []).map(e => e.buyingPriceBase) 
+              : (m.serialNumbers || []).map(e => e.buyingPriceBase);
+            // Show unique prices or "—" if no data
+            const uniquePrices = [...new Set(prices)];
+            return (
+              <div key={i}>
+                {uniquePrices.length > 0 ? (
+                  uniquePrices.map((price, pi) => (
+                    <div key={pi}>₹{(price || 0).toLocaleString()}</div>
+                  ))
+                ) : (
+                  <div>—</div>
+                )}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    { key: "sellingPriceWithGst", label: "Selling Price (GST Incl.) / Qty", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "sellingPriceBase", label: "Selling Price (Base) / Qty", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingPriceBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "discountPercentage", label: "Disc. %", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.discountPercentage > 0 ? `${m.discountPercentage}%` : "—"}{sep(i, s.machines.length)}</div>)}</div> },
-    { key: "netSellingPriceWithGst", label: "Net Price (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.netSellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "netSellingPriceBase", label: "Selling Net Price (Base) / Qty", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.netSellingPriceBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "netSellingPriceWithGst", label: "Selling Net Price (GST Incl.) / Qty", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.netSellingPriceWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "sellingTotalWithGst", label: "Total (GST Incl.)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingTotalWithGst.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "sellingTotalBase", label: "Total (Base)", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>₹{m.sellingTotalBase.toLocaleString()}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "grandTotalBase", label: "Grand Total (Base)", render: (s) => <span className="font-medium">₹{s.grandTotalBase.toLocaleString()}</span> },

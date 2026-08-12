@@ -1047,6 +1047,8 @@ const completeCall = async (req, res) => {
           hsnCode:                info.hsnCode || "",
           categoryId:             info.categoryId,
           category:               info.category,
+          divisionId:             info.divisionId,
+          division:               info.division,
           sellingPriceBase:       info.sellingPriceBase,
           buyingPriceBase:        info.buyingPriceBase,
           total:                  lineTotal,

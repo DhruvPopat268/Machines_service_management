@@ -408,6 +408,22 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       }) : "—",
     },
     {
+      key: "isFreeParts",
+      label: "Is Free",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => {
+        const parts = m.usedParts ?? [];
+        return <div key={i}>{parts.length > 0 ? parts.map((p, j) => <div key={j}>{p.total === 0 ? <span className="text-green-600 text-xs font-medium">Yes</span> : <span className="text-red-500 text-xs">No</span>}{j < parts.length - 1 ? "," : ""}</div>) : "—"}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>;
+      }) : "—",
+    },
+    {
+      key: "buyingPriceBase",
+      label: "Original Buying Price (Base)",
+      render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => {
+        const parts = m.usedParts ?? [];
+        return <div key={i}>{parts.length > 0 ? parts.map((p, j) => <div key={j}>₹{(p.buyingPriceBase ?? 0).toLocaleString()}{j < parts.length - 1 ? "," : ""}</div>) : "—"}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>;
+      }) : "—",
+    },
+    {
       key: "problemTypes",
       label: "Problem Types",
       className: "w-[140px] max-w-[140px]",

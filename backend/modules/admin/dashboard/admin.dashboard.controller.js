@@ -455,4 +455,488 @@ const getAccountCharts = async (req, res) => {
   }
 };
 
-module.exports = { getStats, getCharts, getAccountCharts };
+/**
+ * Get net profit charts data
+ * - Monthly net profit trend (4-month window, navigable)
+ * - Category-wise net profit
+ * - Division-wise net profit
+ */
+const getNetProfitCharts = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+
+    // ── Date filter for category/division (respects custom date range) ──
+    const dateFilter = {};
+    if (from || to) {
+      dateFilter.createdAt = {};
+      if (from) dateFilter.createdAt.$gte = new Date(from);
+      if (to) {
+        const d = new Date(to);
+        d.setHours(23, 59, 59, 999);
+        dateFilter.createdAt.$lte = d;
+      }
+    }
+
+    // ── Monthly trends — independent of date filter, uses its own mYear/mMonth window ──
+    const now = new Date();
+    const mYear = parseInt(req.query.mYear) || now.getFullYear();
+    const mMonth = parseInt(req.query.mMonth) || (now.getMonth() + 1); // 1-12
+    const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    // Build 4-month window ending at mYear/mMonth
+    const monthWindow = [];
+    for (let i = 3; i >= 0; i--) {
+      let m = mMonth - i;
+      let y = mYear;
+      if (m <= 0) {
+        m += 12;
+        y -= 1;
+      }
+      monthWindow.push({ year: y, month: m, label: `${MONTH_NAMES[m - 1]} ${y}` });
+    }
+    const windowStart = new Date(monthWindow[0].year, monthWindow[0].month - 1, 1);
+    const windowEnd = new Date(monthWindow[3].year, monthWindow[3].month, 1); // exclusive
+
+    // ── Calculate monthly net profit ──
+    const [monthlySalesRows, monthlyServiceChargesRows, monthlyExpensesRows, monthlyFreeMaterialRows] = await Promise.all([
+      // Monthly sales revenue and COGS
+      SoldMachine.aggregate([
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        {
+          $group: {
+            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            revenue: { $sum: "$grandTotalBase" },
+            cogs: { $sum: "$cogsTotalBase" },
+          },
+        },
+      ]),
+
+      // Monthly service charges
+      ServiceCall.aggregate([
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd }, totalCharges: { $gt: 0 } } },
+        {
+          $group: {
+            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            serviceCharges: { $sum: "$totalCharges" },
+          },
+        },
+      ]),
+
+      // Monthly expenses
+      Expense.aggregate([
+        { $match: { date: { $gte: windowStart, $lt: windowEnd } } },
+        {
+          $group: {
+            _id: { year: { $year: "$date" }, month: { $month: "$date" } },
+            expenses: { $sum: "$amount" },
+          },
+        },
+      ]),
+
+      // Monthly free material cost
+      ServiceCall.aggregate([
+        {
+          $match: {
+            createdAt: { $gte: windowStart, $lt: windowEnd },
+            status: "Completed",
+            callType: "Service-Call",
+          },
+        },
+        { $unwind: "$machines" },
+        { $unwind: "$machines.usedParts" },
+        { $match: { "machines.usedParts.total": 0 } },
+        {
+          $group: {
+            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            freeMaterialCost: { $sum: "$machines.usedParts.buyingPriceBase" },
+          },
+        },
+      ]),
+    ]);
+
+    // Build monthly data map
+    const monthlyDataMap = {};
+    monthlySalesRows.forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      monthlyDataMap[key] = {
+        revenue: r.revenue || 0,
+        cogs: r.cogs || 0,
+        serviceCharges: 0,
+        expenses: 0,
+        freeMaterialCost: 0,
+      };
+    });
+
+    monthlyServiceChargesRows.forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      if (!monthlyDataMap[key]) {
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+      }
+      monthlyDataMap[key].serviceCharges = r.serviceCharges || 0;
+    });
+
+    monthlyExpensesRows.forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      if (!monthlyDataMap[key]) {
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+      }
+      monthlyDataMap[key].expenses = r.expenses || 0;
+    });
+
+    monthlyFreeMaterialRows.forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      if (!monthlyDataMap[key]) {
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+      }
+      monthlyDataMap[key].freeMaterialCost = r.freeMaterialCost || 0;
+    });
+
+    // Map to 4-month window
+    const monthlyNetProfitStats = monthWindow.map(({ year, month, label }) => {
+      const key = `${year}-${month}`;
+      const data = monthlyDataMap[key] || {
+        revenue: 0,
+        cogs: 0,
+        serviceCharges: 0,
+        expenses: 0,
+        freeMaterialCost: 0,
+      };
+
+      const totalRevenue = data.revenue + data.serviceCharges;
+      const totalCosts = data.cogs + data.expenses + data.freeMaterialCost;
+      const netProfit = Math.round((totalRevenue - totalCosts) * 100) / 100;
+
+      return {
+        month: label,
+        revenue: Math.round(data.revenue * 100) / 100,
+        serviceCharges: Math.round(data.serviceCharges * 100) / 100,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        cogs: Math.round(data.cogs * 100) / 100,
+        expenses: Math.round(data.expenses * 100) / 100,
+        freeMaterialCost: Math.round(data.freeMaterialCost * 100) / 100,
+        totalCosts: Math.round(totalCosts * 100) / 100,
+        netProfit,
+      };
+    });
+
+    const isCurrentWindow = mYear === now.getFullYear() && mMonth === now.getMonth() + 1;
+
+    // ── Calculate category-wise net profit (respects custom date range) ──
+    const [categorySalesRows, categoryServiceChargesRows, categoryFreeMaterialRows] = await Promise.all([
+      // Category-wise sales revenue and COGS
+      SoldMachine.aggregate([
+        { $match: dateFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.category": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: "$machines.category",
+            revenue: { $sum: "$machines.sellingTotalBase" },
+            cogs: {
+              $sum: {
+                $sum: {
+                  $map: {
+                    input: {
+                      $concatArrays: [
+                        { $ifNull: ["$machines.serialNumbers", []] },
+                        { $ifNull: ["$machines.partCodes", []] },
+                      ],
+                    },
+                    as: "item",
+                    in: { $ifNull: ["$$item.buyingPriceBase", 0] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        { $project: { _id: 0, category: "$_id", revenue: 1, cogs: 1 } },
+      ]),
+
+      // Category-wise service charges (proportional to machines in calls)
+      ServiceCall.aggregate([
+        { $match: { ...dateFilter, totalCharges: { $gt: 0 } } },
+        { $unwind: "$machines" },
+        { $match: { "machines.category": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: { callId: "$_id", category: "$machines.category", totalCharges: "$totalCharges" },
+            machineCount: { $sum: 1 },
+          },
+        },
+        {
+          $group: {
+            _id: { callId: "$_id.callId", totalCharges: "$_id.totalCharges" },
+            categories: {
+              $push: { category: "$_id.category", machineCount: "$machineCount" },
+            },
+            totalMachines: { $sum: "$machineCount" },
+          },
+        },
+        { $unwind: "$categories" },
+        {
+          $project: {
+            category: "$categories.category",
+            serviceCharges: {
+              $multiply: [
+                "$_id.totalCharges",
+                { $divide: ["$categories.machineCount", "$totalMachines"] },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$category",
+            serviceCharges: { $sum: "$serviceCharges" },
+          },
+        },
+        { $project: { _id: 0, category: "$_id", serviceCharges: 1 } },
+      ]),
+
+      // Category-wise free material cost
+      ServiceCall.aggregate([
+        {
+          $match: {
+            ...dateFilter,
+            status: "Completed",
+            callType: "Service-Call",
+          },
+        },
+        { $unwind: "$machines" },
+        { $unwind: "$machines.usedParts" },
+        { $match: { "machines.usedParts.total": 0, "machines.usedParts.category": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: "$machines.usedParts.category",
+            freeMaterialCost: { $sum: "$machines.usedParts.buyingPriceBase" },
+          },
+        },
+        { $project: { _id: 0, category: "$_id", freeMaterialCost: 1 } },
+      ]),
+    ]);
+
+    // Build category map
+    const categoryMap = {};
+    categorySalesRows.forEach((r) => {
+      categoryMap[r.category] = {
+        category: r.category,
+        revenue: r.revenue || 0,
+        cogs: r.cogs || 0,
+        serviceCharges: 0,
+        freeMaterialCost: 0,
+      };
+    });
+
+    categoryServiceChargesRows.forEach((r) => {
+      if (!categoryMap[r.category]) {
+        categoryMap[r.category] = {
+          category: r.category,
+          revenue: 0,
+          cogs: 0,
+          serviceCharges: 0,
+          freeMaterialCost: 0,
+        };
+      }
+      categoryMap[r.category].serviceCharges = r.serviceCharges || 0;
+    });
+
+    categoryFreeMaterialRows.forEach((r) => {
+      if (!categoryMap[r.category]) {
+        categoryMap[r.category] = {
+          category: r.category,
+          revenue: 0,
+          cogs: 0,
+          serviceCharges: 0,
+          freeMaterialCost: 0,
+        };
+      }
+      categoryMap[r.category].freeMaterialCost = r.freeMaterialCost || 0;
+    });
+
+    const categoryNetProfitStats = Object.values(categoryMap)
+      .map((data) => {
+        const totalRevenue = data.revenue + data.serviceCharges;
+        const totalCosts = data.cogs + data.freeMaterialCost;
+        const netProfit = Math.round((totalRevenue - totalCosts) * 100) / 100;
+
+        return {
+          category: data.category,
+          revenue: Math.round(data.revenue * 100) / 100,
+          serviceCharges: Math.round(data.serviceCharges * 100) / 100,
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          cogs: Math.round(data.cogs * 100) / 100,
+          freeMaterialCost: Math.round(data.freeMaterialCost * 100) / 100,
+          totalCosts: Math.round(totalCosts * 100) / 100,
+          netProfit,
+        };
+      })
+      .sort((a, b) => b.netProfit - a.netProfit);
+
+    // ── Calculate division-wise net profit (respects custom date range) ──
+    const [divisionSalesRows, divisionServiceChargesRows, divisionFreeMaterialRows] = await Promise.all([
+      // Division-wise sales revenue and COGS
+      SoldMachine.aggregate([
+        { $match: dateFilter },
+        { $unwind: "$machines" },
+        { $match: { "machines.division": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: "$machines.division",
+            revenue: { $sum: "$machines.sellingTotalBase" },
+            cogs: {
+              $sum: {
+                $sum: {
+                  $map: {
+                    input: {
+                      $concatArrays: [
+                        { $ifNull: ["$machines.serialNumbers", []] },
+                        { $ifNull: ["$machines.partCodes", []] },
+                      ],
+                    },
+                    as: "item",
+                    in: { $ifNull: ["$$item.buyingPriceBase", 0] },
+                  },
+                },
+              },
+            },
+          },
+        },
+        { $project: { _id: 0, division: "$_id", revenue: 1, cogs: 1 } },
+      ]),
+
+      // Division-wise service charges (proportional to machines in calls)
+      ServiceCall.aggregate([
+        { $match: { ...dateFilter, totalCharges: { $gt: 0 } } },
+        { $unwind: "$machines" },
+        { $match: { "machines.division": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: { callId: "$_id", division: "$machines.division", totalCharges: "$totalCharges" },
+            machineCount: { $sum: 1 },
+          },
+        },
+        {
+          $group: {
+            _id: { callId: "$_id.callId", totalCharges: "$_id.totalCharges" },
+            divisions: {
+              $push: { division: "$_id.division", machineCount: "$machineCount" },
+            },
+            totalMachines: { $sum: "$machineCount" },
+          },
+        },
+        { $unwind: "$divisions" },
+        {
+          $project: {
+            division: "$divisions.division",
+            serviceCharges: {
+              $multiply: [
+                "$_id.totalCharges",
+                { $divide: ["$divisions.machineCount", "$totalMachines"] },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: "$division",
+            serviceCharges: { $sum: "$serviceCharges" },
+          },
+        },
+        { $project: { _id: 0, division: "$_id", serviceCharges: 1 } },
+      ]),
+
+      // Division-wise free material cost
+      ServiceCall.aggregate([
+        {
+          $match: {
+            ...dateFilter,
+            status: "Completed",
+            callType: "Service-Call",
+          },
+        },
+        { $unwind: "$machines" },
+        { $unwind: "$machines.usedParts" },
+        { $match: { "machines.usedParts.total": 0, "machines.usedParts.division": { $nin: [null, ""] } } },
+        {
+          $group: {
+            _id: "$machines.usedParts.division",
+            freeMaterialCost: { $sum: "$machines.usedParts.buyingPriceBase" },
+          },
+        },
+        { $project: { _id: 0, division: "$_id", freeMaterialCost: 1 } },
+      ]),
+    ]);
+
+    // Build division map
+    const divisionMap = {};
+    divisionSalesRows.forEach((r) => {
+      divisionMap[r.division] = {
+        division: r.division,
+        revenue: r.revenue || 0,
+        cogs: r.cogs || 0,
+        serviceCharges: 0,
+        freeMaterialCost: 0,
+      };
+    });
+
+    divisionServiceChargesRows.forEach((r) => {
+      if (!divisionMap[r.division]) {
+        divisionMap[r.division] = {
+          division: r.division,
+          revenue: 0,
+          cogs: 0,
+          serviceCharges: 0,
+          freeMaterialCost: 0,
+        };
+      }
+      divisionMap[r.division].serviceCharges = r.serviceCharges || 0;
+    });
+
+    divisionFreeMaterialRows.forEach((r) => {
+      if (!divisionMap[r.division]) {
+        divisionMap[r.division] = {
+          division: r.division,
+          revenue: 0,
+          cogs: 0,
+          serviceCharges: 0,
+          freeMaterialCost: 0,
+        };
+      }
+      divisionMap[r.division].freeMaterialCost = r.freeMaterialCost || 0;
+    });
+
+    const divisionNetProfitStats = Object.values(divisionMap)
+      .map((data) => {
+        const totalRevenue = data.revenue + data.serviceCharges;
+        const totalCosts = data.cogs + data.freeMaterialCost;
+        const netProfit = Math.round((totalRevenue - totalCosts) * 100) / 100;
+
+        return {
+          division: data.division,
+          revenue: Math.round(data.revenue * 100) / 100,
+          serviceCharges: Math.round(data.serviceCharges * 100) / 100,
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          cogs: Math.round(data.cogs * 100) / 100,
+          freeMaterialCost: Math.round(data.freeMaterialCost * 100) / 100,
+          totalCosts: Math.round(totalCosts * 100) / 100,
+          netProfit,
+        };
+      })
+      .sort((a, b) => b.netProfit - a.netProfit);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        monthlyNetProfitStats,
+        isCurrentWindow,
+        categoryNetProfitStats,
+        divisionNetProfitStats,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getStats, getCharts, getAccountCharts, getNetProfitCharts };

@@ -74,6 +74,12 @@ const Dashboard = () => {
   const [accountChartsLoading, setAccountChartsLoading] = useState(true);
   const [profitBreakupOpen, setProfitBreakupOpen] = useState(false);
 
+  // Net Profit Charts State
+  const [netProfitChartsLoading, setNetProfitChartsLoading] = useState(true);
+  const [monthlyNetProfitStats, setMonthlyNetProfitStats] = useState<{ month: string; totalRevenue: number; totalCosts: number; netProfit: number }[]>([]);
+  const [categoryNetProfitStats, setCategoryNetProfitStats] = useState<{ category: string; netProfit: number }[]>([]);
+  const [divisionNetProfitStats, setDivisionNetProfitStats] = useState<{ division: string; netProfit: number }[]>([]);
+
   const now = new Date();
   const [monthlyEndYear,  setMonthlyEndYear]  = useState(now.getFullYear());
   const [monthlyEndMonth, setMonthlyEndMonth] = useState(now.getMonth() + 1);
@@ -155,6 +161,25 @@ const Dashboard = () => {
       })
       .catch(() => {})
       .finally(() => setAccountChartsLoading(false));
+  }, [dateMode, appliedFrom, appliedTo, monthlyEndYear, monthlyEndMonth]);
+
+  useEffect(() => {
+    setNetProfitChartsLoading(true);
+    const params: Record<string, string> = {
+      mYear:  String(monthlyEndYear),
+      mMonth: String(monthlyEndMonth),
+    };
+    if (dateMode === "custom" && appliedFrom) params.from = format(appliedFrom, "yyyy-MM-dd");
+    if (dateMode === "custom" && appliedTo)   params.to   = format(appliedTo, "yyyy-MM-dd");
+    api.get("/admin/dashboard/net-profit-charts", { params })
+      .then(r => {
+        const d = r.data.data;
+        setMonthlyNetProfitStats(d.monthlyNetProfitStats ?? []);
+        setCategoryNetProfitStats(d.categoryNetProfitStats ?? []);
+        setDivisionNetProfitStats(d.divisionNetProfitStats ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setNetProfitChartsLoading(false));
   }, [dateMode, appliedFrom, appliedTo, monthlyEndYear, monthlyEndMonth]);
 
 
@@ -927,6 +952,106 @@ const serviceStats = [
                   }
                 </CardContent>
               </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Net Profit Charts Section */}
+        {(viewMode === "both" || viewMode === "account") && (
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Net Profit Analysis</h2>
+              <p className="text-sm text-muted-foreground">Revenue, costs, and profitability breakdown</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              {/* Monthly Net Profit Trend */}
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg mb-0">Monthly Net Profit Trend</CardTitle>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => shiftMonth(-1)}
+                        className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted">
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs text-muted-foreground w-28 text-center">
+                        {monthlyNetProfitStats[0]?.month} – {monthlyNetProfitStats[3]?.month}
+                      </span>
+                      <button onClick={() => shiftMonth(1)} disabled={isCurrentMonthWindow}
+                        className="h-6 w-6 rounded flex items-center justify-center hover:bg-muted disabled:opacity-40">
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {netProfitChartsLoading
+                    ? <div className="h-[350px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={350}>
+                      <BarChart data={monthlyNetProfitStats} margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 11 }} />
+                        <YAxis className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                        <Legend align="right" verticalAlign="top" wrapperStyle={{ top: -5 }} />
+                        <Bar dataKey="totalRevenue" name="Total Revenue" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="totalCosts" name="Total Costs" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="netProfit" name="Net Profit" fill="hsl(217, 91%, 50%)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+
+              {/* Category and Division Net Profit */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Top 5 Categories by Net Profit */}
+                <Card className="border-0 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg mb-0">Top 5 Categories by Net Profit</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-0">
+                    {netProfitChartsLoading
+                      ? <div className="h-[280px] flex items-center justify-center"><Spinner /></div>
+                      : categoryNetProfitStats.length === 0
+                        ? <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">No data available</div>
+                        : <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={categoryNetProfitStats} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis type="number" className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="category" className="text-xs" tick={{ fontSize: 11 }} width={90} />
+                            <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                            <Bar dataKey="netProfit" name="Net Profit" fill="hsl(217, 91%, 50%)" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                    }
+                  </CardContent>
+                </Card>
+
+                {/* Top 5 Divisions by Net Profit */}
+                <Card className="border-0 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg mb-0">Top 5 Divisions by Net Profit</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 pb-0">
+                    {netProfitChartsLoading
+                      ? <div className="h-[280px] flex items-center justify-center"><Spinner /></div>
+                      : divisionNetProfitStats.length === 0
+                        ? <div className="h-[280px] flex items-center justify-center text-sm text-muted-foreground">No data available</div>
+                        : <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={divisionNetProfitStats} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                            <XAxis type="number" className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="division" className="text-xs" tick={{ fontSize: 11 }} width={90} />
+                            <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                            <Bar dataKey="netProfit" name="Net Profit" fill="hsl(142, 71%, 45%)" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                    }
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </div>
         )}
