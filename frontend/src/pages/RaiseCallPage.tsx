@@ -42,20 +42,22 @@ const RaiseCallPage = () => {
   const [loading, setLoading]   = useState(true);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
 
-  const [customers, setCustomers]   = useState<DropdownOption[]>([]);
-  const [categories, setCategories] = useState<DropdownOption[]>([]);
-  const [divisions, setDivisions]   = useState<DropdownOption[]>([]);
+  const [customers, setCustomers]       = useState<DropdownOption[]>([]);
+  const [categories, setCategories]     = useState<DropdownOption[]>([]);
+  const [divisions, setDivisions]       = useState<DropdownOption[]>([]);
+  const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
 
-  const [selectedCustomer, setSelectedCustomer] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedDivision, setSelectedDivision] = useState("");
+  const [selectedCustomer, setSelectedCustomer]         = useState("");
+  const [selectedCategory, setSelectedCategory]         = useState("");
+  const [selectedDivision, setSelectedDivision]         = useState("");
+  const [selectedContractType, setSelectedContractType] = useState("");
   const [selectedDisInstalled, setSelectedDisInstalled] = useState("");
   const [search, setSearch]           = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
   // Renew contract state
   const [renewDialog, setRenewDialog]           = useState<CustomerMachine | null>(null);
-  const [contractTypes, setContractTypes]       = useState<ContractType[]>([]);
+  const [renewContractTypes, setRenewContractTypes] = useState<ContractType[]>([]);
   const [renewContractTypeId, setRenewContractTypeId] = useState("");
   const [renewValidFrom, setRenewValidFrom]     = useState("");
   const [renewValidTo, setRenewValidTo]         = useState("");
@@ -64,6 +66,7 @@ const RaiseCallPage = () => {
   const customerAbortRef = useRef<AbortController | null>(null);
   const categoryAbortRef = useRef<AbortController | null>(null);
   const divisionAbortRef = useRef<AbortController | null>(null);
+  const contractTypeAbortRef = useRef<AbortController | null>(null);
   const abortRef         = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -82,6 +85,7 @@ const RaiseCallPage = () => {
       setCategories(cat.data.data);
       setDivisions(div.data.data);
       setContractTypes(ct.data.data);
+      setRenewContractTypes(ct.data.data);
     }).catch(() => {});
   }, []);
 
@@ -115,6 +119,16 @@ const RaiseCallPage = () => {
     } catch {}
   }, []);
 
+  const fetchContractTypeOptions = useCallback(async (q: string) => {
+    contractTypeAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    contractTypeAbortRef.current = ctrl;
+    try {
+      const res = await api.get("/admin/contract-types", { params: { limit: 100, search: q, status: "Active" }, signal: ctrl.signal });
+      if (!ctrl.signal.aborted) setContractTypes(res.data.data);
+    } catch {}
+  }, []);
+
   const fetchMachines = useCallback(async (page = 1) => {
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -127,6 +141,7 @@ const RaiseCallPage = () => {
       if (debouncedSearch)  params.search = debouncedSearch;
       if (selectedCategory) params.category = selectedCategory;
       if (selectedDivision) params.division = selectedDivision;
+      if (selectedContractType) params.contractTypeId = selectedContractType;
       if (selectedDisInstalled) params.disInstalled = selectedDisInstalled;
 
       const res = await api.get("/admin/service-calls/customer-machines", { params, signal: ctrl.signal });
@@ -140,16 +155,17 @@ const RaiseCallPage = () => {
     } finally {
       if (!ctrl.signal.aborted) setLoading(false);
     }
-  }, [selectedCustomer, debouncedSearch, selectedCategory, selectedDivision, selectedDisInstalled]);
+  }, [selectedCustomer, debouncedSearch, selectedCategory, selectedDivision, selectedContractType, selectedDisInstalled]);
 
   useEffect(() => { fetchMachines(1); }, [fetchMachines]);
 
-  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedDisInstalled || search;
+  const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedContractType || selectedDisInstalled || search;
 
   const clearFilters = () => {
     setSelectedCustomer("");
     setSelectedCategory("");
     setSelectedDivision("");
+    setSelectedContractType("");
     setSelectedDisInstalled("");
     setSearch("");
   };
@@ -319,6 +335,15 @@ const RaiseCallPage = () => {
             searchPlaceholder="Search divisions..."
             className="w-[160px] h-9 text-sm"
           />
+          <SearchableSelect
+            options={contractTypes.map(ct => ({ label: ct.name, value: ct._id }))}
+            value={selectedContractType}
+            onChange={setSelectedContractType}
+            onSearchChange={fetchContractTypeOptions}
+            placeholder="Contract Type"
+            searchPlaceholder="Search contract types..."
+            className="w-[160px] h-9 text-sm"
+          />
           <Select value={selectedDisInstalled} onValueChange={setSelectedDisInstalled}>
             <SelectTrigger className="w-[150px] h-9 text-sm"><SelectValue placeholder="Dis-Installed" /></SelectTrigger>
             <SelectContent>
@@ -358,7 +383,7 @@ const RaiseCallPage = () => {
                 onChange={e => setRenewContractTypeId(e.target.value)}
               >
                 <option value="">Select contract type...</option>
-                {contractTypes.map(ct => <option key={ct._id} value={ct._id}>{ct.name}</option>)}
+                {renewContractTypes.map(ct => <option key={ct._id} value={ct._id}>{ct.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">

@@ -355,7 +355,7 @@ const getAccountCharts = async (req, res) => {
     const windowStart = new Date(monthWindow[0].year, monthWindow[0].month - 1, 1);
     const windowEnd   = new Date(monthWindow[3].year, monthWindow[3].month,     1);
 
-    const [categoryPurchaseRows, categorySaleRows, divisionPurchaseRows, divisionSaleRows, vendorRows, customerSaleRows, purchaseTrendRows, saleTrendRows, contractTypeRows] = await Promise.all([
+    const [categoryPurchaseRows, categorySaleRows, divisionPurchaseRows, divisionSaleRows, vendorRows, customerSaleRows, purchaseTrendRows, saleTrendRows, contractTypeRows, expenseCategoryRows] = await Promise.all([
       // Category-wise Purchase
       PurchasedMachine.aggregate([
         { $match: accountFilter },
@@ -430,6 +430,14 @@ const getAccountCharts = async (req, res) => {
         { $group: { _id: "$_id.contractType", totalAmount: { $sum: "$sellingTotal" } } },
         { $project: { _id: 0, name: "$_id", totalAmount: 1 } },
       ]),
+      // Expense Category-wise
+      Expense.aggregate([
+        { $match: accountFilter },
+        { $match: { "category.name": { $nin: [null, ""] } } },
+        { $group: { _id: "$category.name", totalAmount: { $sum: "$amount" } } },
+        { $project: { _id: 0, category: "$_id", totalAmount: 1 } },
+        { $sort: { totalAmount: -1 } },
+      ]),
     ]);
 
     const categoryMap = {};
@@ -461,8 +469,9 @@ const getAccountCharts = async (req, res) => {
     const isCurrentWindow = mYear === now.getFullYear() && mMonth === (now.getMonth() + 1);
 
     const contractTypeStats = contractTypeRows;
+    const expenseCategoryStats = expenseCategoryRows;
 
-    return res.status(200).json({ success: true, data: { categoryStats, divisionStats, vendorStats, customerSaleStats, purchaseTrendStats, contractTypeStats, isCurrentWindow } });
+    return res.status(200).json({ success: true, data: { categoryStats, divisionStats, vendorStats, customerSaleStats, purchaseTrendStats, contractTypeStats, expenseCategoryStats, isCurrentWindow } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

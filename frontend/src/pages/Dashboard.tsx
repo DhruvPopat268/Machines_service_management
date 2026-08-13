@@ -63,6 +63,7 @@ const Dashboard = () => {
   const [customerSaleStats, setCustomerSaleStats] = useState<{ customer: string; totalAmount: number }[]>([]);
   const [purchaseTrendStats, setPurchaseTrendStats] = useState<{ month: string; purchaseAmount: number; saleAmount: number }[]>([]);
   const [contractTypeStats, setContractTypeStats]   = useState<{ name: string; totalAmount: number }[]>([]);
+  const [expenseCategoryStats, setExpenseCategoryStats] = useState<{ category: string; totalAmount: number }[]>([]);
   const [totalEngineers, setTotalEngineers]   = useState(0);
   const [inactiveEngineers, setInactiveEngineers] = useState(0);
   const [totalCustomers, setTotalCustomers]   = useState(0);
@@ -158,6 +159,7 @@ const Dashboard = () => {
         setCustomerSaleStats(d.customerSaleStats ?? []);
         setPurchaseTrendStats(d.purchaseTrendStats   ?? []);
         setContractTypeStats(d.contractTypeStats     ?? []);
+        setExpenseCategoryStats(d.expenseCategoryStats ?? []);
       })
       .catch(() => {})
       .finally(() => setAccountChartsLoading(false));
@@ -969,6 +971,26 @@ const serviceStats = [
                         <Tooltip formatter={(value: number, name: string) => [`₹${value.toLocaleString("en-IN")}`, name]} />
                         <Legend layout="vertical" align="right" verticalAlign="middle" formatter={(value) => <span className="text-xs">{value}</span>} />
                       </PieChart>
+                    </ResponsiveContainer>
+                  }
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg mb-0">Expense by Category</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 pb-0">
+                  {accountChartsLoading
+                    ? <div className="h-[300px] flex items-center justify-center"><Spinner /></div>
+                    : <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={expenseCategoryStats} margin={{ top: 0, right: 20, left: 10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="category" className="text-xs" tick={{ fontSize: 11 }} angle={-45} textAnchor="end" height={80} />
+                        <YAxis className="text-xs" tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(value: number) => `₹${value.toLocaleString("en-IN")}`} />
+                        <Bar dataKey="totalAmount" name="Total Amount" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                      </BarChart>
                     </ResponsiveContainer>
                   }
                 </CardContent>

@@ -276,10 +276,13 @@ const updateCall = async (req, res) => {
 
 const getCustomerMachines = async (req, res) => {
   try {
-    const { customerId, search, category, division, page = 1, limit = 10 } = req.query;
+    const { customerId, search, category, division, contractTypeId, page = 1, limit = 10 } = req.query;
 
     if (customerId && !mongoose.isValidObjectId(customerId))
       return res.status(400).json({ success: false, message: "Invalid customerId" });
+
+    if (contractTypeId && !mongoose.isValidObjectId(contractTypeId))
+      return res.status(400).json({ success: false, message: "Invalid contractTypeId" });
 
     const soldRecords = await SoldMachine.find(customerId ? { "customerInfo.customerId": customerId } : {}).sort({ createdAt: -1 });
     if (soldRecords.length === 0)
@@ -322,6 +325,8 @@ const getCustomerMachines = async (req, res) => {
       allData = allData.filter(m => m.categoryId?.toString() === category);
     if (division && mongoose.isValidObjectId(division))
       allData = allData.filter(m => m.divisionId?.toString() === division);
+    if (contractTypeId && mongoose.isValidObjectId(contractTypeId))
+      allData = allData.filter(m => m.contractType?.contractTypeId?.toString() === contractTypeId);
     if (req.query.disInstalled === "true")  allData = allData.filter(m => m.disInstalled === true);
     if (req.query.disInstalled === "false") allData = allData.filter(m => m.disInstalled === false);
 
