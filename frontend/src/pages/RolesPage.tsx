@@ -27,9 +27,11 @@ const PERMISSION_SECTIONS: { label: string; keys: string[] }[] = [
   { label: "Purchase Management",     keys: ["purchase-machines"] },
   { label: "Sells Management",        keys: ["sell-machines"] },
   { label: "Call Management",         keys: ["calls", "calls-raise"] },
-  { label: "Travel Reimbursements",   keys: ["reimbursements"] },
+  { label: "Expense Management",      keys: ["reimbursements", "expense-categories", "add-expenses"] },
+  { label: "Incentive Management",    keys: ["incentive-categories", "add-incentives"] },
+  { label: "GST Config",              keys: ["gst-config"] },
   { label: "Customers Management",    keys: ["problem-types", "customers"] },
-  { label: "System Users Management", keys: ["permissions", "system-users", "roles"] },
+  { label: "System Users Management", keys: ["system-users", "roles"] },
   { label: "Engineers Management",    keys: ["engineers", "engineer-performance"] },
 ];
 

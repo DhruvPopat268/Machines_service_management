@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Edit, Trash2, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
-import { Pagination } from "@/components/Pagination";
 import api from "@/lib/axiosInterceptor";
 
 interface Permission {
@@ -21,7 +20,6 @@ interface Permission {
 }
 
 const emptyForm = { name: "", status: "Active" as Permission["status"] };
-const LIMIT = 10;
 
 const PermissionsPage = () => {
   const [data, setData] = useState<Permission[]>([]);
@@ -30,7 +28,6 @@ const PermissionsPage = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
 
   const [addDialog, setAddDialog] = useState(false);
   const [addForm, setAddForm] = useState(emptyForm);
@@ -45,16 +42,15 @@ const PermissionsPage = () => {
     return () => clearTimeout(t);
   }, [search]);
 
-  const fetchPermissions = useCallback(async (page = 1) => {
+  const fetchPermissions = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = { page: String(page), limit: String(LIMIT) };
+      const params: Record<string, string> = {};
       if (debouncedSearch) params.search = debouncedSearch;
       if (statusFilter !== "all") params.status = statusFilter;
 
       const res = await api.get("/admin/permissions", { params });
       setData(res.data.data);
-      setPagination(res.data.pagination);
     } catch {
       toast.error("Failed to fetch permissions");
     } finally {
@@ -62,7 +58,7 @@ const PermissionsPage = () => {
     }
   }, [debouncedSearch, statusFilter]);
 
-  useEffect(() => { fetchPermissions(1); }, [fetchPermissions]);
+  useEffect(() => { fetchPermissions(); }, [fetchPermissions]);
 
   const handleAdd = async () => {
     if (!addForm.name.trim()) return toast.error("Name is required");
@@ -72,7 +68,7 @@ const PermissionsPage = () => {
       toast.success("Permission added successfully");
       setAddDialog(false);
       setAddForm(emptyForm);
-      fetchPermissions(1);
+      fetchPermissions();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to add permission");
     } finally {
@@ -88,7 +84,7 @@ const PermissionsPage = () => {
       await api.patch(`/admin/permissions/${editDialog._id}`, editForm);
       toast.success("Permission updated successfully");
       setEditDialog(null);
-      fetchPermissions(pagination.page);
+      fetchPermissions();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update permission");
     } finally {
@@ -103,8 +99,7 @@ const PermissionsPage = () => {
       await api.delete(`/admin/permissions/${deleteDialog._id}`);
       toast.success("Permission deleted successfully");
       setDeleteDialog(null);
-      const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
-      fetchPermissions(newPage);
+      fetchPermissions();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete permission");
     } finally {
@@ -117,14 +112,14 @@ const PermissionsPage = () => {
     try {
       await api.patch(`/admin/permissions/${p._id}`, { status: newStatus });
       toast.success(`Status updated to ${newStatus}`);
-      fetchPermissions(pagination.page);
+      fetchPermissions();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update status");
     }
   };
 
   const columns: Column<Permission>[] = [
-    { key: "_id", label: "No.", render: (_, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "_id", label: "No.", render: (_, i) => <span className="font-medium text-foreground">{i + 1}</span> },
     { key: "name", label: "Permission Name", render: (p) => <span className="font-medium">{p.name}</span> },
     {
       key: "status", label: "Status", render: (p) => (
@@ -176,8 +171,7 @@ const PermissionsPage = () => {
             </div>
           </div>
 
-          <DataTable columns={columns} data={data} />
-          <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={LIMIT} onPageChange={fetchPermissions} />
+          <DataTable columns={columns} data={data} pageSize={999} />
         </>
       )}
 

@@ -74,9 +74,9 @@ const App = () => (
             <Route path="/calls/:id"          element={<G k="calls"><CallDetailsPage /></G>} />
 
             <Route path="/machines"           element={<G k="machines-list"><MachinesPage /></G>} />
-            <Route path="/machines/add"       element={<G k="machines-add"><AddMachineForm type="Machine" /></G>} />
-            <Route path="/machines/:id"       element={<G k="machines-list"><AddMachineForm type="Machine" mode="view" /></G>} />
-            <Route path="/machines/:id/edit"  element={<G k="machines-list"><AddMachineForm type="Machine" mode="edit" /></G>} />
+            <Route path="/machines/add"       element={<G k="machines-add"><AddMachineForm type="Item" /></G>} />
+            <Route path="/machines/:id"       element={<G k="machines-list"><AddMachineForm type="Item" mode="view" /></G>} />
+            <Route path="/machines/:id/edit"  element={<G k="machines-list"><AddMachineForm type="Item" mode="edit" /></G>} />
 
             <Route path="/inventory-logs"     element={<G k="inventory-logs"><InventoryLogsPage /></G>} />
             <Route path="/inventory-logs/:id" element={<G k="inventory-logs"><InventoryLogDetailPage /></G>} />
@@ -106,7 +106,9 @@ const App = () => (
             <Route path="/gst-config"          element={<G k="gst-config"><GstConfigPage /></G>} />
 
             <Route path="/users"              element={<G k="system-users"><UsersPage /></G>} />
-            <Route path="/permissions"        element={<G k="permissions"><PermissionsPage /></G>} />
+            {import.meta.env.VITE_PERMISSION === "true" && (
+              <Route path="/permissions"        element={<G k="permissions"><PermissionsPage /></G>} />
+            )}
             <Route path="/roles"              element={<G k="roles"><RolesPage /></G>} />
 
             <Route path="/engineers"          element={<G k="engineers"><EngineersPage /></G>} />

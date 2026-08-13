@@ -18,7 +18,7 @@ const PERMISSION_ROUTES: { key: string; path: string }[] = [
   { key: "reimbursements",     path: "/reimbursements" },
   { key: "problem-types",      path: "/problem-types" },
   { key: "customers",          path: "/customers" },
-  { key: "permissions",        path: "/permissions" },
+  ...(import.meta.env.VITE_PERMISSION === "true" ? [{ key: "permissions", path: "/permissions" }] : []),
   { key: "roles",              path: "/roles" },
   { key: "system-users",       path: "/users" },
   { key: "engineers",          path: "/engineers" },

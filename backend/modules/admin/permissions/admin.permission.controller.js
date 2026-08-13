@@ -3,7 +3,7 @@ const Permission = require("./admin.permission.model");
 
 const getAllPermissions = async (req, res) => {
   try {
-    const { search, status, page = 1, limit = 10 } = req.query;
+    const { search, status } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -12,19 +12,9 @@ const getAllPermissions = async (req, res) => {
     }
     if (status && ["Active", "Inactive"].includes(status)) query.status = status;
 
-    const pageNum  = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const data = await Permission.find(query).sort({ createdAt: -1 });
 
-    const [data, total] = await Promise.all([
-      Permission.find(query).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum),
-      Permission.countDocuments(query),
-    ]);
-
-    res.status(200).json({
-      success: true,
-      data,
-      pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
-    });
+    res.status(200).json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

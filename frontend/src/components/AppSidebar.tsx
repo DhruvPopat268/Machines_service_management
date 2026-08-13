@@ -15,7 +15,7 @@ import { useProfile } from "@/context/ProfileContext";
 
 const linkClass = "flex items-center gap-3 px-3 py-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors";
 const activeClass = "bg-sidebar-accent text-sidebar-primary font-semibold";
-const labelClass = "flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors rounded-md";
+const labelClass = "flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground hover:text-sidebar-foreground transition-colors rounded-md";
 
 function SidebarLink({ to, icon: Icon, label, collapsed }: { to: string; icon: any; label: string; collapsed: boolean }) {
   return (
@@ -61,7 +61,7 @@ function NestedCollapsible({ label, icon: Icon, urls, items, collapsed }: {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition-colors">
+      <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2 text-xs uppercase tracking-wider text-sidebar-foreground hover:text-sidebar-foreground transition-colors">
         <span className="flex items-center gap-2">
           <Icon className="h-3.5 w-3.5" />
           {label}
@@ -123,16 +123,11 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="offcanvas">
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary">
-          <Wrench className="h-5 w-5 text-sidebar-primary-foreground" />
-        </div>
-        {!collapsed && (
-          <div>
-            <p className="text-sm font-bold text-sidebar-accent-foreground">ServiceDesk Pro</p>
-            <p className="text-xs text-sidebar-foreground/50">ERP System</p>
-          </div>
-        )}
+      <div className="flex items-center justify-center px-4 py-4 border-b border-sidebar-border">
+        {import.meta.env.VITE_INVOICE_LOGO_URL
+          ? <img src={import.meta.env.VITE_INVOICE_LOGO_URL} alt="Logo" className={collapsed ? "h-8 w-auto object-contain" : "h-12 w-auto max-w-[160px] object-contain"} />
+          : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary"><Wrench className="h-5 w-5 text-sidebar-primary-foreground" /></div>
+        }
       </div>
 
       <SidebarContent className="pt-2 overflow-y-auto scrollbar-none" style={{ overflowY: "auto" }}>
@@ -374,7 +369,7 @@ export function AppSidebar() {
             {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">System Users Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                {hasPermission("permissions") && (
+                {import.meta.env.VITE_PERMISSION === "true" && hasPermission("permissions") && (
                   <SidebarLink to="/permissions" icon={ShieldCheck} label="System Users Permissions" collapsed={collapsed} />
                 )}
                 {hasPermission("roles") && (

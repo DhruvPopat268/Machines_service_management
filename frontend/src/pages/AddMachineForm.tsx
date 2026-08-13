@@ -19,7 +19,7 @@ interface DivisionOption  { _id: string; name: string; }
 type ImageItem = { preview: string; file?: File };
 
 interface AddMachineFormProps {
-  type: "Machine" | "Accessory";
+  type: "Item" | "Accessory";
   mode?: "add" | "edit" | "view";
 }
 
