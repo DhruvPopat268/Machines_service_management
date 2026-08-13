@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog, ShieldCheck, ShieldHalf,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle, Percent,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle, Percent, Gift,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -117,6 +117,9 @@ export function AppSidebar() {
 
   const showExpensesSection =
     hasPermission("expense-categories") || hasPermission("add-expenses") || hasPermission("reimbursements");
+
+  const showIncentivesSection =
+    hasPermission("incentive-categories") || hasPermission("add-incentives");
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -325,6 +328,23 @@ export function AppSidebar() {
                 )}
                 {hasPermission("reimbursements") && (
                   <SidebarLink to="/reimbursements" icon={Receipt} label="Travel Expenses" collapsed={collapsed} />
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Incentives Management */}
+        {showIncentivesSection && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Incentives Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {hasPermission("incentive-categories") && (
+                  <SidebarLink to="/incentive-categories" icon={Gift} label="Incentive Categories" collapsed={collapsed} />
+                )}
+                {hasPermission("add-incentives") && (
+                  <SidebarLink to="/add-incentives" icon={PlusCircle} label="Add Incentive" collapsed={collapsed} />
                 )}
               </SidebarMenu>
             </SidebarGroupContent>

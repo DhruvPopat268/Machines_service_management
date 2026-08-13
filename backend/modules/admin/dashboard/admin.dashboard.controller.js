@@ -6,6 +6,7 @@ const Machine     = require("../inventoryManagement/admin.machine.model");
 const PurchasedMachine = require("../purchasedMachines/admin.purchasedMachine.model");
 const SoldMachine      = require("../soldMachines/admin.soldMachine.model");
 const Expense          = require("../addExpense/admin.expense.model");
+const Incentive        = require("../addIncentive/admin.incentive.model");
 
 const getStats = async (req, res) => {
   try {
@@ -48,6 +49,7 @@ const getStats = async (req, res) => {
       purchaseAgg,
       saleAgg,
       expenseAgg,
+      incentiveAgg,
       serviceChargesAgg,
       freeMaterialCostAgg,
       stockValueAgg,
@@ -71,6 +73,15 @@ const getStats = async (req, res) => {
         { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } }, totalCogs: { $sum: "$cogsTotalBase" } } },
       ]),
       Expense.aggregate([
+        { $match: from || to ? {
+            date: {
+              ...(from ? { $gte: new Date(from) } : {}),
+              ...(to   ? { $lte: (() => { const d = new Date(to); d.setHours(23,59,59,999); return d; })() } : {}),
+            },
+          } : {} },
+        { $group: { _id: null, totalAmount: { $sum: "$amount" } } },
+      ]),
+      Incentive.aggregate([
         { $match: from || to ? {
             date: {
               ...(from ? { $gte: new Date(from) } : {}),
@@ -123,9 +134,10 @@ const getStats = async (req, res) => {
     const totalUnitsSold       = saleAgg[0]?.totalUnits      ?? 0;
     const totalCogs            = saleAgg[0]?.totalCogs       ?? 0;
     const totalExpenses        = expenseAgg[0]?.totalAmount  ?? 0;
+    const totalIncentives      = incentiveAgg[0]?.totalAmount ?? 0;
     const totalServiceCharges  = serviceChargesAgg[0]?.totalAmount ?? 0;
     const freeMaterialCost     = freeMaterialCostAgg[0]?.totalCost ?? 0;
-    const netProfit            = totalSaleAmount + totalServiceCharges - totalCogs - freeMaterialCost - totalExpenses;
+    const netProfit            = totalSaleAmount + totalServiceCharges + totalIncentives - totalCogs - freeMaterialCost - totalExpenses;
     const stockValue           = Math.round((stockValueAgg[0]?.totalStockValue ?? 0) * 100) / 100;
 
     return res.status(200).json({
@@ -147,6 +159,7 @@ const getStats = async (req, res) => {
         totalUnitsSold,
         totalCogs,
         totalExpenses,
+        totalIncentives,
         totalServiceCharges,
         freeMaterialCost,
         stockValue,
@@ -498,7 +511,7 @@ const getNetProfitCharts = async (req, res) => {
     const windowEnd = new Date(monthWindow[3].year, monthWindow[3].month, 1); // exclusive
 
     // ── Calculate monthly net profit ──
-    const [monthlySalesRows, monthlyServiceChargesRows, monthlyExpensesRows, monthlyFreeMaterialRows] = await Promise.all([
+    const [monthlySalesRows, monthlyServiceChargesRows, monthlyExpensesRows, monthlyIncentivesRows, monthlyFreeMaterialRows] = await Promise.all([
       // Monthly sales revenue and COGS
       SoldMachine.aggregate([
         { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
@@ -533,6 +546,17 @@ const getNetProfitCharts = async (req, res) => {
         },
       ]),
 
+      // Monthly incentives
+      Incentive.aggregate([
+        { $match: { date: { $gte: windowStart, $lt: windowEnd } } },
+        {
+          $group: {
+            _id: { year: { $year: "$date" }, month: { $month: "$date" } },
+            incentives: { $sum: "$amount" },
+          },
+        },
+      ]),
+
       // Monthly free material cost
       ServiceCall.aggregate([
         {
@@ -563,6 +587,7 @@ const getNetProfitCharts = async (req, res) => {
         cogs: r.cogs || 0,
         serviceCharges: 0,
         expenses: 0,
+        incentives: 0,
         freeMaterialCost: 0,
       };
     });
@@ -570,7 +595,7 @@ const getNetProfitCharts = async (req, res) => {
     monthlyServiceChargesRows.forEach((r) => {
       const key = `${r._id.year}-${r._id.month}`;
       if (!monthlyDataMap[key]) {
-        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, incentives: 0, freeMaterialCost: 0 };
       }
       monthlyDataMap[key].serviceCharges = r.serviceCharges || 0;
     });
@@ -578,15 +603,23 @@ const getNetProfitCharts = async (req, res) => {
     monthlyExpensesRows.forEach((r) => {
       const key = `${r._id.year}-${r._id.month}`;
       if (!monthlyDataMap[key]) {
-        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, incentives: 0, freeMaterialCost: 0 };
       }
       monthlyDataMap[key].expenses = r.expenses || 0;
+    });
+
+    monthlyIncentivesRows.forEach((r) => {
+      const key = `${r._id.year}-${r._id.month}`;
+      if (!monthlyDataMap[key]) {
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, incentives: 0, freeMaterialCost: 0 };
+      }
+      monthlyDataMap[key].incentives = r.incentives || 0;
     });
 
     monthlyFreeMaterialRows.forEach((r) => {
       const key = `${r._id.year}-${r._id.month}`;
       if (!monthlyDataMap[key]) {
-        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, freeMaterialCost: 0 };
+        monthlyDataMap[key] = { revenue: 0, cogs: 0, serviceCharges: 0, expenses: 0, incentives: 0, freeMaterialCost: 0 };
       }
       monthlyDataMap[key].freeMaterialCost = r.freeMaterialCost || 0;
     });
@@ -599,10 +632,11 @@ const getNetProfitCharts = async (req, res) => {
         cogs: 0,
         serviceCharges: 0,
         expenses: 0,
+        incentives: 0,
         freeMaterialCost: 0,
       };
 
-      const totalRevenue = data.revenue + data.serviceCharges;
+      const totalRevenue = data.revenue + data.serviceCharges + data.incentives;
       const totalCosts = data.cogs + data.expenses + data.freeMaterialCost;
       const netProfit = Math.round((totalRevenue - totalCosts) * 100) / 100;
 
@@ -610,6 +644,7 @@ const getNetProfitCharts = async (req, res) => {
         month: label,
         revenue: Math.round(data.revenue * 100) / 100,
         serviceCharges: Math.round(data.serviceCharges * 100) / 100,
+        incentives: Math.round(data.incentives * 100) / 100,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         cogs: Math.round(data.cogs * 100) / 100,
         expenses: Math.round(data.expenses * 100) / 100,

@@ -35,6 +35,8 @@ import VendorsPage from "./pages/VendorsPage";
 import TravelReimbursementsPage from "./pages/TravelReimbursementsPage";
 import ExpenseCategoriesPage from "./pages/ExpenseCategoriesPage";
 import AddExpensePage from "./pages/AddExpensePage";
+import IncentiveCategoriesPage from "./pages/IncentiveCategoriesPage";
+import AddIncentivePage from "./pages/AddIncentivePage";
 import GstConfigPage from "./pages/GstConfigPage";
 import ProfilePage from "./pages/ProfilePage";
 import { ProfileProvider } from "./context/ProfileContext";
@@ -97,6 +99,9 @@ const App = () => (
 
             <Route path="/expense-categories" element={<G k="expense-categories"><ExpenseCategoriesPage /></G>} />
             <Route path="/add-expenses"        element={<G k="add-expenses"><AddExpensePage /></G>} />
+
+            <Route path="/incentive-categories" element={<G k="incentive-categories"><IncentiveCategoriesPage /></G>} />
+            <Route path="/add-incentives"        element={<G k="add-incentives"><AddIncentivePage /></G>} />
 
             <Route path="/gst-config"          element={<G k="gst-config"><GstConfigPage /></G>} />
 

@@ -29,7 +29,7 @@ interface DashboardStats {
   activeEngineers: number; activeCustomers: number; lowStockMachines: number;
   totalPurchaseAmount: number; totalUnitsPurchased: number;
   totalSaleAmount: number; totalUnitsSold: number;
-  totalExpenses: number; totalServiceCharges: number; totalCogs: number;
+  totalExpenses: number; totalIncentives: number; totalServiceCharges: number; totalCogs: number;
   freeMaterialCost: number; stockValue: number; netProfit: number;
 }
 
@@ -235,11 +235,12 @@ const serviceStats = [
   ];
 
   const profitStats = [
+    { label: "Total Sale Amt",       value: fmtAmount(stats?.totalSaleAmount ?? 0),                                      icon: TrendingUp,   colorClass: "text-success bg-success/10" },
+    { label: "Total Call Charges",   value: fmtAmount(stats?.totalServiceCharges ?? 0),                                icon: PhoneCall,    colorClass: "text-success bg-success/10" },
+    { label: "Total Incentives",     value: fmtAmount(stats?.totalIncentives ?? 0),                                    icon: TrendingUp,   colorClass: "text-success bg-success/10" },
     { label: "Total COGS",           value: fmtAmount(stats?.totalCogs ?? 0),                                          icon: ShoppingCart, colorClass: "text-warning bg-warning/10" },
     { label: "Total Expenses",       value: fmtAmount(stats?.totalExpenses ?? 0),                                      icon: AlertCircle,  colorClass: "text-destructive bg-destructive/10" },
     { label: "Free Material Cost",   value: fmtAmount(stats?.freeMaterialCost ?? 0),                                   icon: Package,      colorClass: "text-warning bg-warning/10" },
-    { label: "Total Call Charges",   value: fmtAmount(stats?.totalServiceCharges ?? 0),                                icon: PhoneCall,    colorClass: "text-primary bg-accent" },
-    { label: "Net Profit",           value: fmtAmount(stats?.netProfit ?? 0),                                          icon: TrendingUp,   colorClass: (stats?.netProfit ?? 0) >= 0 ? "text-success bg-success/10" : "text-destructive bg-destructive/10" },
   ];
 
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -453,6 +454,40 @@ const serviceStats = [
           </div>
         </div>
 
+        {/* Prominent Net Profit Card - AT TOP */}
+        {(viewMode === "both" || viewMode === "account") && !statsLoading && (
+          <Card className={`border-2 shadow-lg ${(stats?.netProfit ?? 0) >= 0 ? "border-green-500 bg-gradient-to-br from-green-50 to-green-100/50" : "border-red-500 bg-gradient-to-br from-red-50 to-red-100/50"}`}>
+            <CardContent className="p-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-semibold uppercase tracking-wide mb-2 ${(stats?.netProfit ?? 0) >= 0 ? "text-green-700" : "text-red-700"}`}>
+                    Net Profit
+                  </p>
+                  <p className={`text-5xl font-bold ${(stats?.netProfit ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {fmtAmount(stats?.netProfit ?? 0)}
+                  </p>
+                  <p className={`text-xs mt-2 ${(stats?.netProfit ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}>
+                    {(stats?.netProfit ?? 0) >= 0 ? "💰 Strong performance" : "⚠️ Review needed"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setProfitBreakupOpen(true)}
+                  className={`flex-shrink-0 h-16 w-16 rounded-full flex items-center justify-center transition-all hover:scale-110 ${
+                    (stats?.netProfit ?? 0) >= 0
+                      ? "bg-green-200 text-green-700 hover:bg-green-300"
+                      : "bg-red-200 text-red-700 hover:bg-red-300"
+                  }`}
+                  title="View profit breakdown"
+                >
+                  <Info className="h-8 w-8" />
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {(viewMode === "both" || viewMode === "account") && statsLoading && <div className="h-32 rounded-xl bg-muted animate-pulse" />}
+
         {(viewMode === "both" || viewMode === "service") && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {statsLoading
@@ -481,35 +516,17 @@ const serviceStats = [
         )}
 
         {(viewMode === "both" || viewMode === "account") && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {statsLoading
-              ? Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
-              : profitStats.map((stat) =>
-                  stat.label === "Net Profit" ? (
-                    <Card key={stat.label} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                      <CardContent className="p-5 flex items-center gap-4">
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${stat.colorClass}`}>
-                          <TrendingUp className="h-5 w-5" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xl font-bold text-foreground truncate">{stat.value}</p>
-                          <p className="text-xs text-muted-foreground">{stat.label}</p>
-                        </div>
-                        <button
-                          onClick={() => setProfitBreakupOpen(true)}
-                          className="shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-muted transition-colors"
-                          title="View breakup"
-                        >
-                          <Info className="h-4 w-4" />
-                        </button>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <StatsCard key={stat.label} {...stat} />
-                  )
-                )
-            }
-          </div>
+          <>
+            {/* Other Profit Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {statsLoading
+                ? Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)
+                : profitStats
+                    .filter((stat) => stat.label !== "Net Profit")
+                    .map((stat) => <StatsCard key={stat.label} {...stat} />)
+              }
+            </div>
+          </>
         )}
 
         {/* Net Profit Breakup Dialog */}
@@ -530,9 +547,13 @@ const serviceStats = [
                   <span className="text-muted-foreground">Total Call Charges</span>
                   <span className="font-medium text-green-600">+ {fmtAmount(stats?.totalServiceCharges ?? 0)}</span>
                 </div>
+                <div className="flex items-center justify-between px-4 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Total Incentives</span>
+                  <span className="font-medium text-green-600">+ {fmtAmount(stats?.totalIncentives ?? 0)}</span>
+                </div>
                 <div className="flex items-center justify-between px-4 py-2.5 text-sm font-semibold bg-muted/30">
                   <span>Total Revenue</span>
-                  <span className="text-green-600">{fmtAmount((stats?.totalSaleAmount ?? 0) + (stats?.totalServiceCharges ?? 0))}</span>
+                  <span className="text-green-600">{fmtAmount((stats?.totalSaleAmount ?? 0) + (stats?.totalServiceCharges ?? 0) + (stats?.totalIncentives ?? 0))}</span>
                 </div>
               </div>
 
