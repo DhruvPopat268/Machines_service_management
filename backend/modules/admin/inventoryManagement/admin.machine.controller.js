@@ -90,6 +90,7 @@ const getAll = async (req, res) => {
         query.$or = [
           { name:        { $regex: escaped, $options: "i" } },
           { modelNumber: { $regex: escaped, $options: "i" } },
+          { partCode:    { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -156,7 +157,7 @@ const getOne = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, modelNumber, hsnCode, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
+    const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
 
     const error = validateCreateMachine({ name, modelNumber, category, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -184,7 +185,7 @@ const create = async (req, res) => {
     const threshold = lowStockThreshold !== undefined && lowStockThreshold !== "" ? Number(lowStockThreshold) : -1;
     const machine = await Machine.create({
       name: name.trim(),
-      modelNumber, hsnCode,
+      modelNumber, partCode, hsnCode,
       category,
       division:          division || null,
       lowStockThreshold: threshold,
@@ -211,7 +212,7 @@ const update = async (req, res) => {
     if (!machine)
       return res.status(404).json({ success: false, message: "Machine not found" });
 
-    const { name, modelNumber, hsnCode, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
+    const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
 
     const error = validateUpdateMachine({ name, modelNumber, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
@@ -247,6 +248,7 @@ const update = async (req, res) => {
     const updateData = { images: currentImages };
     if (name !== undefined)          updateData.name          = name.trim();
     if (modelNumber !== undefined)   updateData.modelNumber   = modelNumber;
+    if (partCode !== undefined)      updateData.partCode      = partCode;
     if (hsnCode !== undefined)       updateData.hsnCode       = hsnCode;
     if (category !== undefined)      updateData.category      = category;
     if (division !== undefined)      updateData.division      = division || null;
@@ -303,9 +305,9 @@ const formatIST = (date) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "modelNumber", "hsnCode", "category", "division", "lowStockThreshold", "notes", "status (Active/Inactive)"],
-    ["CNC Machine X200", "X200", "84715000", "Heavy Machinery", "CNC Division", "5",  "Sample notes", "Active"],
-    ["Laser Cutter L10", "L10",  "",         "Light Machinery", "Laser Division", "-1", "", "Active"],
+    ["name", "modelNumber", "partCode", "hsnCode", "category", "division", "lowStockThreshold", "notes", "status (Active/Inactive)"],
+    ["CNC Machine X200", "X200", "PC001", "84715000", "Heavy Machinery", "CNC Division", "5",  "Sample notes", "Active"],
+    ["Laser Cutter L10", "L10",  "PC002", "",         "Light Machinery", "Laser Division", "-1", "", "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Machines");
@@ -411,6 +413,7 @@ const importMachines = async (req, res) => {
         await Machine.create({
           name:              String(row.name        || ""),
           modelNumber:       String(row.modelnumber || ""),
+          partCode:          String(row.partcode    || ""),
           hsnCode:           String(row.hsncode     || ""),
           category:          categoryId,
           division:          divisionId,
@@ -482,6 +485,7 @@ const exportMachines = async (req, res) => {
       rows.push({
         name:              m.name,
         modelNumber:       m.modelNumber,
+        partCode:          m.partCode,
         hsnCode:           m.hsnCode,
         category:          m.category?.name ?? "",
         division:          m.division?.name ?? "",
@@ -520,7 +524,7 @@ const buildMachineRow = (machine, borderColor) => {
         <td style="width:56px; vertical-align:top; padding-right:14px;">${image}</td>
         <td style="vertical-align:top;">
           <p style="margin:0; font-size:14px; font-weight:700; color:#111827;">${machine.name}</p>
-          <p style="margin:3px 0 0; font-size:12px; color:#6b7280;">Model: ${machine.modelNumber || "—"} &nbsp;|&nbsp; HSN: ${machine.hsnCode || "—"}</p>
+          <p style="margin:3px 0 0; font-size:12px; color:#6b7280;">Model: ${machine.modelNumber || "—"} &nbsp;|&nbsp; Part: ${machine.partCode || "—"} &nbsp;|&nbsp; HSN: ${machine.hsnCode || "—"}</p>
           <p style="margin:3px 0 0; font-size:12px; color:#6b7280;">${machine.category?.name || "—"} &nbsp;|&nbsp; ${machine.division?.name || "—"}</p>
           <p style="margin:3px 0 0; font-size:12px; font-weight:600; color:${machine.stockStatus === "Out of Stock" ? "#dc2626" : "#d97706"};">Stock: ${machine.currentStock}</p>
         </td>

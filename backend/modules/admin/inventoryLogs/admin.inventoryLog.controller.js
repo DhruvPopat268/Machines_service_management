@@ -100,6 +100,8 @@ const getAll = async (req, res) => {
         query.$or = [
           { "machines.machineName":  { $regex: escaped, $options: "i" } },
           { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
+          { "machines.partCode":     { $regex: escaped, $options: "i" } },
+          { "machines.serialNumber": { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
           { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },

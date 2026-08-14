@@ -37,6 +37,8 @@ const getAll = async (req, res) => {
         query.$or = [
           { "machines.machineName":  { $regex: escaped, $options: "i" } },
           { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
+          { "machines.partCode":     { $regex: escaped, $options: "i" } },
+          { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
           { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
@@ -166,9 +168,8 @@ const createPurchase = async (req, res) => {
     const totalGst = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
     const gstDivisor = 1 + totalGst / 100;
 
-    // ── Collect all serial numbers and part codes for bulk duplicate check ──
+    // ── Collect all serial numbers for bulk duplicate check ──
     const allSerialNumbers = machines.flatMap((m) => m.serialNumbers || []).map((s) => s.trim());
-    const allPartCodes     = machines.flatMap((m) => m.partCodes     || []).map((c) => c.trim());
 
     if (allSerialNumbers.length > 0) {
       const unique = new Set(allSerialNumbers.map((s) => s.toUpperCase()));
@@ -177,15 +178,6 @@ const createPurchase = async (req, res) => {
       const existing = await PurchasedMachine.findOne({ "machines.serialNumbers.serialNumber": { $in: allSerialNumbers } }).session(session);
       if (existing)
         return abort(400, `One or more serial numbers already exist in a purchase record`);
-    }
-
-    if (allPartCodes.length > 0) {
-      const unique = new Set(allPartCodes.map((c) => c.toUpperCase()));
-      if (unique.size !== allPartCodes.length)
-        return abort(400, "Duplicate part codes in submitted list");
-      const existing = await PurchasedMachine.findOne({ "machines.partCodes.partCode": { $in: allPartCodes } }).session(session);
-      if (existing)
-        return abort(400, `One or more part codes already exist in a purchase record`);
     }
 
     // ── Build machine entries ──
@@ -203,16 +195,19 @@ const createPurchase = async (req, res) => {
 
       const isParts    = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
       const buyBase          = Math.round((m.buyingPriceWithGst / gstDivisor) * 100) / 100;
-      const sellBase          = m.sellingPriceWithGst != null ? Math.round((m.sellingPriceWithGst / gstDivisor) * 100) / 100 : null;
+      const gstPerUnit       = Math.round((m.buyingPriceWithGst - buyBase) * 100) / 100;
       const buyingTotalWithGst = Math.round(m.buyingPriceWithGst * m.quantity * 100) / 100;
       const buyingTotalBase    = Math.round(buyBase * m.quantity);
+      const gstTotalForMachine = Math.round((buyingTotalWithGst - buyingTotalBase) * 100) / 100;
+      
       grandTotalWithGst        = Math.round((grandTotalWithGst + buyingTotalWithGst) * 100) / 100;
       grandTotalBase           = Math.round(grandTotalBase + buyingTotalBase);
 
-      machineEntries.push({
+      const machineEntry = {
         machineId:           machine._id,
         machineName:         machine.name,
         modelNumber:         machine.modelNumber || "",
+        partCode:            machine.partCode || "",
         categoryId:          machine.category?._id || null,
         category:            machine.category?.name || "",
         divisionId:          machine.division?._id || null,
@@ -220,17 +215,38 @@ const createPurchase = async (req, res) => {
         quantity:            m.quantity,
         buyingPriceWithGst:  m.buyingPriceWithGst,
         buyingPriceBase:     buyBase,
-        sellingPriceWithGst: m.sellingPriceWithGst ?? null,
-        sellingPriceBase:    sellBase,
+        gstAmountPerUnit:    gstPerUnit,
         buyingTotalWithGst,
         buyingTotalBase,
-        ...(isParts
-          ? { partCodes: (m.partCodes || []).map((c) => ({ partCode: c.trim(), status: "available" })) }
-          : { serialNumbers: (m.serialNumbers || []).map((s) => ({ serialNumber: s.trim(), status: "available" })) }),
-      });
+        gstAmountTotal:      gstTotalForMachine,
+      };
+
+      if (isParts) {
+        machineEntry.availableParts = m.quantity;
+        machineEntry.soldParts = 0;
+      } else {
+        machineEntry.serialNumbers = (m.serialNumbers || []).map((s) => ({ serialNumber: s.trim(), status: "available" }));
+      }
+
+      machineEntries.push(machineEntry);
     }
 
-    const [purchase] = await PurchasedMachine.create([{ vendorInfo, machines: machineEntries, grandTotalWithGst, grandTotalBase }], { session });
+    const grandTotalGstAmount = Math.round((grandTotalWithGst - grandTotalBase) * 100) / 100;
+    const gstConfigData = {
+      cgst: gstConfig?.cgst || 0,
+      sgst: gstConfig?.sgst || 0,
+      igst: gstConfig?.igst || 0,
+      totalGst: totalGst,
+    };
+
+    const [purchase] = await PurchasedMachine.create([{ 
+      vendorInfo, 
+      gstConfig: gstConfigData,
+      machines: machineEntries, 
+      grandTotalWithGst, 
+      grandTotalBase,
+      grandTotalGstAmount,
+    }], { session });
 
     // ── Update machine stock ──
     for (const e of machineEntries) {
@@ -252,13 +268,13 @@ const createPurchase = async (req, res) => {
           machineId:     e.machineId,
           machineName:   e.machineName,
           modelNumber:   e.modelNumber,
+          partCode:      e.partCode,
           categoryId:    e.categoryId,
           category:      e.category,
           divisionId:    e.divisionId,
           division:      e.division,
           quantity:      e.quantity,
           serialNumbers: (e.serialNumbers || []).map(s => s.serialNumber),
-          partCodes:     (e.partCodes || []).map(p => p.partCode),
         })),
       }],
       { session }
@@ -373,7 +389,7 @@ const exportToExcel = async (req, res) => {
 
     const purchases = await PurchasedMachine.find(query).sort({ createdAt: -1 }).lean();
 
-    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Serial / Part Code", "Status", "Purchase Date", "Purchase Time"];
+    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Part Code", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Available Parts", "Sold Parts", "Purchase Date", "Purchase Time"];
 
     const rows = [];
     const merges = [];
@@ -385,42 +401,35 @@ const exportToExcel = async (req, res) => {
       const purchaseStartRow = rows.length;
 
       p.machines.forEach((m) => {
-        const isParts  = !!(m.partCodes && m.partCodes.length);
-        const codes    = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
+        const isParts  = !!(m.availableParts || m.availableParts === 0);
         const machineStartRow = rows.length;
-
-        const codeList = codes.length > 0 ? codes : [null];
-        codeList.forEach((entry, ci) => {
-          const code           = entry ? (isParts ? entry.partCode : entry.serialNumber) : "";
-          const status         = entry ? entry.status : "";
-          const isMachineFirst = ci === 0;
-          const isPurchaseFirst = isMachineFirst && machineStartRow === purchaseStartRow;
-          rows.push({
-            "Vendor Company":           isPurchaseFirst ? p.vendorInfo.companyName || "" : "",
-            "Vendor Name":              isPurchaseFirst ? p.vendorInfo.name        || "" : "",
-            "Vendor Phone":             isPurchaseFirst ? p.vendorInfo.phone       || "" : "",
-            "Machine Name":             isMachineFirst ? m.machineName || "" : "",
-            "Model Number":             isMachineFirst ? m.modelNumber || "" : "",
-            "Category":                 isMachineFirst ? m.category    || "" : "",
-            "Division":                 isMachineFirst ? m.division    || "" : "",
-            "Quantity":                  isMachineFirst ? m.quantity              : "",
-            "Buying Price (Base)":        isMachineFirst ? m.buyingPriceBase       : "",
-            "Buying Price (With GST)":    isMachineFirst ? m.buyingPriceWithGst    : "",
-            "Selling Price (Base)":       isMachineFirst ? (m.sellingPriceBase    ?? "") : "",
-            "Selling Price (With GST)":   isMachineFirst ? (m.sellingPriceWithGst ?? "") : "",
-            "Buying Total (Base)":        isMachineFirst ? m.buyingTotalBase    : "",
-            "Buying Total (With GST)":    isMachineFirst ? m.buyingTotalWithGst : "",
-            "Serial / Part Code":       code,
-            "Status":                   status,
-            "Purchase Date":            isPurchaseFirst ? date : "",
-            "Purchase Time":            isPurchaseFirst ? time : "",
-          });
+        const isMachineFirst = true;
+        const isPurchaseFirst = machineStartRow === purchaseStartRow;
+        
+        rows.push({
+          "Vendor Company":           isPurchaseFirst ? p.vendorInfo.companyName || "" : "",
+          "Vendor Name":              isPurchaseFirst ? p.vendorInfo.name        || "" : "",
+          "Vendor Phone":             isPurchaseFirst ? p.vendorInfo.phone       || "" : "",
+          "Machine Name":             m.machineName || "",
+          "Model Number":             m.modelNumber || "",
+          "Part Code":                m.partCode    || "",
+          "Category":                 m.category    || "",
+          "Division":                 m.division    || "",
+          "Quantity":                 m.quantity,
+          "Buying Price (Base)":      m.buyingPriceBase,
+          "Buying Price (With GST)":  m.buyingPriceWithGst,
+          "Buying Total (Base)":      m.buyingTotalBase,
+          "Buying Total (With GST)":  m.buyingTotalWithGst,
+          "Available Parts":          isParts ? (m.availableParts || 0) : "",
+          "Sold Parts":               isParts ? (m.soldParts || 0) : "",
+          "Purchase Date":            isPurchaseFirst ? date : "",
+          "Purchase Time":            isPurchaseFirst ? time : "",
         });
 
         const sheetMachineStart = machineStartRow + 1;
         const sheetMachineEnd   = rows.length;
         if (sheetMachineStart < sheetMachineEnd) {
-          ["Machine Name", "Model Number", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Selling Price (Base)", "Selling Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)"].forEach((col) => {
+          ["Machine Name", "Model Number", "Part Code", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Available Parts", "Sold Parts"].forEach((col) => {
             const c = COLS.indexOf(col);
             merges.push({ s: { r: sheetMachineStart, c }, e: { r: sheetMachineEnd, c } });
           });
@@ -450,4 +459,4 @@ const exportToExcel = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createPurchase, verifySerialNumbers, verifyPartCodes, exportToExcel };
+module.exports = { getAll, getById, createPurchase, verifySerialNumbers, exportToExcel };

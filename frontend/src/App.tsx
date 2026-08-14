@@ -20,7 +20,6 @@ import CallDetailsPage from "./pages/CallDetailsPage";
 import MachinesPage from "./pages/MachinesPage";
 import AddMachineForm from "./pages/AddMachineForm";
 import InventoryLogsPage from "./pages/InventoryLogsPage";
-import InventoryLogDetailPage from "./pages/InventoryLogDetailPage";
 import MachineDivisionsPage from "./pages/MachineDivisionsPage";
 import MachineCategoriesPage from "./pages/MachineCategoriesPage";
 import CustomersPage from "./pages/CustomersPage";
@@ -79,7 +78,6 @@ const App = () => (
             <Route path="/machines/:id/edit"  element={<G k="machines-list"><AddMachineForm type="Item" mode="edit" /></G>} />
 
             <Route path="/inventory-logs"     element={<G k="inventory-logs"><InventoryLogsPage /></G>} />
-            <Route path="/inventory-logs/:id" element={<G k="inventory-logs"><InventoryLogDetailPage /></G>} />
 
             <Route path="/purchase-machines"      element={<G k="purchase-machines"><PurchaseMachinesPage /></G>} />
 

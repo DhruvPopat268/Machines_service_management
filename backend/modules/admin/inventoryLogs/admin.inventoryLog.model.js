@@ -5,6 +5,7 @@ const machineEntrySchema = new mongoose.Schema(
     machineId:     { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
     machineName:   { type: String, trim: true, required: true },
     modelNumber:   { type: String, trim: true, default: "" },
+    partCode:      { type: String, trim: true, default: "" },
     categoryId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
     category:      { type: String, trim: true, default: "" },
     divisionId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },

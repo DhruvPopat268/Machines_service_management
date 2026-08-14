@@ -19,6 +19,7 @@ interface Machine {
   _id: string;
   name: string;
   modelNumber: string;
+  partCode: string;
   hsnCode: string;
   gstPercentage: number | null;
   category: { _id: string; name: string } | null;
@@ -249,6 +250,7 @@ const MachinesPage = () => {
     },
     { key: "name",        label: "Name",          className: "min-w-[180px] max-w-[220px]", render: (m) => <span className="font-medium block truncate max-w-[200px]" title={m.name}>{m.name}</span> },
     { key: "modelNumber", label: "Model Number",   className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.modelNumber || "—"}</span> },
+    { key: "partCode",    label: "Part Code",      className: "min-w-[120px]", render: (m) => <span className="text-sm">{m.partCode || "—"}</span> },
     { key: "category",   label: "Category",       className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.category?.name || "—"}</span> },
     { key: "division",   label: "Division",       className: "min-w-[140px]", render: (m) => <span className="text-sm">{m.division?.name || "—"}</span> },
     { key: "currentStock",     label: "Current Stock",   className: "min-w-[130px] text-center", render: (m) => <span className="text-sm font-medium">{m.currentStock}</span> },
@@ -322,14 +324,24 @@ const MachinesPage = () => {
 
           {/* Row 1: Search + Date Range + Clear */}
           <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-2 flex-1 max-w-sm">
               <Input
                 placeholder="Search by name or model number..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className=""
               />
+              <div className="text-xs text-muted-foreground cursor-help group relative shrink-0">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-muted-foreground text-[10px] hover:bg-muted hover:border-foreground transition-colors">?</span>
+                <div className="invisible group-hover:visible absolute top-full right-0 mt-2 w-44 bg-slate-900 text-white text-xs rounded-lg p-2 z-50 whitespace-normal">
+                  <p className="font-semibold mb-1">Searchable fields:</p>
+                  <ul className="text-[11px] space-y-0.5">
+                    <li>• Item Name</li>
+                    <li>• Model Number</li>
+                    <li>• Part Code</li>
+                  </ul>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
