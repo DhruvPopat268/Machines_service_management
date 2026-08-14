@@ -691,82 +691,69 @@ const getPartsMachines = async (req, res) => {
     const productCategoryId = process.env.PRODUCT_CATEGORY_ID;
     const { search } = req.query;
 
-    console.log("[getPartsMachines] Request received");
-    console.log("[getPartsMachines] Search term:", search || "(none)");
-    console.log("[getPartsMachines] Product category ID to exclude:", productCategoryId);
-
     const escaped = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    // Remove database-level category filter — it excludes documents with mixed categories
-    // The in-memory filter below handles category exclusion per machine
-    const purchaseRecords = await PurchasedMachine.find({
-      ...(search?.trim() && {
-        $or: [
-          { "machines.machineName": { $regex: escaped, $options: "i" } },
-          { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
-        ],
-      }),
-    });
+    // Filter for machines that are parts machines (have availableParts > 0) and not product category
+    const query = {
+      "machines.availableParts": { $gt: 0 },
+    };
 
-    console.log("[getPartsMachines] Purchase records found:", purchaseRecords.length);
-
-    const machineIds = [...new Set(
-      purchaseRecords.flatMap(record =>
-        record.machines
-          .filter(m => m.categoryId?.toString() !== productCategoryId)
-          .map(m => m.machineId)
-          .filter(Boolean)
-      )
-    )];
-
-    console.log("[getPartsMachines] Unique machine IDs extracted:", machineIds.length);
-
-    const machineImagesMap = new Map();
-    if (machineIds.length > 0) {
-      const machines = await Machine.find({ _id: { $in: machineIds }, status: "Active" }).select("_id images");
-      console.log("[getPartsMachines] Active machines with images found:", machines.length);
-      machines.forEach(m => machineImagesMap.set(m._id.toString(), m.images));
+    // Add search filter if provided
+    if (search?.trim()) {
+      query.$or = [
+        { "machines.machineName": { $regex: escaped, $options: "i" } },
+        { "machines.partCode": { $regex: escaped, $options: "i" } },
+      ];
     }
 
-    // One entry per available part code
-    const parts = [];
+    const purchaseRecords = await PurchasedMachine.find(query);
+
+    // Group by partCode and aggregate availableParts
+    const partCodeMap = new Map(); // partCode -> { machineId, machineName, modelNumber, categoryId, category, divisionId, division, availableQuantity }
+
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
+        // Skip if product category or no available parts
         if (machine.categoryId?.toString() === productCategoryId) continue;
-        if (!machine.machineId || !machineImagesMap.has(machine.machineId.toString())) continue;
+        if (machine.availableParts <= 0) continue;
+        if (!machine.machineId) continue;
+        if (!machine.partCode) continue;
 
-        for (const entry of (machine.partCodes || [])) {
-          if (entry.status !== "available") continue;
-          if (search?.trim()) {
-            const s = search.trim().toLowerCase();
-            const matchesPartCode   = entry.partCode.toLowerCase().includes(s);
-            const matchesMachineName = machine.machineName.toLowerCase().includes(s);
-            if (!matchesPartCode && !matchesMachineName) continue;
-          }
+        // Apply search filter on client side for grouped results
+        if (search?.trim()) {
+          const s = search.trim().toLowerCase();
+          const matchesPartCode   = machine.partCode?.toLowerCase().includes(s) || false;
+          const matchesMachineName = machine.machineName.toLowerCase().includes(s);
+          if (!matchesPartCode && !matchesMachineName) continue;
+        }
 
-          parts.push({
-            machineId:              machine.machineId,
-            machineName:            machine.machineName,
-            modelNumber:            machine.modelNumber || "",
-            categoryId:             machine.categoryId,
-            category:               machine.category,
-            divisionId:             machine.divisionId,
-            division:               machine.division,
-            sellingPriceBase:       machine.sellingPriceBase ?? 0,
-            images:                 machineImagesMap.get(machine.machineId.toString()) || [],
-            partCode:               entry.partCode,
+        const partCode = machine.partCode;
+
+        if (partCodeMap.has(partCode)) {
+          // Part code already exists, add to available quantity
+          const existing = partCodeMap.get(partCode);
+          existing.availableQuantity += machine.availableParts;
+        } else {
+          // First time seeing this part code
+          partCodeMap.set(partCode, {
+            machineId:         machine.machineId,
+            machineName:       machine.machineName,
+            modelNumber:       machine.modelNumber || "",
+            categoryId:        machine.categoryId,
+            category:          machine.category,
+            divisionId:        machine.divisionId,
+            division:          machine.division,
+            availableQuantity: machine.availableParts,
+            partCode:          partCode,
           });
         }
       }
     }
 
-    console.log("[getPartsMachines] Total parts to return:", parts.length);
-    console.log("[getPartsMachines] Response sent successfully");
+    const parts = [...partCodeMap.values()];
 
     return res.status(200).json({ success: true, data: parts });
   } catch (err) {
-    console.error("[getPartsMachines] ERROR:", err.message);
-    console.error("[getPartsMachines] Stack trace:", err.stack);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
