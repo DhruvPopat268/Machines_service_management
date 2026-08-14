@@ -289,7 +289,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     }
 
     if (!companyId) { toast.error("Please select a company"); return; }
-    if (paymentStatus !== "Unpaid") {
+    if (sellingTotal > 0 && paymentStatus !== "Unpaid") {
       if (!paymentMethod) { toast.error("Please select a payment method"); return; }
       if (!paymentDate) { toast.error("Please select a payment date"); return; }
       if (paymentStatus === "Partial-Paid") {
@@ -406,6 +406,16 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     const net = Number(e.sellingPriceWithGst) * (1 - discPct / 100);
     return s + net * Number(e.quantity);
   }, 0);
+
+  useEffect(() => {
+    if (sellingTotal === 0) {
+      setPaymentStatus("Paid");
+      setPaymentMethod("");
+    } else if (paymentStatus === "Paid" && sellingTotal > 0) {
+      // reset back to Unpaid only if it was auto-set (no method selected)
+      if (!paymentMethod) setPaymentStatus("Unpaid");
+    }
+  }, [sellingTotal]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -797,6 +807,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             <div className="border-t shrink-0 bg-background">
 
               {/* Payment section */}
+              {sellingTotal > 0 && (
               <div className="px-4 pt-3 pb-2 space-y-2">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</Label>
                 <div className="grid grid-cols-2 gap-2">
@@ -842,6 +853,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                   )}
                 </div>
               </div>
+              )}
 
               {/* Grand total + actions */}
               <div className="border-t px-4 py-3 flex items-center justify-between gap-4">

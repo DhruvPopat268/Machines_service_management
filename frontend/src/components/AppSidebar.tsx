@@ -104,13 +104,7 @@ export function AppSidebar() {
     hasPermission("inventory-logs");
 
   const showSystemUsersSection =
-    hasPermission("permissions") || hasPermission("roles") || hasPermission("system-users");
-
-  const showEngineersSection =
-    hasPermission("engineers") || hasPermission("engineer-performance");
-
-  const showCustomersSection =
-    hasPermission("problem-types") || hasPermission("customers");
+    hasPermission("permissions") || hasPermission("roles") || hasPermission("system-users") || hasPermission("engineers") || hasPermission("engineer-performance");
 
   const showCallsSection =
     hasPermission("calls") || hasPermission("calls-raise");
@@ -150,61 +144,44 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {/* Company Management */}
-        {hasPermission("companies") && (
+        {/* Vendors / Customers Management */}
+        {(hasPermission("vendors") || hasPermission("customers")) && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Company Management</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Vendors / Customers Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/companies" icon={Building2} label="Companies" collapsed={collapsed} />
+                {hasPermission("vendors") && <SidebarLink to="/vendors" icon={Truck} label="Vendors" collapsed={collapsed} />}
+                {hasPermission("customers") && <SidebarLink to="/customers" icon={Users} label="Customers" collapsed={collapsed} />}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
-        {/* Zone Management */}
-        {hasPermission("zones") && (
+        {/* Purchase / Sell Management */}
+        {(hasPermission("purchase-machines") || hasPermission("sell-machines")) && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Zone Management</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase / Sell Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/zones" icon={MapPin} label="Zones" collapsed={collapsed} />
+                {hasPermission("purchase-machines") && <SidebarLink to="/purchase-machines" icon={ShoppingBag} label="Purchase Items" collapsed={collapsed} />}
+                {hasPermission("sell-machines") && <SidebarLink to="/sell-machines" icon={ShoppingCart} label="Sell Items" collapsed={collapsed} />}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
-        {/* Contracts Management */}
-        {hasPermission("contract-types") && (
+        {/* Call Management */}
+        {showCallsSection && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Contracts Management</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/contract-types" icon={FileSignature} label="Contract Types" collapsed={collapsed} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Pages Category */}
-        {hasPermission("pages-categories") && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Pages Category Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarLink to="/pages-categories" icon={LayoutList} label="Pages Categories" collapsed={collapsed} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Vendor Management */}
-        {hasPermission("vendors") && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Vendor Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarLink to="/vendors" icon={Truck} label="Vendors" collapsed={collapsed} />
+                {hasPermission("calls") && (
+                  <SidebarLink to="/calls" icon={PhoneCall} label="Calls" collapsed={collapsed} />
+                )}
+                {hasPermission("calls-raise") && (
+                  <SidebarLink to="/calls/raise" icon={PhoneOutgoing} label="Raise a Call" collapsed={collapsed} />
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -256,108 +233,17 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {/* GST Management */}
-        {hasPermission("gst-config") && (
+        {/* Expenses / Incentives */}
+        {(showExpensesSection || showIncentivesSection) && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">GST Management</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Expenses / Incentives</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                <SidebarLink to="/gst-config" icon={Percent} label="GST Config" collapsed={collapsed} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Purchase Management */}
-        {hasPermission("purchase-machines") && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Purchase Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarLink to="/purchase-machines" icon={ShoppingBag} label="Purchase Items" collapsed={collapsed} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Sells Management */}
-        {hasPermission("sell-machines") && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Sells Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarLink to="/sell-machines" icon={ShoppingCart} label="Sell Items" collapsed={collapsed} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Call Management */}
-        {showCallsSection && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Call Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {hasPermission("calls") && (
-                  <SidebarLink to="/calls" icon={PhoneCall} label="Calls" collapsed={collapsed} />
-                )}
-                {hasPermission("calls-raise") && (
-                  <SidebarLink to="/calls/raise" icon={PhoneOutgoing} label="Raise a Call" collapsed={collapsed} />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Expenses Management */}
-        {(showExpensesSection || hasPermission("reimbursements")) && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Expenses Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {hasPermission("expense-categories") && (
-                  <SidebarLink to="/expense-categories" icon={Wallet} label="Expense Categories" collapsed={collapsed} />
-                )}
-                {hasPermission("add-expenses") && (
-                  <SidebarLink to="/add-expenses" icon={PlusCircle} label="Add Expense" collapsed={collapsed} />
-                )}
-                {hasPermission("reimbursements") && (
-                  <SidebarLink to="/reimbursements" icon={Receipt} label="Travel Expenses" collapsed={collapsed} />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Incentives Management */}
-        {showIncentivesSection && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Incentives Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {hasPermission("incentive-categories") && (
-                  <SidebarLink to="/incentive-categories" icon={Gift} label="Incentive Categories" collapsed={collapsed} />
-                )}
-                {hasPermission("add-incentives") && (
-                  <SidebarLink to="/add-incentives" icon={PlusCircle} label="Add Incentive" collapsed={collapsed} />
-                )}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {/* Customers Management */}
-        {showCustomersSection && (
-          <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Customers Management</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {hasPermission("problem-types") && (
-                  <SidebarLink to="/problem-types" icon={FileText} label="Problem Types" collapsed={collapsed} />
-                )}
-                {hasPermission("customers") && (
-                  <SidebarLink to="/customers" icon={Users} label="Customers" collapsed={collapsed} />
-                )}
+                {hasPermission("expense-categories") && <SidebarLink to="/expense-categories" icon={Wallet} label="Expense Categories" collapsed={collapsed} />}
+                {hasPermission("add-expenses") && <SidebarLink to="/add-expenses" icon={PlusCircle} label="Add Expense" collapsed={collapsed} />}
+                {hasPermission("reimbursements") && <SidebarLink to="/reimbursements" icon={Receipt} label="Travel Expenses" collapsed={collapsed} />}
+                {hasPermission("incentive-categories") && <SidebarLink to="/incentive-categories" icon={Gift} label="Incentive Categories" collapsed={collapsed} />}
+                {hasPermission("add-incentives") && <SidebarLink to="/add-incentives" icon={PlusCircle} label="Add Incentive" collapsed={collapsed} />}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -378,23 +264,29 @@ export function AppSidebar() {
                 {hasPermission("system-users") && (
                   <SidebarLink to="/users" icon={UserCog} label="System Users" collapsed={collapsed} />
                 )}
+                {hasPermission("engineers") && (
+                  <SidebarLink to="/engineers" icon={HardHat} label="Engineers" collapsed={collapsed} />
+                )}
+                {hasPermission("engineer-performance") && (
+                  <SidebarLink to="/engineers/performance" icon={BarChart2} label="Engineer Performance" collapsed={collapsed} />
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
 
-        {/* Engineers Management */}
-        {showEngineersSection && (
+        {/* Others */}
+        {(hasPermission("companies") || hasPermission("zones") || hasPermission("contract-types") || hasPermission("pages-categories") || hasPermission("problem-types") || hasPermission("gst-config")) && (
           <SidebarGroup>
-            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Engineers Management</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="text-sidebar-foreground font-semibold text-xs tracking-wider px-3 py-1">Others</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
-                {hasPermission("engineers") && (
-                  <SidebarLink to="/engineers" icon={HardHat} label="Engineers" collapsed={collapsed} />
-                )}
-                {hasPermission("engineer-performance") && (
-                  <SidebarLink to="/engineers/performance" icon={BarChart2} label="Performance Reports" collapsed={collapsed} />
-                )}
+                {hasPermission("gst-config") && <SidebarLink to="/gst-config" icon={Percent} label="GST Config" collapsed={collapsed} />}
+                {hasPermission("companies") && <SidebarLink to="/companies" icon={Building2} label="Companies" collapsed={collapsed} />}
+                {hasPermission("zones") && <SidebarLink to="/zones" icon={MapPin} label="Zones" collapsed={collapsed} />}
+                {hasPermission("contract-types") && <SidebarLink to="/contract-types" icon={FileSignature} label="Contract Types" collapsed={collapsed} />}
+                {hasPermission("pages-categories") && <SidebarLink to="/pages-categories" icon={LayoutList} label="Pages Categories" collapsed={collapsed} />}
+                {hasPermission("problem-types") && <SidebarLink to="/problem-types" icon={FileText} label="Problem Types" collapsed={collapsed} />}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
