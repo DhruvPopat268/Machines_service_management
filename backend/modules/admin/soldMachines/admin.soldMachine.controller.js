@@ -106,13 +106,20 @@ const getAvailableCodes = async (req, res) => {
     );
 
     if (isParts) {
-      const partCodes = matchingMachines
-        .flatMap(m => m.partCodes || [])
-        .filter(p => p.status === "available")
-        .map(p => p.partCode);
+      // For parts machines: return aggregated availability info
+      const totalAvailable = matchingMachines.reduce((sum, m) => sum + (m.availableParts || 0), 0);
+      const partCode = matchingMachines[0]?.partCode || "";
 
-      return res.status(200).json({ success: true, type: "partCodes", data: partCodes });
+      return res.status(200).json({
+        success: true,
+        type: "partCode",
+        data: {
+          partCode: partCode,
+          availableQuantity: totalAvailable,
+        },
+      });
     } else {
+      // For non-parts machines: return available serial numbers
       const serialNumbers = matchingMachines
         .flatMap(m => m.serialNumbers || [])
         .filter(s => s.status === "available")
@@ -137,6 +144,9 @@ const getAll = async (req, res) => {
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
           { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
+          { "machines.partCode": { $regex: escaped, $options: "i" } },
+          { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
           { "customerInfo.name": { $regex: escaped, $options: "i" } },
           { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
@@ -255,9 +265,9 @@ const createSale = async (req, res) => {
       gstNumber: customer.gstNumber || "",
     };
 
-    // ── Collect all serial numbers and part codes for bulk verification ──
+    // ── Collect all serial numbers for bulk verification ──
+    // Part codes are auto-fetched per machine via FIFO in the loop below
     const allSerialNumbers = machines.flatMap((m) => (m.serialNumbers || []).map(e => e.serialNumber.trim()));
-    const allPartCodes = machines.flatMap((m) => m.partCodes || []).map((c) => c.trim());
 
     // Check serial numbers: must exist in purchase as available, must not already be sold
     if (allSerialNumbers.length > 0) {
@@ -280,27 +290,6 @@ const createSale = async (req, res) => {
         return abort(400, `Serial numbers already sold: ${alreadySold.join(", ")}`);
     }
 
-    // Check part codes: must exist in purchase as available, must not already be sold
-    if (allPartCodes.length > 0) {
-      const uniqueSet = new Set(allPartCodes.map((c) => c.toUpperCase()));
-      if (uniqueSet.size !== allPartCodes.length)
-        return abort(400, "Duplicate part codes in submitted list");
-
-      const purchaseDocs = await PurchasedMachine.find(
-        { "machines.partCodes.partCode": { $in: allPartCodes } },
-        { "machines.partCodes": 1 }
-      ).session(session);
-
-      const foundEntries = purchaseDocs.flatMap(p => p.machines.flatMap(m => m.partCodes || []));
-      const notInPurchase = allPartCodes.filter(pc => !foundEntries.some(e => e.partCode.toUpperCase() === pc.toUpperCase()));
-      if (notInPurchase.length > 0)
-        return abort(400, `Part codes not found in any purchase: ${notInPurchase.join(", ")}`);
-
-      const alreadySold = allPartCodes.filter(pc => foundEntries.some(e => e.partCode.toUpperCase() === pc.toUpperCase() && e.status === "sold"));
-      if (alreadySold.length > 0)
-        return abort(400, `Part codes already sold: ${alreadySold.join(", ")}`);
-    }
-
     // ── Fetch GST config ──
     const gstConfig = await GstConfig.findOne().lean();
     const totalGst = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
@@ -310,6 +299,7 @@ const createSale = async (req, res) => {
     const machineEntries = [];
     let grandTotalBase = 0;
     let grandTotalWithGst = 0;
+    let grandTotalGstAmount = 0;
     let cogsTotalBase = 0;
 
     for (const m of machines) {
@@ -324,19 +314,24 @@ const createSale = async (req, res) => {
       const discountPct = Number(m.discountPercentage) || 0;
       const sellingPriceWithGst = Math.round(m.sellingPriceWithGst * 100) / 100;
       const sellingPriceBase = Math.round((sellingPriceWithGst / gstDivisor) * 100) / 100;
+      const gstAmountPerUnit = Math.round((sellingPriceWithGst - sellingPriceBase) * 100) / 100;
       const netSellingPriceWithGst = Math.round(sellingPriceWithGst * (1 - discountPct / 100) * 100) / 100;
       const netSellingPriceBase = Math.round((netSellingPriceWithGst / gstDivisor) * 100) / 100;
+      const netGstAmountPerUnit = Math.round((netSellingPriceWithGst - netSellingPriceBase) * 100) / 100;
       const sellingTotalBase = Math.round(netSellingPriceBase * m.quantity * 100) / 100;
       const sellingTotalWithGst = Math.round(netSellingPriceWithGst * m.quantity * 100) / 100;
+      const gstAmountTotal = Math.round(netGstAmountPerUnit * m.quantity * 100) / 100;
       const discountAmountWithGst = Math.round((sellingPriceWithGst - netSellingPriceWithGst) * 100) / 100;
 
       grandTotalBase = Math.round((grandTotalBase + sellingTotalBase) * 100) / 100;
       grandTotalWithGst = Math.round((grandTotalWithGst + sellingTotalWithGst) * 100) / 100;
+      grandTotalGstAmount = Math.round((grandTotalGstAmount + gstAmountTotal) * 100) / 100;
 
       const entryData = {
         machineId: machine._id,
         machineName: machine.name,
         modelNumber: machine.modelNumber || "",
+        partCode: machine.partCode || "",
         hsnCode: machine.hsnCode || "",
         categoryId: machine.category?._id || null,
         category: machine.category?.name || "",
@@ -345,17 +340,20 @@ const createSale = async (req, res) => {
         quantity: m.quantity,
         sellingPriceWithGst,
         sellingPriceBase,
+        gstAmountPerUnit,
         discount: { percentage: discountPct, amount: discountAmountWithGst },
         netSellingPriceBase,
         netSellingPriceWithGst,
+        netGstAmountPerUnit,
         sellingTotalBase,
         sellingTotalWithGst,
+        gstAmountTotal,
       };
 
       const purchaseDocs = await PurchasedMachine.find(
         { "machines.machineId": machine._id },
-        { "machines": 1 }
-      ).session(session).lean();
+        { "machines": 1, "createdAt": 1 }
+      ).sort({ createdAt: 1 }).session(session).lean();
 
       const getMachineEntry = (code, field) => {
         for (const doc of purchaseDocs) {
@@ -371,11 +369,33 @@ const createSale = async (req, res) => {
       };
 
       if (isParts) {
-        entryData.partCodes = (m.partCodes || []).map(c => {
-          const bp = getMachineEntry(c.trim(), "partCodes");
-          cogsTotalBase = Math.round((cogsTotalBase + bp) * 100) / 100;
-          return { partCode: c.trim(), buyingPriceBase: bp, contractType: null };
-        });
+        // FIFO: find the first purchase doc (oldest) where availableParts >= quantity
+        let chosenPurchaseDocId = null;
+        let chosenBuyingPriceBase = 0;
+        let chosenPartCode = "";
+
+        for (const doc of purchaseDocs) {
+          for (const me of doc.machines) {
+            if (me.machineId?.toString() !== machine._id.toString()) continue;
+            if ((me.availableParts || 0) >= m.quantity) {
+              chosenPurchaseDocId = doc._id;
+              chosenBuyingPriceBase = me.buyingPriceBase ?? 0;
+              chosenPartCode = me.partCode || "";
+              break;
+            }
+          }
+          if (chosenPurchaseDocId) break;
+        }
+
+        if (!chosenPurchaseDocId) {
+          return abort(400, `Machine "${machine.name}": insufficient available parts in stock for quantity ${m.quantity}`);
+        }
+
+        cogsTotalBase = Math.round((cogsTotalBase + chosenBuyingPriceBase) * 100) / 100;
+        entryData.partCodes = { partCode: chosenPartCode, buyingPriceBase: chosenBuyingPriceBase };
+
+        // Store chosen purchase doc info for stock deduction after sale is created
+        entryData._chosenPurchaseDocId = chosenPurchaseDocId.toString();
       } else {
         entryData.serialNumbers = await Promise.all((m.serialNumbers || []).map(async (sEntry) => {
           const ct = await ContractType.findById(sEntry.contractTypeId).session(session);
@@ -438,7 +458,7 @@ const createSale = async (req, res) => {
       remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
     }
 
-    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, cogsTotalBase, currentPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
+    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, grandTotalGstAmount, cogsTotalBase, currentPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
 
     let transactionId = null;
     if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
@@ -454,7 +474,7 @@ const createSale = async (req, res) => {
       await Machine.updateOne({ _id: e.machineId }, { $set: { currentStock: newStock, stockStatus } }, { session });
     }
 
-    // ── Mark serial numbers and part codes as sold in PurchasedMachine ──
+    // ── Mark serial numbers as sold in PurchasedMachine ──
     for (const sn of allSerialNumbers) {
       await PurchasedMachine.updateOne(
         { "machines.serialNumbers.serialNumber": sn },
@@ -462,12 +482,22 @@ const createSale = async (req, res) => {
         { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }], session }
       );
     }
-    for (const pc of allPartCodes) {
+
+    // ── Deduct availableParts / increment soldParts on chosen purchase doc for parts machines ──
+    for (const e of machineEntries) {
+      if (!e._chosenPurchaseDocId) continue;
       await PurchasedMachine.updateOne(
-        { "machines.partCodes.partCode": pc },
-        { $set: { "machines.$[outer].partCodes.$[inner].status": "sold" } },
-        { arrayFilters: [{ "outer.partCodes.partCode": pc }, { "inner.partCode": pc }], session }
+        { _id: e._chosenPurchaseDocId, "machines.machineId": e.machineId },
+        {
+          $inc: {
+            "machines.$.availableParts": -e.quantity,
+            "machines.$.soldParts": e.quantity,
+          },
+        },
+        { session }
       );
+      // remove internal field before saving
+      delete e._chosenPurchaseDocId;
     }
 
     // ── Inventory log ──
@@ -485,7 +515,7 @@ const createSale = async (req, res) => {
           division: e.division,
           quantity: e.quantity,
           serialNumbers: (e.serialNumbers || []).map(s => s.serialNumber),
-          partCodes: (e.partCodes || []).map(p => p.partCode),
+          partCodes: e.partCodes ? [e.partCodes.partCode] : [],
         })),
       }],
       { session }
@@ -536,7 +566,9 @@ const createSale = async (req, res) => {
           const cgstAmount = parseFloat(((grandTotalBase * cgstNum) / 100).toFixed(2));
           const sgstAmount = parseFloat(((grandTotalBase * sgstNum) / 100).toFixed(2));
           const igstAmount = parseFloat(((grandTotalBase * igstNum) / 100).toFixed(2));
-          const invoiceGrandTotalWithGst = parseFloat((grandTotalBase + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+          // Use the already-stored grandTotalWithGst (accumulated per machine line via Math.round)
+          // instead of recalculating from grandTotalBase to avoid rounding discrepancy
+          const invoiceGrandTotalWithGst = grandTotalWithGst;
 
           const invoiceLogoUrl = process.env.INVOICE_LOGO_URL || "";
           const invoiceLogoText = process.env.INVOICE_LOGO_TEXT || "";
@@ -592,7 +624,7 @@ const createSale = async (req, res) => {
             const machineRows = machineEntries.map((m, idx) => {
               const isParts = m.categoryId?.toString() !== PRODUCT_CATEGORY_ID;
               const serials = isParts
-                ? (m.partCodes || []).map(p => p.partCode)
+                ? (m.partCodes ? [m.partCodes.partCode] : [])
                 : (m.serialNumbers || []).map(s => s.serialNumber);
               const serialLabel = isParts ? "P/C" : "S/N";
               let row = rowTemplate
@@ -869,7 +901,12 @@ const exportToExcel = async (req, res) => {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
           { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
+          { "machines.partCode": { $regex: escaped, $options: "i" } },
+          { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
           { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -910,8 +947,8 @@ const exportToExcel = async (req, res) => {
       const saleStartRow = rows.length;
 
       sale.machines.forEach((m) => {
-        const isParts = !!(m.partCodes && m.partCodes.length);
-        const codes = isParts ? (m.partCodes || []) : (m.serialNumbers || []);
+        const isParts = !!(m.partCodes && m.partCodes.partCode);
+        const codes = isParts ? [m.partCodes] : (m.serialNumbers || []);
         const machineStartRow = rows.length;
 
         const codeList = codes.length > 0 ? codes : [null];
@@ -1159,7 +1196,7 @@ const generateInvoice = async (req, res) => {
         const rate = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
         const isParts = m.categoryId?.toString() !== PRODUCT_CATEGORY_ID;
         const serials = isParts
-          ? (m.partCodes || []).map(p => p.partCode)
+          ? (m.partCodes ? [m.partCodes.partCode] : [])
           : (m.serialNumbers || []).map(s => s.serialNumber);
         const serialLabel = isParts ? "P/C" : "S/N";
         let row = rowTemplate

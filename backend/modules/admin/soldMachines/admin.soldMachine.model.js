@@ -38,7 +38,6 @@ const partCodeEntrySchema = new mongoose.Schema(
   {
     partCode:        { type: String, trim: true, required: true },
     buyingPriceBase: { type: Number, default: 0 },
-    contractType:    { type: contractTypeSnapshotSchema, default: null },
   },
   { _id: false }
 );
@@ -48,21 +47,25 @@ const soldMachineEntrySchema = new mongoose.Schema(
     machineId:              { type: mongoose.Schema.Types.ObjectId, ref: "Machine", default: null },
     machineName:            { type: String, trim: true, required: true },
     modelNumber:            { type: String, trim: true, default: "" },
+    partCode:               { type: String, trim: true, default: "" },
     hsnCode:                { type: String, trim: true, default: "" },
     categoryId:             { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory", default: null },
     category:               { type: String, trim: true, default: "" },
     divisionId:             { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision", default: null },
     division:               { type: String, trim: true, default: "" },
-    quantity:             { type: Number, required: true },
-    sellingPriceWithGst:  { type: Number, required: true },
-    sellingPriceBase:     { type: Number, required: true },
-    discount:             { percentage: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
-    netSellingPriceBase:  { type: Number, required: true },
+    quantity:               { type: Number, required: true },
+    sellingPriceWithGst:    { type: Number, required: true },
+    sellingPriceBase:       { type: Number, required: true },
+    gstAmountPerUnit:       { type: Number, default: 0 },
+    discount:               { percentage: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
+    netSellingPriceBase:    { type: Number, required: true },
     netSellingPriceWithGst: { type: Number, required: true },
-    sellingTotalBase:     { type: Number, required: true },
-    sellingTotalWithGst:  { type: Number, required: true },
+    netGstAmountPerUnit:    { type: Number, default: 0 },
+    sellingTotalBase:       { type: Number, required: true },
+    sellingTotalWithGst:    { type: Number, required: true },
+    gstAmountTotal:         { type: Number, default: 0 },
     serialNumbers:          { type: [serialNumberEntrySchema], default: [] },
-    partCodes:              { type: [partCodeEntrySchema], default: [] },
+    partCodes:              { type: partCodeEntrySchema, default: null },
   },
   { _id: false }
 );
@@ -86,6 +89,7 @@ const soldMachineSchema = new mongoose.Schema(
     },
     grandTotalBase:    { type: Number, default: 0 },
     grandTotalWithGst: { type: Number, default: 0 },
+    grandTotalGstAmount: { type: Number, default: 0 },
     cogsTotalBase:     { type: Number, default: 0 },
     cgst:             { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
     sgst:             { percent: { type: Number, default: 0 }, amount: { type: Number, default: 0 } },
@@ -120,7 +124,6 @@ soldMachineSchema.index({ "machines.divisionId": 1 });
 soldMachineSchema.index({ "machines.serialNumbers.serialNumber": 1 });
 soldMachineSchema.index({ "machines.partCodes.partCode": 1 });
 soldMachineSchema.index({ "machines.serialNumbers.contractType.contractTypeId": 1 });
-soldMachineSchema.index({ "machines.partCodes.contractType.contractTypeId": 1 });
 soldMachineSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("SoldMachine", soldMachineSchema);

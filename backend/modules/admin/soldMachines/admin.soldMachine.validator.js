@@ -13,7 +13,7 @@ const validateCreateSale = (body) => {
     return "machines array is required and must not be empty";
 
   for (let mi = 0; mi < machines.length; mi++) {
-    const { machineId, categoryId, quantity, sellingPriceWithGst, discountPercentage, serialNumbers, partCodes } = machines[mi];
+    const { machineId, quantity, sellingPriceWithGst, discountPercentage, serialNumbers } = machines[mi];
     const label = `Machine ${mi + 1}`;
 
     if (!machineId || !mongoose.isValidObjectId(machineId))
@@ -35,18 +35,9 @@ const validateCreateSale = (body) => {
       if (n > 100)    return `${label}: discountPercentage cannot exceed 100`;
     }
 
-    const isParts = !categoryId || categoryId.toString() !== PRODUCT_CATEGORY_ID;
-
-    if (isParts) {
-      if (!Array.isArray(partCodes) || partCodes.length === 0)
-        return `${label}: partCodes are required for parts category machines`;
-      if (partCodes.length !== Number(quantity))
-        return `${label}: partCodes count must match quantity (${quantity})`;
-      if (partCodes.some((c) => !c || !String(c).trim()))
-        return `${label}: all part codes must be non-empty strings`;
-    } else {
-      if (!Array.isArray(serialNumbers) || serialNumbers.length === 0)
-        return `${label}: serialNumbers are required`;
+    // serialNumbers validation only — isParts is determined in controller from DB
+    // For parts machines, partCodes are auto-fetched in controller, nothing to validate here
+    if (Array.isArray(serialNumbers) && serialNumbers.length > 0) {
       if (serialNumbers.length !== Number(quantity))
         return `${label}: serialNumbers count must match quantity (${quantity})`;
 
