@@ -93,10 +93,16 @@ const getAll = async (req, res) => {
     let totalSold = 0;
     for (const p of allPurchases) {
       for (const m of p.machines) {
-        const codes = m.serialNumbers?.length ? m.serialNumbers : (m.partCodes || []);
-        for (const c of codes) {
-          if (c.status === "available") totalAvailable++;
-          else if (c.status === "sold") totalSold++;
+        // For product machines: serialNumbers array has items
+        if (m.serialNumbers && m.serialNumbers.length > 0) {
+          for (const sn of m.serialNumbers) {
+            if (sn.status === "available") totalAvailable++;
+            else if (sn.status === "sold") totalSold++;
+          }
+        } else {
+          // For parts machines: use availableParts and soldParts numeric fields
+          totalAvailable += m.availableParts || 0;
+          totalSold += m.soldParts || 0;
         }
       }
     }
