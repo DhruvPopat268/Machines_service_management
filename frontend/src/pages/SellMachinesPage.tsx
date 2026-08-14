@@ -280,19 +280,22 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       for (let i = 0; i < qty; i++) {
         const u = e.units[i];
         if (!u.value.trim()) { toast.error(`Select serial number for ${e.machine.name} unit ${i + 1}`); return; }
-        if (!u.contractTypeId) { toast.error(`Select contract type for ${e.machine.name} unit ${i + 1}`); return; }
-        if (!u.validFrom) { toast.error(`Enter valid from for ${e.machine.name} unit ${i + 1}`); return; }
-        if (!u.validTo) { toast.error(`Enter valid to for ${e.machine.name} unit ${i + 1}`); return; }
-        if (u.validTo <= u.validFrom) { toast.error(`Valid To must be after Valid From for ${e.machine.name} unit ${i + 1}`); return; }
-        if (u.contractTypeId === TSS_CONTRACT_TYPE_ID && u.pagesCategories.length === 0) {
-          toast.error(`Add at least one pages category for ${e.machine.name} unit ${i + 1}`); return;
-        }
-        if (u.contractTypeId === TSS_CONTRACT_TYPE_ID) {
-          for (let pi = 0; pi < u.pagesCategories.length; pi++) {
-            const p = u.pagesCategories[pi];
-            if (!p.pagesCategoryId) { toast.error(`Select pages category for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return; }
-            if (p.costPerPage === "" || isNaN(Number(p.costPerPage)) || Number(p.costPerPage) < 0) {
-              toast.error(`Enter valid cost per page for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return;
+        
+        // Contract type is now optional — only validate if provided
+        if (u.contractTypeId) {
+          if (!u.validFrom) { toast.error(`Enter valid from for ${e.machine.name} unit ${i + 1}`); return; }
+          if (!u.validTo) { toast.error(`Enter valid to for ${e.machine.name} unit ${i + 1}`); return; }
+          if (u.validTo <= u.validFrom) { toast.error(`Valid To must be after Valid From for ${e.machine.name} unit ${i + 1}`); return; }
+          if (u.contractTypeId === TSS_CONTRACT_TYPE_ID && u.pagesCategories.length === 0) {
+            toast.error(`Add at least one pages category for ${e.machine.name} unit ${i + 1}`); return;
+          }
+          if (u.contractTypeId === TSS_CONTRACT_TYPE_ID) {
+            for (let pi = 0; pi < u.pagesCategories.length; pi++) {
+              const p = u.pagesCategories[pi];
+              if (!p.pagesCategoryId) { toast.error(`Select pages category for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return; }
+              if (p.costPerPage === "" || isNaN(Number(p.costPerPage)) || Number(p.costPerPage) < 0) {
+                toast.error(`Enter valid cost per page for ${e.machine.name} unit ${i + 1} entry ${pi + 1}`); return;
+              }
             }
           }
         }

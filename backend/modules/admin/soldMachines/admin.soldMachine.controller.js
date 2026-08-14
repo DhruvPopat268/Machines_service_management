@@ -398,27 +398,42 @@ const createSale = async (req, res) => {
         entryData._chosenPurchaseDocId = chosenPurchaseDocId.toString();
       } else {
         entryData.serialNumbers = await Promise.all((m.serialNumbers || []).map(async (sEntry) => {
-          const ct = await ContractType.findById(sEntry.contractTypeId).session(session);
-          if (!ct) throw new Error(`Contract type \"${sEntry.contractTypeId}\" not found`);
-          if (ct.status === "Inactive") throw new Error(`Contract type \"${ct.name}\" is inactive`);
-          const validFrom = new Date(sEntry.validFrom);
-          const validTo = new Date(sEntry.validTo);
-          if (isNaN(validFrom.getTime())) throw new Error(`Invalid validFrom for serial ${sEntry.serialNumber}`);
-          if (isNaN(validTo.getTime())) throw new Error(`Invalid validTo for serial ${sEntry.serialNumber}`);
-          if (validTo <= validFrom) throw new Error(`validTo must be after validFrom for serial ${sEntry.serialNumber}`);
-
+          let contractType = null;
           let pagesCategories = [];
-          if (TSS_CONTRACT_TYPE_ID && ct._id.toString() === TSS_CONTRACT_TYPE_ID) {
-            pagesCategories = await Promise.all((sEntry.pagesCategories || []).map(async (pc) => {
-              const cat = await PagesCategory.findById(pc.pagesCategoryId).session(session);
-              if (!cat) throw new Error(`Pages category \"${pc.pagesCategoryId}\" not found`);
-              if (cat.status === "Inactive") throw new Error(`Pages category \"${cat.name}\" is inactive`);
-              return {
-                pagesCategoryId: cat._id,
-                pagesCategory: cat.name,
-                costPerPage: Number(pc.costPerPage),
-              };
-            }));
+
+          // Contract type is optional now
+          if (sEntry.contractTypeId) {
+            const ct = await ContractType.findById(sEntry.contractTypeId).session(session);
+            if (!ct) throw new Error(`Contract type \"${sEntry.contractTypeId}\" not found`);
+            if (ct.status === "Inactive") throw new Error(`Contract type \"${ct.name}\" is inactive`);
+            const validFrom = new Date(sEntry.validFrom);
+            const validTo = new Date(sEntry.validTo);
+            if (isNaN(validFrom.getTime())) throw new Error(`Invalid validFrom for serial ${sEntry.serialNumber}`);
+            if (isNaN(validTo.getTime())) throw new Error(`Invalid validTo for serial ${sEntry.serialNumber}`);
+            if (validTo <= validFrom) throw new Error(`validTo must be after validFrom for serial ${sEntry.serialNumber}`);
+
+            if (TSS_CONTRACT_TYPE_ID && ct._id.toString() === TSS_CONTRACT_TYPE_ID) {
+              pagesCategories = await Promise.all((sEntry.pagesCategories || []).map(async (pc) => {
+                const cat = await PagesCategory.findById(pc.pagesCategoryId).session(session);
+                if (!cat) throw new Error(`Pages category \"${pc.pagesCategoryId}\" not found`);
+                if (cat.status === "Inactive") throw new Error(`Pages category \"${cat.name}\" is inactive`);
+                return {
+                  pagesCategoryId: cat._id,
+                  pagesCategory: cat.name,
+                  costPerPage: Number(pc.costPerPage),
+                };
+              }));
+            }
+
+            contractType = {
+              contractTypeId: ct._id,
+              name: ct.name,
+              code: ct.code,
+              freeService: ct.freeService,
+              freeParts: ct.freeParts,
+              validFrom,
+              validTo,
+            };
           }
 
           const bp = getMachineEntry(sEntry.serialNumber, "serialNumbers");
@@ -428,15 +443,7 @@ const createSale = async (req, res) => {
             serialNumber: sEntry.serialNumber.trim(),
             buyingPriceBase: bp,
             minCopies: Number(sEntry.minCopies) || 0,
-            contractType: {
-              contractTypeId: ct._id,
-              name: ct.name,
-              code: ct.code,
-              freeService: ct.freeService,
-              freeParts: ct.freeParts,
-              validFrom,
-              validTo,
-            },
+            contractType,
             pagesCategories,
           };
         }));
@@ -885,6 +892,85 @@ const renewContract = async (req, res) => {
       return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
 
     res.status(200).json({ success: true, message: "Contract renewed successfully" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const addContract = async (req, res) => {
+  try {
+    const { serialNumber, contractTypeId, validFrom, validTo } = req.body;
+
+    if (!serialNumber?.trim())
+      return res.status(400).json({ success: false, message: "serialNumber is required" });
+    if (!mongoose.isValidObjectId(contractTypeId))
+      return res.status(400).json({ success: false, message: "Invalid contractTypeId" });
+
+    // Parse date strings as IST midnight (input is YYYY-MM-DD from date input)
+    const toISTMidnight = (dateStr) => {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d, 0, 0, 0) - (5.5 * 60 * 60 * 1000));
+    };
+
+    const validFromDate = toISTMidnight(validFrom);
+    const validToDate   = toISTMidnight(validTo);
+    if (isNaN(validFromDate.getTime())) return res.status(400).json({ success: false, message: "Invalid validFrom" });
+    if (isNaN(validToDate.getTime()))   return res.status(400).json({ success: false, message: "Invalid validTo" });
+    if (validToDate <= validFromDate)   return res.status(400).json({ success: false, message: "validTo must be after validFrom" });
+
+    // Today midnight in IST
+    const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    nowIST.setHours(0, 0, 0, 0);
+    const todayISTMidnightUTC = new Date(nowIST.getTime() - (5.5 * 60 * 60 * 1000));
+
+    if (validFromDate < todayISTMidnightUTC)
+      return res.status(400).json({ success: false, message: "validFrom cannot be a past date" });
+
+    const ct = await ContractType.findOne({ _id: contractTypeId, status: "Active" });
+    if (!ct) return res.status(404).json({ success: false, message: "Active contract type not found" });
+
+    const sn = serialNumber.trim();
+
+    // Check if serial number exists and doesn't already have a contract
+    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": sn });
+    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
+
+    let existingContract = null;
+    outer: for (const machine of soldRecord.machines) {
+      for (const entry of (machine.serialNumbers || [])) {
+        if (entry.serialNumber === sn) {
+          existingContract = entry.contractType;
+          break outer;
+        }
+      }
+    }
+
+    if (existingContract) {
+      return res.status(400).json({ success: false, message: "Serial number already has a contract. Use renew contract instead." });
+    }
+
+    const result = await SoldMachine.updateOne(
+      { "machines.serialNumbers.serialNumber": sn },
+      {
+        $set: {
+          "machines.$[outer].serialNumbers.$[inner].contractType": {
+            contractTypeId: ct._id,
+            name: ct.name,
+            code: ct.code,
+            freeService: ct.freeService,
+            freeParts: ct.freeParts,
+            validFrom: validFromDate,
+            validTo: validToDate,
+          },
+        },
+      },
+      { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
+    );
+
+    if (result.modifiedCount === 0)
+      return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
+
+    res.status(200).json({ success: true, message: "Contract added successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1579,4 +1665,4 @@ const addPayment = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts };
+module.exports = { getAll, getById, createSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts };

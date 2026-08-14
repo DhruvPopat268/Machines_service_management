@@ -45,28 +45,33 @@ const validateCreateSale = (body) => {
         const entry = serialNumbers[si];
         const slabel = `${label} serial ${si + 1}`;
         if (!entry || typeof entry !== "object")
-          return `${slabel}: must be an object with serialNumber and contract fields`;
+          return `${slabel}: must be an object with serialNumber`;
         if (!entry.serialNumber || !String(entry.serialNumber).trim())
           return `${slabel}: serialNumber is required`;
-        if (!entry.contractTypeId || !mongoose.isValidObjectId(entry.contractTypeId))
-          return `${slabel}: invalid or missing contractTypeId`;
-        if (!entry.validFrom || !entry.validTo)
-          return `${slabel}: validFrom and validTo are required`;
-        const from = new Date(entry.validFrom);
-        const to   = new Date(entry.validTo);
-        if (isNaN(from.getTime())) return `${slabel}: invalid validFrom date`;
-        if (isNaN(to.getTime()))   return `${slabel}: invalid validTo date`;
-        if (to <= from)            return `${slabel}: validTo must be after validFrom`;
+        
+        // Contract type fields are now optional
+        // Only validate them if contractTypeId is provided
+        if (entry.contractTypeId) {
+          if (!mongoose.isValidObjectId(entry.contractTypeId))
+            return `${slabel}: invalid contractTypeId`;
+          if (!entry.validFrom || !entry.validTo)
+            return `${slabel}: validFrom and validTo are required when contractTypeId is provided`;
+          const from = new Date(entry.validFrom);
+          const to   = new Date(entry.validTo);
+          if (isNaN(from.getTime())) return `${slabel}: invalid validFrom date`;
+          if (isNaN(to.getTime()))   return `${slabel}: invalid validTo date`;
+          if (to <= from)            return `${slabel}: validTo must be after validFrom`;
 
-        if (TSS_CONTRACT_TYPE_ID && entry.contractTypeId.toString() === TSS_CONTRACT_TYPE_ID) {
-          if (!Array.isArray(entry.pagesCategories) || entry.pagesCategories.length === 0)
-            return `${slabel}: pagesCategories is required (at least 1) for TSS contract type`;
-          for (let pi = 0; pi < entry.pagesCategories.length; pi++) {
-            const pc = entry.pagesCategories[pi];
-            if (!pc.pagesCategoryId || !mongoose.isValidObjectId(pc.pagesCategoryId))
-              return `${slabel} pagesCategories[${pi}]: invalid or missing pagesCategoryId`;
-            if (pc.costPerPage == null || isNaN(Number(pc.costPerPage)) || Number(pc.costPerPage) < 0)
-              return `${slabel} pagesCategories[${pi}]: costPerPage must be a non-negative number`;
+          if (TSS_CONTRACT_TYPE_ID && entry.contractTypeId.toString() === TSS_CONTRACT_TYPE_ID) {
+            if (!Array.isArray(entry.pagesCategories) || entry.pagesCategories.length === 0)
+              return `${slabel}: pagesCategories is required (at least 1) for TSS contract type`;
+            for (let pi = 0; pi < entry.pagesCategories.length; pi++) {
+              const pc = entry.pagesCategories[pi];
+              if (!pc.pagesCategoryId || !mongoose.isValidObjectId(pc.pagesCategoryId))
+                return `${slabel} pagesCategories[${pi}]: invalid or missing pagesCategoryId`;
+              if (pc.costPerPage == null || isNaN(Number(pc.costPerPage)) || Number(pc.costPerPage) < 0)
+                return `${slabel} pagesCategories[${pi}]: costPerPage must be a non-negative number`;
+            }
           }
         }
       }

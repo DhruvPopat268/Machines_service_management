@@ -2,13 +2,13 @@ const mongoose = require("mongoose");
 
 const contractTypeSnapshotSchema = new mongoose.Schema(
   {
-    contractTypeId: { type: mongoose.Schema.Types.ObjectId, ref: "ContractType", required: true },
-    name:           { type: String, trim: true, required: true },
-    code:           { type: String, trim: true, uppercase: true, required: true },
+    contractTypeId: { type: mongoose.Schema.Types.ObjectId, ref: "ContractType" },
+    name:           { type: String, trim: true },
+    code:           { type: String, trim: true, uppercase: true },
     freeService:    { type: Boolean, default: false },
     freeParts:      { type: Boolean, default: false },
-    validFrom:      { type: Date, required: true },
-    validTo:        { type: Date, required: true },
+    validFrom:      { type: Date },
+    validTo:        { type: Date },
   },
   { _id: false }
 );
@@ -87,7 +87,7 @@ const machineEntrySchema = new mongoose.Schema(
     division:         { type: String, trim: true, default: "" },
     categoryId:       { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory", default: null },
     category:         { type: String, trim: true, default: "" },
-    contractType:     { type: contractTypeSnapshotSchema, required: true },
+    contractType:     { type: contractTypeSnapshotSchema, default: null },
     issueDescription: { type: String, trim: true, required: true },
     problemTypeIds:   { type: [mongoose.Schema.Types.ObjectId], ref: "ProblemType", default: [] },
     problemTypes:     { type: [String], default: [] },

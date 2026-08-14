@@ -63,6 +63,13 @@ const RaiseCallPage = () => {
   const [renewValidTo, setRenewValidTo]         = useState("");
   const [renewing, setRenewing]                 = useState(false);
 
+  // Add contract state
+  const [addContractDialog, setAddContractDialog] = useState<CustomerMachine | null>(null);
+  const [addContractTypeId, setAddContractTypeId] = useState("");
+  const [addValidFrom, setAddValidFrom]           = useState("");
+  const [addValidTo, setAddValidTo]               = useState("");
+  const [adding, setAdding]                       = useState(false);
+
   const customerAbortRef = useRef<AbortController | null>(null);
   const categoryAbortRef = useRef<AbortController | null>(null);
   const divisionAbortRef = useRef<AbortController | null>(null);
@@ -201,6 +208,37 @@ const RaiseCallPage = () => {
     }
   };
 
+  const openAddContractDialog = (m: CustomerMachine) => {
+    setAddContractDialog(m);
+    setAddContractTypeId("");
+    setAddValidFrom("");
+    setAddValidTo("");
+  };
+
+  const handleAddContract = async () => {
+    if (!addContractDialog) return;
+    if (!addContractTypeId) { toast.error("Select a contract type"); return; }
+    if (!addValidFrom)      { toast.error("Select valid from date"); return; }
+    if (!addValidTo)        { toast.error("Select valid to date"); return; }
+    if (addValidTo <= addValidFrom) { toast.error("Valid To must be after Valid From"); return; }
+    setAdding(true);
+    try {
+      await api.patch("/admin/sales/add-contract", {
+        serialNumber:   addContractDialog.serialNumber,
+        contractTypeId: addContractTypeId,
+        validFrom:      addValidFrom,
+        validTo:        addValidTo,
+      });
+      toast.success("Contract added successfully");
+      setAddContractDialog(null);
+      fetchMachines(pagination.page);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to add contract");
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const columns: Column<CustomerMachine>[] = [
     {
       key: "no", label: "#",
@@ -241,9 +279,11 @@ const RaiseCallPage = () => {
         return (
           <div>
             <span>{m.contractType?.name || "—"}</span>
-            <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700" }`}>
-              {isExpired ? "Expired" : "Active"}
-            </span>
+            {m.contractType?.name && (
+              <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ isExpired ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700" }`}>
+                {isExpired ? "Expired" : "Active"}
+              </span>
+            )}
           </div>
         );
       },
@@ -280,6 +320,11 @@ const RaiseCallPage = () => {
             {!m.disInstalled && isExpired && (
               <Button size="sm" variant="destructive" className="h-8 gap-1.5" onClick={() => openRenewDialog(m)}>
                 <RefreshCw className="h-3.5 w-3.5" /> Renew Contract
+              </Button>
+            )}
+            {!m.disInstalled && !m.contractType?.name && (
+              <Button size="sm" variant="outline" className="h-8 gap-1.5 bg-yellow-400 hover:bg-yellow-500 border-yellow-400 text-black" onClick={() => openAddContractDialog(m)}>
+                <RefreshCw className="h-3.5 w-3.5" /> Add Contract
               </Button>
             )}
             {!m.disInstalled && (
@@ -399,6 +444,41 @@ const RaiseCallPage = () => {
             <Button variant="outline" onClick={() => setRenewDialog(null)}>Cancel</Button>
             <Button onClick={handleRenew} disabled={renewing}>
               {renewing ? "Renewing..." : "Renew"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addContractDialog} onOpenChange={() => setAddContractDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Contract — {addContractDialog?.serialNumber}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Contract Type</Label>
+              <select
+                className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+                value={addContractTypeId}
+                onChange={e => setAddContractTypeId(e.target.value)}
+              >
+                <option value="">Select contract type...</option>
+                {contractTypes.map(ct => <option key={ct._id} value={ct._id}>{ct.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Valid From</Label>
+              <Input type="date" value={addValidFrom} onChange={e => setAddValidFrom(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Valid To</Label>
+              <Input type="date" value={addValidTo} onChange={e => setAddValidTo(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddContractDialog(null)}>Cancel</Button>
+            <Button onClick={handleAddContract} disabled={adding}>
+              {adding ? "Adding..." : "Add Contract"}
             </Button>
           </DialogFooter>
         </DialogContent>
