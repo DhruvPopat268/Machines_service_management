@@ -391,7 +391,7 @@ const createSale = async (req, res) => {
           return abort(400, `Machine "${machine.name}": insufficient available parts in stock for quantity ${m.quantity}`);
         }
 
-        cogsTotalBase = Math.round((cogsTotalBase + chosenBuyingPriceBase) * 100) / 100;
+        cogsTotalBase = Math.round((cogsTotalBase + (chosenBuyingPriceBase * m.quantity)) * 100) / 100;
         entryData.partCodes = { partCode: chosenPartCode, buyingPriceBase: chosenBuyingPriceBase };
 
         // Store chosen purchase doc info for stock deduction after sale is created
