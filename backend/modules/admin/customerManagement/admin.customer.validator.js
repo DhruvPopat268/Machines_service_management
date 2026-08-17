@@ -54,7 +54,6 @@ const validateImportCustomerRow = (row, rowNum) => {
   if (!/^[0-9]{10}$/.test(phone)) return `Row ${rowNum}: phone must be exactly 10 digits`;
   if (!email) return `Row ${rowNum}: email is required`;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return `Row ${rowNum}: invalid email format`;
-  if (!String(row.address || "").trim()) return `Row ${rowNum}: address is required`;
   if (!String(row.zonename || "").trim()) return `Row ${rowNum}: zone is required`;
   if (!["Active", "Inactive"].includes(status)) return `Row ${rowNum}: status must be Active or Inactive`;
   if (isNaN(totalPurchases) || totalPurchases < 0) return `Row ${rowNum}: totalPurchases must be a non-negative number`;

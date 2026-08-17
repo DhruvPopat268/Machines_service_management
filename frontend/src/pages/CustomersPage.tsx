@@ -37,6 +37,12 @@ interface Customer {
   source: "manual" | "imported";
   profilePhoto?: string;
   userLocation?: { address?: string; latitude?: number; longitude?: number };
+  department?: string;
+  pincode?: number;
+  type?: "Jobber" | "Govt" | "Pvt" | "Edun";
+  contactPersonName?: string;
+  contactPersonPhone?: string;
+  contactPersonDesignation?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,7 +72,7 @@ const loadGMaps = () => new Promise<void>((resolve) => {
   document.head.appendChild(script);
 });
 
-const emptyForm = { name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", status: "Active" as Customer["status"], profilePhoto: null as File | null, userLocation: null as { address: string; latitude?: number; longitude?: number } | null };
+const emptyForm = { name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", status: "Active" as Customer["status"], profilePhoto: null as File | null, userLocation: null as { address: string; latitude?: number; longitude?: number } | null, department: "", pincode: "", type: "none" as any, contactPersonName: "", contactPersonPhone: "", contactPersonDesignation: "" };
 const LIMIT = 10;
 
 interface Suggestion { place_id: string; description: string; }
@@ -167,6 +173,7 @@ const CustomerForm = ({ form, setForm, zoneOptions, existingPhoto }: CustomerFor
       </div>
 
       <div className="space-y-2"><Label htmlFor="cust-name">Name <span className="text-destructive">*</span></Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-department">Department</Label><Input id="cust-department" placeholder="e.g. Sales, IT, Operations" value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} /></div>
       <div className="space-y-2"><Label htmlFor="cust-phone">Phone <span className="text-destructive">*</span></Label><Input id="cust-phone" placeholder="e.g. 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
       <div className="space-y-2"><Label htmlFor="cust-email">Email <span className="text-destructive">*</span></Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
 
@@ -199,11 +206,29 @@ const CustomerForm = ({ form, setForm, zoneOptions, existingPhoto }: CustomerFor
         </div>
       </div>
 
+      <div className="space-y-2"><Label htmlFor="cust-pincode">Pincode</Label><Input id="cust-pincode" placeholder="e.g. 400001" value={form.pincode} onChange={(e) => setForm((p) => ({ ...p, pincode: e.target.value }))} /></div>
+
       <div className="space-y-2">
         <Label>Zone</Label>
         <SearchableSelect options={zoneOptions} value={form.zone} onChange={(v) => setForm((p) => ({ ...p, zone: v }))} placeholder="Select zone" searchPlaceholder="Search zones..." />
       </div>
       <div className="space-y-2"><Label htmlFor="cust-gst">GST Number</Label><Input id="cust-gst" placeholder="e.g. 27AABCA1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} /></div>
+      <div className="space-y-2">
+        <Label htmlFor="cust-type">Customer Type</Label>
+        <Select value={form.type || "none"} onValueChange={(v) => setForm((p) => ({ ...p, type: v === "none" ? "" : (v as any) }))}>
+          <SelectTrigger id="cust-type"><SelectValue placeholder="Select type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="Jobber">Jobber</SelectItem>
+            <SelectItem value="Govt">Govt</SelectItem>
+            <SelectItem value="Pvt">Pvt</SelectItem>
+            <SelectItem value="Edun">Edun</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2"><Label htmlFor="cust-contact-name">Contact Person Name</Label><Input id="cust-contact-name" placeholder="e.g. John Doe" value={form.contactPersonName} onChange={(e) => setForm((p) => ({ ...p, contactPersonName: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-contact-phone">Contact Person Phone</Label><Input id="cust-contact-phone" placeholder="e.g. 9800000001" value={form.contactPersonPhone} onChange={(e) => setForm((p) => ({ ...p, contactPersonPhone: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-contact-designation">Contact Person Designation</Label><Input id="cust-contact-designation" placeholder="e.g. Manager, Director" value={form.contactPersonDesignation} onChange={(e) => setForm((p) => ({ ...p, contactPersonDesignation: e.target.value }))} /></div>
       <div className="space-y-2">
         <Label htmlFor="cust-status">Status</Label>
         <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as Customer["status"] }))}>
@@ -318,12 +343,18 @@ const CustomersPage = () => {
         if (addForm.userLocation) fd.append("userLocation", JSON.stringify(addForm.userLocation));
         if (addForm.zone) fd.append("zone", addForm.zone);
         if (addForm.gstNumber) fd.append("gstNumber", addForm.gstNumber.toUpperCase());
+        if (addForm.department) fd.append("department", addForm.department);
+        if (addForm.pincode) fd.append("pincode", addForm.pincode);
+        if (addForm.type && addForm.type !== "none") fd.append("type", addForm.type);
+        if (addForm.contactPersonName) fd.append("contactPersonName", addForm.contactPersonName);
+        if (addForm.contactPersonPhone) fd.append("contactPersonPhone", addForm.contactPersonPhone);
+        if (addForm.contactPersonDesignation) fd.append("contactPersonDesignation", addForm.contactPersonDesignation);
         fd.append("status", addForm.status);
         fd.append("profilePhoto", addForm.profilePhoto);
         payload = fd;
       } else {
         const { address: _a, profilePhoto: _p, ...rest } = addForm;
-        payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || undefined };
+        payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || undefined, type: rest.type !== "none" ? rest.type : undefined };
         if (!addForm.userLocation) delete payload.userLocation;
       }
       await api.post("/admin/customers", payload);
@@ -354,12 +385,18 @@ const CustomersPage = () => {
         if (editForm.userLocation) fd.append("userLocation", JSON.stringify(editForm.userLocation));
         if (editForm.zone) fd.append("zone", editForm.zone);
         if (editForm.gstNumber) fd.append("gstNumber", editForm.gstNumber.toUpperCase());
+        if (editForm.department) fd.append("department", editForm.department);
+        if (editForm.pincode) fd.append("pincode", editForm.pincode);
+        if (editForm.type && editForm.type !== "none") fd.append("type", editForm.type);
+        if (editForm.contactPersonName) fd.append("contactPersonName", editForm.contactPersonName);
+        if (editForm.contactPersonPhone) fd.append("contactPersonPhone", editForm.contactPersonPhone);
+        if (editForm.contactPersonDesignation) fd.append("contactPersonDesignation", editForm.contactPersonDesignation);
         fd.append("status", editForm.status);
         fd.append("profilePhoto", editForm.profilePhoto);
         payload = fd;
       } else {
         const { address: _a, profilePhoto: _p, ...rest } = editForm;
-        payload = { ...rest, gstNumber: rest.gstNumber ? rest.gstNumber.toUpperCase() : "", zone: rest.zone || null };
+        payload = { ...rest, gstNumber: rest.gstNumber ? rest.gstNumber.toUpperCase() : "", zone: rest.zone || null, type: rest.type !== "none" ? rest.type : undefined };
         if (!editForm.userLocation) delete payload.userLocation;
       }
       await api.patch(`/admin/customers/${editDialog._id}`, payload);
@@ -478,6 +515,12 @@ const CustomersPage = () => {
     } },
     { key: "zone", label: "Zone", render: (c) => c.zone ? <span className="text-sm">{c.zone.name}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "gstNumber", label: "GST Number", render: (c) => c.gstNumber ? <span className="font-mono text-sm">{c.gstNumber}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "department", label: "Department", render: (c) => c.department ? <span className="text-sm">{c.department}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "pincode", label: "Pincode", render: (c) => c.pincode ? <span className="text-sm">{c.pincode}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "type", label: "Type", render: (c) => c.type ? <span className="text-sm">{c.type}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "contactPersonName", label: "Contact Person", render: (c) => c.contactPersonName ? <span className="text-sm">{c.contactPersonName}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "contactPersonPhone", label: "Contact Phone", render: (c) => c.contactPersonPhone ? <span className="text-sm">{c.contactPersonPhone}</span> : <span className="text-muted-foreground text-sm">—</span> },
+    { key: "contactPersonDesignation", label: "Designation", render: (c) => c.contactPersonDesignation ? <span className="text-sm">{c.contactPersonDesignation}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "totalPurchases", label: "Purchases", render: (c) => <span className="font-medium text-sm">{c.totalPurchases}</span> },
     {
       key: "source", label: "Source", render: (c) => (
@@ -510,7 +553,7 @@ const CustomersPage = () => {
       key: "actions", label: "Actions", sticky: true, render: (c) => (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Sell Machine" onClick={() => navigate(`/sell-machines?customerId=${c._id}`)}><ShoppingCart className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${c.name}`} onClick={() => { setEditDialog(c); setEditForm({ name: c.name, phone: c.phone, email: c.email, address: c.userLocation?.address || c.address || "", zone: c.zone?._id || "", gstNumber: c.gstNumber, status: c.status, profilePhoto: null, userLocation: c.userLocation ? { address: c.userLocation.address || "", latitude: c.userLocation.latitude, longitude: c.userLocation.longitude } : null }); }}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${c.name}`} onClick={() => { setEditDialog(c); setEditForm({ name: c.name, phone: c.phone, email: c.email, address: c.userLocation?.address || c.address || "", zone: c.zone?._id || "", gstNumber: c.gstNumber, status: c.status, profilePhoto: null, userLocation: c.userLocation ? { address: c.userLocation.address || "", latitude: c.userLocation.latitude, longitude: c.userLocation.longitude } : null, department: c.department || "", pincode: c.pincode?.toString() || "", type: c.type || "none", contactPersonName: c.contactPersonName || "", contactPersonPhone: c.contactPersonPhone || "", contactPersonDesignation: c.contactPersonDesignation || "" }); }}>
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Delete ${c.name}`} onClick={() => setDeleteDialog(c)}>

@@ -52,7 +52,7 @@ const getActiveZones = async (req, res) => {
 
 const signup = async (req, res) => {
   try {
-    const { name, phone, email, password, zone } = req.body;
+    const { name, phone, email, password, zone, department, pincode, type, contactPersonName, contactPersonPhone, contactPersonDesignation } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
 
     let userLocation;
@@ -119,6 +119,12 @@ const signup = async (req, res) => {
       source: "manual",
       ...(profilePhoto   && { profilePhoto }),
       ...(userLocation   && { userLocation }),
+      ...(department && { department: String(department).trim() }),
+      ...(pincode && { pincode: Number(pincode) }),
+      ...(type && { type }),
+      ...(contactPersonName && { contactPersonName: String(contactPersonName).trim() }),
+      ...(contactPersonPhone && { contactPersonPhone: String(contactPersonPhone).trim() }),
+      ...(contactPersonDesignation && { contactPersonDesignation: String(contactPersonDesignation).trim() }),
     });
 
     const token = jwt.sign({ id: customer._id, email: customer.email }, process.env.CUSTOMER_JWT_SECRET, {

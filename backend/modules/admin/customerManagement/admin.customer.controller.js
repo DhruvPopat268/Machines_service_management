@@ -136,7 +136,7 @@ const getAll = async (req, res) => {
 
 const create = async (req, res) => {
   try {
-    const { name, phone, email, zone, status } = req.body;
+    const { name, phone, email, zone, status, department, pincode, type, contactPersonName, contactPersonPhone, contactPersonDesignation } = req.body;
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
 
     let userLocation;
@@ -202,6 +202,12 @@ const create = async (req, res) => {
         password: hashedPassword,
         ...(profilePhoto  && { profilePhoto }),
         ...(userLocation  && { userLocation }),
+        ...(department && { department: String(department).trim() }),
+        ...(pincode && { pincode: Number(pincode) }),
+        ...(type && { type }),
+        ...(contactPersonName && { contactPersonName: String(contactPersonName).trim() }),
+        ...(contactPersonPhone && { contactPersonPhone: String(contactPersonPhone).trim() }),
+        ...(contactPersonDesignation && { contactPersonDesignation: String(contactPersonDesignation).trim() }),
       });
     } catch (dbErr) {
       if (profilePhoto) await deleteProfilePhoto(profilePhoto);
@@ -233,7 +239,7 @@ const update = async (req, res) => {
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid customer ID" });
 
-    const { name, phone, email, zone, status } = req.body;
+    const { name, phone, email, zone, status, department, pincode, type, contactPersonName, contactPersonPhone, contactPersonDesignation } = req.body;
     const gstNumber = req.body.gstNumber !== undefined
       ? String(req.body.gstNumber).trim().toUpperCase()
       : undefined;
@@ -259,6 +265,12 @@ const update = async (req, res) => {
     if (status    !== undefined) updateData.status    = status;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
     if (userLocation !== undefined) updateData.userLocation = userLocation;
+    if (department !== undefined) updateData.department = String(department).trim();
+    if (pincode !== undefined) updateData.pincode = Number(pincode);
+    if (type !== undefined) updateData.type = type;
+    if (contactPersonName !== undefined) updateData.contactPersonName = String(contactPersonName).trim();
+    if (contactPersonPhone !== undefined) updateData.contactPersonPhone = String(contactPersonPhone).trim();
+    if (contactPersonDesignation !== undefined) updateData.contactPersonDesignation = String(contactPersonDesignation).trim();
 
     if (req.file) {
       try {
@@ -375,8 +387,8 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "phone", "email", "zoneName", "gstNumber", "totalPurchases", "status (Active/Inactive)"],
-    ["Acme Corp", "9800000000", "acme@example.com", "North Zone", "27AABCA1234A1Z5", 5, "Active"],
+    ["name", "department", "phone", "email", "zoneName", "address", "pincode", "gstNumber", "type (Jobber/Govt/Pvt/Edun)", "contactPersonName", "contactPersonPhone", "contactPersonDesignation", "totalPurchases", "status (Active/Inactive)"],
+    ["Acme Corp", "Sales", "9800000000", "acme@example.com", "North Zone", "123 Business Park", "400001", "27AABCA1234A1Z5", "Pvt", "John Doe", "9800000001", "Manager", 5, "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Customers");
@@ -418,6 +430,12 @@ const importCustomers = async (req, res) => {
         email:          String(normalized.email          || "").trim().toLowerCase(),
         zoneName:       String(normalized.zonename       || "").trim(),
         gstNumber:      String(normalized.gstnumber      || "").trim().toUpperCase(),
+        department:     String(normalized.department     || "").trim(),
+        pincode:        normalized.pincode ? Number(normalized.pincode) : undefined,
+        type:           normalized.type ? String(normalized.type).trim() : undefined,
+        contactPersonName: String(normalized.contactpersonname || "").trim(),
+        contactPersonPhone: String(normalized.contactpersonphone || "").trim(),
+        contactPersonDesignation: String(normalized.contactpersondesignation || "").trim(),
         totalPurchases: normalized.totalpurchases !== undefined && normalized.totalpurchases !== "" ? Math.max(0, Number(normalized.totalpurchases)) : 0,
         status:         String(normalized.status         || "").trim(),
       });
@@ -428,19 +446,19 @@ const importCustomers = async (req, res) => {
       try {
         if (doc.gstNumber) {
           const gstError = validateGST(doc.gstNumber);
-          if (gstError) { skipped++; continue; }
+          if (gstError) { skipped++; skippedReasons.push(`${doc.email}: Invalid GST - ${gstError}`); continue; }
           const gstExists = await Customer.findOne({ gstNumber: doc.gstNumber });
-          if (gstExists) { skipped++; continue; }
+          if (gstExists) { skipped++; skippedReasons.push(`${doc.email}: GST number already exists`); continue; }
         }
         const phoneExists = await Customer.findOne({ phone: doc.phone });
-        if (phoneExists) { skipped++; continue; }
+        if (phoneExists) { skipped++; skippedReasons.push(`${doc.email}: Phone number already exists`); continue; }
         const emailExists = await Customer.findOne({ email: doc.email });
-        if (emailExists) { skipped++; continue; }
+        if (emailExists) { skipped++; skippedReasons.push(`${doc.email}: Email already exists`); continue; }
 
         let zoneId = null;
         if (doc.zoneName) {
           const zone = await Zone.findOne({ name: { $regex: `^${doc.zoneName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" } });
-          if (!zone) { skipped++; skippedReasons.push(`Row ${docs.indexOf(doc) + 2}: zone "${doc.zoneName}" not found`); continue; }
+          if (!zone) { skipped++; skippedReasons.push(`${doc.email}: Zone "${doc.zoneName}" not found`); continue; }
           zoneId = zone._id;
         }
 
@@ -454,18 +472,29 @@ const importCustomers = async (req, res) => {
           gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status, source: "imported",
           customerId,
           password: hashedPassword,
+          ...(doc.department && { department: doc.department }),
+          ...(doc.pincode && { pincode: doc.pincode }),
+          ...(doc.type && { type: doc.type }),
+          ...(doc.contactPersonName && { contactPersonName: doc.contactPersonName }),
+          ...(doc.contactPersonPhone && { contactPersonPhone: doc.contactPersonPhone }),
+          ...(doc.contactPersonDesignation && { contactPersonDesignation: doc.contactPersonDesignation }),
         });
 
         await sendWelcomeCredentials(newCustomer.name, newCustomer.email, defaultPassword);
         imported++;
       } catch (rowErr) {
-        if (rowErr.code === 11000) { skipped++; } else { throw rowErr; }
+        if (rowErr.code === 11000) { 
+          skipped++; 
+          const key = Object.keys(rowErr.keyPattern || {})[0];
+          const msg = key === "phone" ? "Phone number already exists" : key === "email" ? "Email already exists" : "GST number already exists";
+          skippedReasons.push(`${doc.email}: ${msg}`);
+        } else { throw rowErr; }
       }
     }
 
     const parts = [`${imported} customer${imported !== 1 ? "s" : ""} imported successfully`];
     if (skipped) parts.push(`${skipped} skipped`);
-    res.status(200).json({ success: true, message: parts.join(", "), skippedReasons: [...new Set(skippedReasons.map((r) => r.replace(/^Row \d+: /, "")))] });
+    res.status(200).json({ success: true, message: parts.join(", "), skippedReasons: [...new Set(skippedReasons)] });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -524,11 +553,23 @@ const exportCustomers = async (req, res) => {
       const created = formatIST(c.createdAt);
       const updated = formatIST(c.updatedAt);
       return {
-        name: c.name, phone: c.phone, email: c.email,
-        address: c.address, zone: c.zone?.name || "",
-        gstNumber: c.gstNumber, status: c.status,
-        "Created Date": created.date, "Created Time": created.time,
-        "Updated Date": updated.date, "Updated Time": updated.time,
+        name: c.name, 
+        department: c.department || "",
+        phone: c.phone, 
+        email: c.email,
+        zone: c.zone?.name || "",
+        address: c.userLocation?.address || c.address || "", 
+        pincode: c.pincode || "",
+        gstNumber: c.gstNumber || "",
+        type: c.type || "",
+        contactPersonName: c.contactPersonName || "",
+        contactPersonPhone: c.contactPersonPhone || "",
+        contactPersonDesignation: c.contactPersonDesignation || "",
+        status: c.status,
+        "Created Date": created.date, 
+        "Created Time": created.time,
+        "Updated Date": updated.date, 
+        "Updated Time": updated.time,
       };
     });
     const ws = xlsx.utils.json_to_sheet(rows);
@@ -548,7 +589,7 @@ const getById = async (req, res) => {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id))
       return res.status(400).json({ success: false, message: "Invalid customer ID" });
-    const customer = await Customer.findById(id).populate("zone", "name code").select("_id name phone email address zone gstNumber userLocation status");
+    const customer = await Customer.findById(id).populate("zone", "name code").select("_id name phone email address zone gstNumber userLocation status department pincode type contactPersonName contactPersonPhone contactPersonDesignation");
     if (!customer)
       return res.status(404).json({ success: false, message: "Customer not found" });
     return res.status(200).json({ success: true, data: customer });
