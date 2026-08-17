@@ -586,15 +586,27 @@ const getChargesSummary = async (req, res) => {
     const hasUsedParts = Array.isArray(usedParts) && usedParts.length > 0;
 
     if (hasUsedParts) {
-      for (const p of usedParts) {
-        if (!p || typeof p.partCode !== "string")
-          return res.status(400).json({ success: false, message: "Each usedPart must have a partCode string" });
-        if (!p.serialNumber || typeof p.serialNumber !== "string")
-          return res.status(400).json({ success: false, message: "Each usedPart must have a serialNumber" });
+      // Validate each entry
+      for (let i = 0; i < usedParts.length; i++) {
+        const p = usedParts[i];
+        if (!p || typeof p.partCode !== "string" || !p.partCode.trim())
+          return res.status(400).json({ success: false, message: `usedParts[${i}]: partCode must be a non-empty string` });
+        if (!p.serialNumber || typeof p.serialNumber !== "string" || !p.serialNumber.trim())
+          return res.status(400).json({ success: false, message: `usedParts[${i}]: serialNumber is required` });
+        if (!Number.isInteger(p.quantity) || p.quantity < 1)
+          return res.status(400).json({ success: false, message: `usedParts[${i}]: quantity must be a positive integer` });
+        if (typeof p.sellingPriceWithGst !== "number" || p.sellingPriceWithGst < 0)
+          return res.status(400).json({ success: false, message: `usedParts[${i}]: sellingPriceWithGst must be a non-negative number` });
       }
+
+      // Validate partCode uniqueness
+      const partCodes = usedParts.map(p => p.partCode.trim());
+      const uniquePartCodes = new Set(partCodes);
+      if (uniquePartCodes.size !== partCodes.length)
+        return res.status(400).json({ success: false, message: "usedParts contains duplicate partCode entries" });
     }
 
-    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines cgst sgst igst ");
+    const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines cgst sgst igst");
     if (!call)
       return res.status(404).json({ success: false, message: "Call not found" });
 
@@ -622,55 +634,56 @@ const getChargesSummary = async (req, res) => {
     const contractMap = new Map();
     for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
 
-    // Validate serialNumbers
+    // Validate each serialNumber belongs to this call
     for (const p of usedParts) {
-      if (!contractMap.has(p.serialNumber))
-        return res.status(400).json({ success: false, message: `serialNumber ${p.serialNumber} does not belong to this call` });
+      if (!contractMap.has(p.serialNumber.trim()))
+        return res.status(400).json({ success: false, message: `serialNumber "${p.serialNumber}" does not belong to this call` });
     }
 
     const partCodesList = usedParts.map(p => p.partCode.trim());
 
+    // Verify each partCode exists in PurchasedMachine with availableParts > 0
     const purchaseRecords = await PurchasedMachine.find(
-      { "machines.partCodes.partCode": { $in: partCodesList } },
-      { "machines.partCodes": 1, "machines.sellingPriceBase": 1 }
+      { "machines.partCode": { $in: partCodesList } },
+      { "machines.partCode": 1, "machines.availableParts": 1 }
     );
 
-    const priceMap = new Map();
+    const availableMap = new Map(); // partCode -> availableParts
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
-        const unitPrice = machine.sellingPriceBase ?? 0;
-        for (const entry of (machine.partCodes || [])) {
-          if (partCodesList.includes(entry.partCode.trim()))
-            priceMap.set(entry.partCode.trim(), unitPrice);
-        }
+        const pc = machine.partCode?.trim();
+        if (pc && partCodesList.includes(pc))
+          availableMap.set(pc, (availableMap.get(pc) ?? 0) + (machine.availableParts ?? 0));
       }
     }
 
-    const notFound = partCodesList.filter(c => !priceMap.has(c));
+    const notFound = partCodesList.filter(c => !availableMap.has(c));
     if (notFound.length > 0)
       return res.status(404).json({ success: false, message: `Part code(s) not found: ${notFound.join(", ")}` });
 
-    const alreadySold = [];
-    for (const record of purchaseRecords) {
-      for (const machine of record.machines) {
-        for (const entry of (machine.partCodes || [])) {
-          if (partCodesList.includes(entry.partCode.trim()) && entry.status === "sold")
-            alreadySold.push(entry.partCode.trim());
-        }
-      }
-    }
-    if (alreadySold.length > 0)
-      return res.status(400).json({ success: false, message: `Part code(s) already sold: ${alreadySold.join(", ")}` });
+    const noStock = partCodesList.filter(c => availableMap.get(c) <= 0);
+    if (noStock.length > 0)
+      return res.status(400).json({ success: false, message: `Part code(s) out of stock: ${noStock.join(", ")}` });
 
+    // Validate requested quantity does not exceed available stock
+    for (const p of usedParts) {
+      const pc = p.partCode.trim();
+      const available = availableMap.get(pc) ?? 0;
+      if (p.quantity > available)
+        return res.status(400).json({ success: false, message: `Part code "${pc}" requested quantity (${p.quantity}) exceeds available stock (${available})` });
+    }
+
+    // Calculate parts charges
     const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+    const totalGstPercent = cgstPercent + sgstPercent + igstPercent;
     let partsCharges = 0;
     for (const p of usedParts) {
-      const contract  = contractMap.get(p.serialNumber);
+      const contract   = contractMap.get(p.serialNumber.trim());
       const validToIST = contract?.validTo ? new Date(new Date(contract.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
-      const isExpired = !validToIST || now > validToIST;
-      const unitPrice = priceMap.get(p.partCode.trim()) ?? 0;
-      const charge    = (!isExpired && contract?.freeParts) ? 0 : unitPrice;
-      partsCharges    = Math.round((partsCharges + charge) * 100) / 100;
+      const isExpired  = !validToIST || now > validToIST;
+      const basePrice  = parseFloat((p.sellingPriceWithGst / (1 + totalGstPercent / 100)).toFixed(2));
+      const charge     = (!isExpired && contract?.freeParts) ? 0 : basePrice * p.quantity;
+      partsCharges     = Math.round((partsCharges + charge) * 100) / 100;
     }
 
     const totalCharges = Math.round((serviceCharges + partsCharges) * 100) / 100;
