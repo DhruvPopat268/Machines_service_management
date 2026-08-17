@@ -790,6 +790,7 @@ const getServiceCallInvoice = async (req, res) => {
     const rows = [];
     let srNo = 1;
     for (const machine of call.machines) {
+      console.log("✅ Processing machine:", machine.serialNumber);
       const sc = machine.serviceCharge ?? 0;
       if (sc > 0) {
         rows.push(`<tr>
@@ -802,8 +803,13 @@ const getServiceCallInvoice = async (req, res) => {
           <td class="right">${fmt(sc)}</td>
         </tr>`);
       }
+      console.log("✅ usedParts count:", machine.usedParts?.length || 0);
       for (const part of (machine.usedParts || [])) {
-        const rate = part.sellingPriceBase ?? 0;
+        console.log("✅ Part data:", JSON.stringify(part, null, 2));
+        const qty = part.quantity ?? 1;
+        const rate = part.total === 0 ? 0 : (part.sellingPriceBase ?? 0);
+        const amount = part.total ?? 0;
+        console.log(`✅ Calculated: qty=${qty}, rate=${rate}, amount=${amount}`);
         rows.push(`<tr>
           <td>${srNo++}</td>
           <td>
@@ -813,12 +819,13 @@ const getServiceCallInvoice = async (req, res) => {
           </td>
           <td style="font-size:11px;">${machine.serialNumber || ""}</td>
           <td>${part.hsnCode || ""}</td>
-          <td class="right">1</td>
+          <td class="right">${qty}</td>
           <td class="right">${fmt(rate)}</td>
-          <td class="right">${fmt(rate)}</td>
+          <td class="right">${fmt(amount)}</td>
         </tr>`);
       }
     }
+    console.log("✅ Total rows generated:", rows.length);
     html = html.replace("{{tableRows}}", rows.join(""));
 
     const [{ default: puppeteer }, { default: chromium }] = await Promise.all([

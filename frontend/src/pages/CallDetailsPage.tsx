@@ -576,7 +576,7 @@ const CallDetailsPage = () => {
                         <TableCell>
                           <p className="font-medium">{part.machineName}</p>
                         </TableCell>
-                        <TableCell className="text-right">1</TableCell>
+                        <TableCell className="text-right">{part.quantity ?? 1}</TableCell>
                         <TableCell className="text-right">₹{part.sellingPrice ?? part.discountedSellingPrice ?? 0}</TableCell>
                         <TableCell className="text-right font-semibold text-blue-600">₹{part.total}</TableCell>
                       </TableRow>

@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const multer = require("multer");
-const { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, createReimbursement, completeCall, getCustomerOutstandingDue } = require("./engineer.serviceCall.controller");
+const { getAssignedCalls, getOnHoldCalls, getHistoryCalls, getCounterReadingAssignedCalls, getCounterReadingHistoryCalls, getReimbursementPreview, startTravel, reachedLocation, startWork, putOnHold, getPartsMachines, getChargesSummary, getPartsStockDebug, createReimbursement, completeCall, getCustomerOutstandingDue } = require("./engineer.serviceCall.controller");
 const engineerAuthMiddleware = require("../../../middleware/engineer.auth.middleware");
 
 const upload = multer({
@@ -29,6 +29,7 @@ router.patch("/reached-location", reachedLocation);
 router.patch("/start-work", upload.array("beforeWorkImages", 10), startWork);
 router.patch("/on-hold", putOnHold);
 router.post("/charges-summary", getChargesSummary);
+router.post("/parts-stock-debug", getPartsStockDebug);
 router.post("/reimbursement", createReimbursement);
 router.patch("/complete", upload.fields([
   { name: "afterWorkImages", maxCount: 10 },

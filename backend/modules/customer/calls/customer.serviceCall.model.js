@@ -69,6 +69,7 @@ const usedPartSchema = new mongoose.Schema(
     category:               { type: String, trim: true, default: "" },
     divisionId:             { type: mongoose.Schema.Types.ObjectId, default: null },
     division:               { type: String, trim: true, default: "" },
+    quantity:               { type: Number, default: 1 },
     sellingPriceBase:       { type: Number, default: 0 },
     buyingPriceBase:        { type: Number, default: 0 },
     total:                  { type: Number, default: 0 },
