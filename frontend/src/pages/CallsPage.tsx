@@ -401,7 +401,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
     {
       key: "usedParts",
       label: "Parts Replaced",
-      className: "w-[154px] max-w-[154px]",
+      className: "w-[250px] max-w-[250px]",
       render: (c) => c.machines.length > 0 ? c.machines.map((m, i) => {
         const parts = m.usedParts ?? [];
         return <div key={i}>{parts.length > 0 ? parts.map((p, j) => <div key={j}>{p.machineName} ({p.partCode}) (Qty: {p.quantity ?? 1}){j < parts.length - 1 ? "," : ""}</div>) : "—"}{i < c.machines.length - 1 && <hr className="my-1 border-t border-border" />}</div>;

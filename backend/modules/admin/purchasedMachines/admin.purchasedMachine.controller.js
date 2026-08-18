@@ -54,11 +54,17 @@ const getAll = async (req, res) => {
 
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (inventoryStatus === "available" || inventoryStatus === "sold") {
-      const statusFilter = { $elemMatch: { serialNumbers: { $elemMatch: { status: inventoryStatus } } } };
+      // For serial number machines: check serialNumbers[].status
+      const serialFilter = { serialNumbers: { $elemMatch: { status: inventoryStatus } } };
+      // For parts machines: check availableParts > 0 (available) or soldParts > 0 (sold)
+      const partsFilter = inventoryStatus === "available"
+        ? { availableParts: { $gt: 0 } }
+        : { soldParts: { $gt: 0 } };
+
       if (machineFilter) {
-        query.machines = { $elemMatch: { ...machineFilter.$elemMatch, $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+        query.machines = { $elemMatch: { ...machineFilter.$elemMatch, $or: [ serialFilter, partsFilter ] } };
       } else {
-        query.machines = { $elemMatch: { $or: [ { serialNumbers: { $elemMatch: { status: inventoryStatus } } }, { partCodes: { $elemMatch: { status: inventoryStatus } } } ] } };
+        query.machines = { $elemMatch: { $or: [ serialFilter, partsFilter ] } };
       }
     } else if (machineFilter) {
       query.machines = machineFilter;

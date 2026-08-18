@@ -1401,7 +1401,7 @@ const SellMachinesPage = () => {
     { key: "grandTotalBase", label: "Grand Total (Base)", render: (s) => <span className="font-medium">₹{s.grandTotalBase.toLocaleString()}</span> },
     { key: "grandTotalGstAmount", label: "Grand Total GST Amt", render: (s) => { const gstPct = (s.cgst?.percent || 0) + (s.sgst?.percent || 0) + (s.igst?.percent || 0); return <span>₹{(s.grandTotalGstAmount || 0).toLocaleString()} ({gstPct}%)</span>; } },
     { key: "grandTotalWithGst", label: "Grand Total (GST Incl.)", render: (s) => <span className="font-semibold">₹{s.grandTotalWithGst.toLocaleString()}</span> },
-    { key: "currentPaymentStatus", label: "Payment", render: (s) => {
+    { key: "currentPaymentStatus", label: "Current Payment Status", render: (s) => {
       if (!s.currentPaymentStatus) return <span className="text-muted-foreground text-xs">—</span>;
       const color = s.currentPaymentStatus === "Paid" ? "text-green-600 bg-green-50 border-green-200" : s.currentPaymentStatus === "Partial-Paid" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
       return <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${color}`}>{s.currentPaymentStatus}</span>;

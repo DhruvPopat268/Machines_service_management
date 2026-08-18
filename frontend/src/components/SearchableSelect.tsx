@@ -104,10 +104,15 @@ export function SearchableSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0" style={{ width: "var(--radix-popover-trigger-width)" }} align="start">
+      <PopoverContent
+        className="p-0 max-h-64"
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+        align="start"
+        onWheel={(e) => e.stopPropagation()}
+      >
         <Command shouldFilter={false}>
           <CommandInput placeholder={searchPlaceholder} value={searchQuery} onValueChange={handleSearchChange} />
-          <CommandList>
+          <CommandList className="max-h-52 overflow-y-auto">
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup>
               {displayOptions.map((option) => (
