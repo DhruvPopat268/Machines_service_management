@@ -1049,10 +1049,10 @@ const serviceStats = [
 
               {/* Category and Division Net Profit */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Top 5 Categories by Net Profit */}
+                {/* Categorywise Net Profit */}
                 <Card className="border-0 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg mb-0">Top 5 Categories by Net Profit</CardTitle>
+                    <CardTitle className="text-lg mb-0">Categorywise Net Profit</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-0">
                     {netProfitChartsLoading
@@ -1072,10 +1072,10 @@ const serviceStats = [
                   </CardContent>
                 </Card>
 
-                {/* Top 5 Divisions by Net Profit */}
+                {/* Divisionwise Net Profit */}
                 <Card className="border-0 shadow-sm">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg mb-0">Top 5 Divisions by Net Profit</CardTitle>
+                    <CardTitle className="text-lg mb-0">Divisionwise Net Profit</CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0 pb-0">
                     {netProfitChartsLoading
