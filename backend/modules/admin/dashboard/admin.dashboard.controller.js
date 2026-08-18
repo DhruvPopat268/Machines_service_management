@@ -733,9 +733,9 @@ const getNetProfitCharts = async (req, res) => {
             category: 1,
             revenue: 1,
             cogs: {
-              $multiply: [
-                { $add: ["$serialNumbersCogs", "$partCodesCogs"] },
-                "$quantity",
+              $add: [
+                "$serialNumbersCogs",
+                { $multiply: ["$partCodesCogs", "$quantity"] },
               ],
             },
           },
@@ -992,9 +992,9 @@ const getNetProfitCharts = async (req, res) => {
             division: 1,
             revenue: 1,
             cogs: {
-              $multiply: [
-                { $add: ["$serialNumbersCogs", "$partCodesCogs"] },
-                "$quantity",
+              $add: [
+                "$serialNumbersCogs",
+                { $multiply: ["$partCodesCogs", "$quantity"] },
               ],
             },
           },
