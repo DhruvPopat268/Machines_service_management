@@ -1026,7 +1026,7 @@ const SellMachinesPage = () => {
   const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>([]);
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
   const [machineOptions, setMachineOptions] = useState<{ label: string; value: string }[]>([]);
-  const [filterEngineers, setFilterEngineers] = useState<{ _id: string; name: string; engineerId?: string }[]>([]);
+  const [filterEngineers, setFilterEngineers] = useState<{ _id: string; name: string; engineerId?: string; role?: string }[]>([]);
   const [selectedFilterEngineers, setSelectedFilterEngineers] = useState<string[]>([]);
   const [engineerFilterSearch, setEngineerFilterSearch] = useState("");
   const [engineerFilterOpen, setEngineerFilterOpen] = useState(false);
@@ -1051,7 +1051,7 @@ const SellMachinesPage = () => {
     try {
       const p: any = { limit: 100, status: "Active" };
       if (q) p.search = q;
-      const r = await api.get("/admin/engineers", { params: p });
+      const r = await api.get("/admin/sales/system-users", { params: p });
       setFilterEngineers(r.data.data);
     } catch { }
   };
@@ -1541,7 +1541,11 @@ const SellMachinesPage = () => {
                           </div>
                           <div>
                             <p className="text-xs font-medium">{eng.name}</p>
-                            {eng.engineerId && <p className="text-[10px] text-muted-foreground">{eng.engineerId}</p>}
+                            {(eng.role || eng.engineerId) && (
+                              <p className="text-[10px] text-muted-foreground">
+                                {eng.role}{eng.engineerId ? ` - ${eng.engineerId}` : ""}
+                              </p>
+                            )}
                           </div>
                         </button>
                       );
