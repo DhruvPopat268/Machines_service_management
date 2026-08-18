@@ -132,7 +132,7 @@ const getCallDetail = async (req, res) => {
 const assignEngineer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { engineerId, companyId } = req.body;
+    const { engineerId, companyId, customerPORef } = req.body;
 
     if (!mongoose.isValidObjectId(engineerId))
       return res.status(400).json({ success: false, message: "Invalid engineerId" });
@@ -193,6 +193,7 @@ const assignEngineer = async (req, res) => {
       status: "Assigned",
       "dates.assigned": new Date(),
       companyInfo,
+      ...(customerPORef?.trim() && { "customerInfo.customerPORef": customerPORef.trim() }),
       cgst: { percent: cgstPercent, amount: cgstAmount },
       sgst: { percent: sgstPercent, amount: sgstAmount },
       igst: { percent: igstPercent, amount: igstAmount },

@@ -263,6 +263,7 @@ const createSale = async (req, res) => {
       address: customer.userLocation?.address || "",
       zone: customer.zone?.name || "",
       gstNumber: customer.gstNumber || "",
+      customerPORef: req.body.customerPORef?.trim() || "",
     };
 
     // ── Collect all serial numbers for bulk verification ──
@@ -608,6 +609,7 @@ const createSale = async (req, res) => {
             .replace(/{{customerUniqueId}}/g, customerInfo.customerUniqueId || "")
             .replace(/{{customerZone}}/g, customerInfo.zone || "")
             .replace(/{{customerGst}}/g, customerInfo.gstNumber || "")
+            .replace(/{{customerPORef}}/g, customerInfo.customerPORef || "")
             .replace(/{{grandTotalBase}}/g, formatNum(grandTotalBase))
             .replace(/{{cgstPercent}}/g, cgstNum)
             .replace(/{{cgstAmount}}/g, formatNum(cgstAmount))
@@ -1248,6 +1250,7 @@ const generateInvoice = async (req, res) => {
       .replace(/{{customerUniqueId}}/g, sale.customerInfo.customerUniqueId || "")
       .replace(/{{customerZone}}/g, sale.customerInfo.zone || "")
       .replace(/{{customerGst}}/g, sale.customerInfo.gstNumber || "")
+      .replace(/{{customerPORef}}/g, sale.customerInfo.customerPORef || "")
       .replace(/{{basicTotal}}/g, formatNum(basicTotal))
       .replace(/{{cgstPercent}}/g, cgstNum)
       .replace(/{{cgstAmount}}/g, formatNum(cgstAmount))

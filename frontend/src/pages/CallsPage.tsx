@@ -101,7 +101,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [companies, setCompanies]           = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [assignEngineers, setAssignEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
-  const [assignForm, setAssignForm]         = useState({ companyId: "none" });
+  const [assignForm, setAssignForm]         = useState({ companyId: "none", customerPORef: "" });
 
   const [cancelTarget, setCancelTarget] = useState<ServiceCall | null>(null);
   const [cancelling, setCancelling]     = useState(false);
@@ -267,7 +267,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const openAssignDialog = async (c: ServiceCall) => {
     setAssignDialog(c);
     setSelectedEngineerId(c.engineerInfo?._id || "");
-    setAssignForm({ companyId: (c as any).companyInfo?.companyId ?? "none" });
+    setAssignForm({ companyId: (c as any).companyInfo?.companyId ?? "none", customerPORef: "" });
     setAssignDialogLoading(true);
     try {
       const [engData, compRes] = await Promise.all([
@@ -710,6 +710,16 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   </Select>
                 </div>
 
+                <div className="space-y-2">
+                  <Label className="text-sm">Customer PO/Ref No <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                  <Input
+                    className="h-9 text-sm"
+                    placeholder="Enter PO or reference number"
+                    value={assignForm.customerPORef}
+                    onChange={(e) => setAssignForm(p => ({ ...p, customerPORef: e.target.value }))}
+                  />
+                </div>
+
 
                 <div className="space-y-2">
                   <Label>Select Engineer</Label>
@@ -745,6 +755,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                         assignDialog._id,
                         selectedEngineerId,
                         assignForm.companyId !== "none" ? assignForm.companyId : undefined,
+                        assignForm.customerPORef || undefined,
                       );
                       toast.success(`Engineer assigned to ${assignDialog.callId}`);
                       setAssignDialog(null);

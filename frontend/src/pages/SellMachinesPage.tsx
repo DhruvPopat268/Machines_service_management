@@ -96,6 +96,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [companies, setCompanies] = useState<{ _id: string; name: string }[]>([]);
   const [companyId, setCompanyId] = useState("");
   const [processedByDialog, setProcessedByDialog] = useState(false);
+  const [customerPORef, setCustomerPORef] = useState("");
   const [engineers, setEngineers] = useState<Engineer[]>([]);
   const [selectedEngineers, setSelectedEngineers] = useState<string[]>([]);
   const [engineerSearch, setEngineerSearch] = useState("");
@@ -353,6 +354,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       ...(paymentStatus !== "Unpaid" && { paymentMethod, paymentDate }),
       ...(paymentStatus === "Partial-Paid" && { paidAmount: Number(paidAmount) }),
       processedBy: selectedEngineers,
+      ...(customerPORef.trim() && { customerPORef: customerPORef.trim() }),
+      ...(customerPORef.trim() && { customerPORef: customerPORef.trim() }),
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
         return {
@@ -412,7 +415,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); setProcessedByDialog(false); setSelectedEngineers([]); setEngineerSearch(""); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); setProcessedByDialog(false); setSelectedEngineers([]); setEngineerSearch(""); setCustomerPORef(""); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -903,17 +906,27 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             <DialogTitle className="flex items-center gap-2"><Users className="h-4 w-4" /> Processed By</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <p className="text-xs text-muted-foreground">Select users who processed this sale (optional)</p>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">Customer PO/Ref No (Optional)</Label>
               <Input
-                className="pl-8 h-9 text-sm"
-                placeholder="Search users..."
-                value={engineerSearch}
-                onChange={(e) => { setEngineerSearch(e.target.value); fetchEngineers(e.target.value); }}
+                className="h-9 text-sm"
+                placeholder="Enter PO or reference number"
+                value={customerPORef}
+                onChange={(e) => setCustomerPORef(e.target.value)}
               />
             </div>
-            <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
+            <div className="border-t pt-3">
+              <p className="text-xs text-muted-foreground mb-2">Select users who processed this sale (optional)</p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  className="pl-8 h-9 text-sm"
+                  placeholder="Search users..."
+                  value={engineerSearch}
+                  onChange={(e) => { setEngineerSearch(e.target.value); fetchEngineers(e.target.value); }}
+                />
+              </div>
+              <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
               {loadingEngineers ? (
                 <p className="text-xs text-muted-foreground px-3 py-4 text-center">Loading...</p>
               ) : engineers.length === 0 ? (
@@ -941,6 +954,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             {selectedEngineers.length > 0 && (
               <p className="text-xs text-primary font-medium">{selectedEngineers.length} user{selectedEngineers.length > 1 ? "s" : ""} selected</p>
             )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setProcessedByDialog(false); setEngineerSearch(""); }} disabled={submitting}>Back</Button>

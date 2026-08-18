@@ -120,8 +120,10 @@ export const serviceCallsApi = {
     return { data: response.data.data, stats: response.data.stats, pagination: response.data.pagination };
   },
 
-  assignEngineer: async (id: string, engineerId: string, companyId?: string): Promise<ServiceCall> => {
-    const res = await api.patch(`/admin/service-calls/${id}/assign-engineer`, { engineerId, companyId });
+  assignEngineer: async (id: string, engineerId: string, companyId?: string, customerPORef?: string): Promise<ServiceCall> => {
+    const payload: Record<string, any> = { engineerId, companyId };
+    if (customerPORef?.trim()) payload.customerPORef = customerPORef.trim();
+    const res = await api.patch(`/admin/service-calls/${id}/assign-engineer`, payload);
     return res.data.data;
   },
 

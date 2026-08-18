@@ -41,6 +41,7 @@ const CallDetailsPage = () => {
   const [priorityDialog, setPriorityDialog] = useState(false);
   const [selectedEngineerId, setSelectedEngineerId] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [customerPORef, setCustomerPORef] = useState("");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
@@ -63,6 +64,7 @@ const CallDetailsPage = () => {
   const openAssignDialog = async () => {
     setSelectedEngineerId(call.engineerInfo?._id || "");
     setSelectedCompanyId((call as any).companyInfo?.companyId || "");
+    setCustomerPORef("");
     setAssignDialog(true);
     setAssignDialogLoading(true);
     try {
@@ -752,7 +754,7 @@ const CallDetailsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={assignDialog} onOpenChange={setAssignDialog}>
+      <Dialog open={assignDialog} onOpenChange={(o) => { if (!o) { setAssignDialog(false); setCustomerPORef(""); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"} — {call.callId}</DialogTitle>
@@ -762,6 +764,28 @@ const CallDetailsPage = () => {
               <div className="flex justify-center py-6"><Spinner /></div>
             ) : (
             <>
+            <div className="space-y-2">
+              <Label>Company <span className="text-destructive">*</span></Label>
+              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
+                <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
+                <SelectContent>
+                  {companies.filter(c => c._id).map((c) => (
+                    <SelectItem key={c._id} value={c._id}>
+                      {c.name}{c.gstNumber ? ` — ${c.gstNumber}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Customer PO/Ref No <span className="text-muted-foreground font-normal text-xs">(Optional)</span></Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="Enter PO or reference number"
+                value={customerPORef}
+                onChange={(e) => setCustomerPORef(e.target.value)}
+              />
+            </div>
             <div className="space-y-2">
               <Label>Select Engineer</Label>
               <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
@@ -781,19 +805,6 @@ const CallDetailsPage = () => {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Company <span className="text-destructive">*</span></Label>
-              <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                <SelectTrigger><SelectValue placeholder="Select company" /></SelectTrigger>
-                <SelectContent>
-                  {companies.filter(c => c._id).map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {c.name}{c.gstNumber ? ` — ${c.gstNumber}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
             </>
             )}
           </div>
@@ -805,7 +816,7 @@ const CallDetailsPage = () => {
                 if (!id) return;
                 setSaving(true);
                 try {
-                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId);
+                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId, customerPORef || undefined);
                   toast.success(`Engineer assigned to ${call.callId}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setAssignDialog(false);

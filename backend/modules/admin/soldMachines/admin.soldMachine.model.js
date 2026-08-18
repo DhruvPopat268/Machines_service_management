@@ -104,6 +104,7 @@ const soldMachineSchema = new mongoose.Schema(
       address:    { type: String, trim: true, default: "" },
       zone:       { type: String, trim: true, default: "" },
       gstNumber:  { type: String, trim: true, uppercase: true, default: "" },
+      customerPORef: { type: String, trim: true, default: "" },
     },
     machines:             { type: [soldMachineEntrySchema], required: true },
     processedBy:          { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" }], default: [] },

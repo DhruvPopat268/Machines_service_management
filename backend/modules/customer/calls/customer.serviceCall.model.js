@@ -126,6 +126,7 @@ const serviceCallSchema = new mongoose.Schema(
       address:    { type: String, trim: true, required: true },
       zone:       { type: String, trim: true, default: "" },
       gstNumber:  { type: String, trim: true, uppercase: true, default: "" },
+      customerPORef: { type: String, trim: true, default: "" },
       location: {
         address:   { type: String, trim: true },
         latitude:  { type: Number, min: [-90,  "Latitude must be between -90 and 90"],  max: [90,  "Latitude must be between -90 and 90"] },
