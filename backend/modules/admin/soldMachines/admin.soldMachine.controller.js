@@ -1665,4 +1665,41 @@ const addPayment = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts };
+const getSystemUsers = async (req, res) => {
+  try {
+    const AdminUser = require("../auth/admin.user.model");
+    const { search, status, role, limit = 100 } = req.query;
+
+    const query = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { engineerId: { $regex: search, $options: "i" } },
+      ];
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (role) {
+      query.role = role;
+    }
+
+    const users = await AdminUser.find(query)
+      .select("_id name email role engineerId status profilePhoto")
+      .sort({ name: 1 })
+      .limit(parseInt(limit));
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers };

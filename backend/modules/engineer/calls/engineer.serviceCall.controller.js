@@ -294,7 +294,6 @@ const getReimbursementPreview = async (req, res) => {
     const engineerId = req.engineer.id;
     const { callId, purpose = "Service Call", currentLocation } = req.body;
 
-    console.log(`[getReimbursementPreview] engineerId: ${engineerId}, callId: ${callId}, purpose: ${purpose}, currentLocation: ${JSON.stringify(currentLocation)}`);
 
     if (!mongoose.isValidObjectId(callId))
       return res.status(400).json({ success: false, message: "Invalid callId" });
@@ -602,11 +601,11 @@ const getChargesSummary = async (req, res) => {
           return res.status(400).json({ success: false, message: `usedParts[${i}]: sellingPriceWithGst must be a non-negative number` });
       }
 
-      // Validate partCode uniqueness
-      const partCodes = usedParts.map(p => p.partCode.trim());
-      const uniquePartCodes = new Set(partCodes);
-      if (uniquePartCodes.size !== partCodes.length)
-        return res.status(400).json({ success: false, message: "usedParts contains duplicate partCode entries" });
+      // Validate partCode uniqueness per serialNumber (same partCode on same serialNumber is not allowed)
+      const partCodeSerialKeys = usedParts.map(p => `${p.serialNumber.trim()}::${p.partCode.trim()}`);
+      const uniquePartCodeSerialKeys = new Set(partCodeSerialKeys);
+      if (uniquePartCodeSerialKeys.size !== partCodeSerialKeys.length)
+        return res.status(400).json({ success: false, message: "usedParts contains duplicate partCode for the same serial number" });
     }
 
     const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines cgst sgst igst");
@@ -957,7 +956,6 @@ const completeCall = async (req, res) => {
     const engineerId = req.engineer.id;
     const { callId, usedParts, sendToEmail, sendToWhatsapp, counterReadings, serviceCallReadings, engineerCompleteRemarks } = req.body;
 
-    console.log("completeCall called with:", { callId, usedParts, sendToEmail, sendToWhatsapp, counterReadings, serviceCallReadings, engineerCompleteRemarks });
 
     const abort = async (status, message) => {
       await session.abortTransaction();
@@ -976,7 +974,6 @@ const completeCall = async (req, res) => {
       parsedUsedParts = typeof usedParts === "string" ? JSON.parse(usedParts) : usedParts;
       // Handle double-stringified JSON (from multipart form data)
       if (typeof parsedUsedParts === "string") parsedUsedParts = JSON.parse(parsedUsedParts);
-      console.log("✅ parsedUsedParts:", JSON.stringify(parsedUsedParts, null, 2));
     } catch (_) {
       return abort(400, "Invalid usedParts format");
     }
@@ -1022,7 +1019,6 @@ const completeCall = async (req, res) => {
 
     // usedParts only apply to Service-Call type; ignore for other call types
     const hasUsedParts = Array.isArray(parsedUsedParts) && parsedUsedParts.length > 0 && call.callType === "Service-Call";
-    console.log("✅ hasUsedParts:", hasUsedParts, "| call.callType:", call.callType, "| parsedUsedParts.length:", parsedUsedParts?.length);
 
     if (hasUsedParts) {
       for (let i = 0; i < parsedUsedParts.length; i++) {
@@ -1039,11 +1035,10 @@ const completeCall = async (req, res) => {
         if (isNaN(p.sellingPriceWithGst) || p.sellingPriceWithGst < 0)
           return abort(400, `usedParts[${i}]: sellingPriceWithGst must be a non-negative number`);
       }
-      // Validate partCode uniqueness
-      const partCodesArr = parsedUsedParts.map(p => p.partCode.trim());
-      if (new Set(partCodesArr).size !== partCodesArr.length)
-        return abort(400, "usedParts contains duplicate partCode entries");
-      console.log("✅ Validation passed for usedParts");
+      // Validate partCode uniqueness per serialNumber (same partCode on same serialNumber is not allowed)
+      const partCodeSerialKeys = parsedUsedParts.map(p => `${p.serialNumber.trim()}::${p.partCode.trim()}`);
+      if (new Set(partCodeSerialKeys).size !== partCodeSerialKeys.length)
+        return abort(400, "usedParts contains duplicate partCode for the same serial number");
     }
 
     // ── Upload images ──
@@ -1074,7 +1069,6 @@ const completeCall = async (req, res) => {
       const purchaseRecords = await PurchasedMachine.find(
         { "machines.partCode": { $in: partCodesList } }
       ).sort({ createdAt: 1 }).session(session).lean();
-      console.log("✅ purchaseRecords count:", purchaseRecords.length);
 
       // FIFO: for each partCode find oldest purchase record with availableParts >= quantity
       const partInfoMap = new Map(); // partCode -> { machineInfo, buyingPriceBase, purchaseDocId }
@@ -1105,7 +1099,6 @@ const completeCall = async (req, res) => {
         if (!found)
           return abort(400, `Part code "${pc}" does not have sufficient available stock`);
       }
-      console.log("✅ partInfoMap built, size:", partInfoMap.size);
 
       // Fetch hsnCode from Machine docs
       const uniqueMachineIds = [...new Set([...partInfoMap.values()].map(i => i.machineId?.toString()).filter(Boolean))];
@@ -1135,7 +1128,6 @@ const completeCall = async (req, res) => {
         const basePrice  = parseFloat((p.sellingPriceWithGst / (1 + totalGstPercent / 100)).toFixed(2));
         const lineTotal  = (!isExpired && contract?.freeParts) ? 0 : basePrice * p.quantity;
         partsCharges     = Math.round((partsCharges + lineTotal) * 100) / 100;
-        console.log(`✅ Part ${pc}: qty=${p.quantity}, basePrice=${basePrice}, lineTotal=${lineTotal}, partsCharges=${partsCharges}`);
 
         const callMachineKey = p.serialNumber.trim();
         if (!variantPartsMap.has(callMachineKey)) variantPartsMap.set(callMachineKey, []);
@@ -1154,7 +1146,6 @@ const completeCall = async (req, res) => {
           buyingPriceBase:     info.buyingPriceBase,
           total:               lineTotal,
         });
-        console.log(`✅ Pushed to variantPartsMap for ${callMachineKey}, current size:`, variantPartsMap.get(callMachineKey).length);
 
         // Deduct quantity from Machine currentStock
         const updated = await Machine.findOneAndUpdate(
@@ -1422,10 +1413,7 @@ const completeCall = async (req, res) => {
       machineSetFields[`machines.${idx}.usedParts`]           = mParts;
       machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(m.serialNumber) ? [counterReadingsMap.get(m.serialNumber)] : [];
       machineSetFields[`machines.${idx}.serviceCallReadings`] = serviceCallReadingsMap.get(m.serialNumber) ?? [];
-      console.log(`✅ Machine ${idx} (${m.serialNumber}): mParts.length=${mParts.length}, mPartsCharge=${mPartsCharge}`);
     });
-    console.log("✅ Total partsCharges:", partsCharges);
-    console.log("✅ machineSetFields:", JSON.stringify(machineSetFields, null, 2));
 
     const cgstPercent       = call.cgst?.percent ?? 0;
     const sgstPercent       = call.sgst?.percent ?? 0;

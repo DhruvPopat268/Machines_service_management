@@ -50,7 +50,7 @@ interface UnitRow {
   pagesCategories: PagesCategoryEntry[];
 }
 
-interface Engineer { _id: string; name: string; engineerId?: string; }
+interface Engineer { _id: string; name: string; engineerId?: string; role?: string; }
 
 interface MachineEntry {
   machine: Machine;
@@ -178,9 +178,9 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     try {
       const p: any = { limit: 100, status: "Active" };
       if (q) p.search = q;
-      const r = await api.get("/admin/engineers", { params: p });
+      const r = await api.get("/admin/sales/system-users", { params: p });
       setEngineers(r.data.data);
-    } catch { toast.error("Failed to load engineers"); }
+    } catch { toast.error("Failed to load users"); }
     finally { setLoadingEngineers(false); }
   };
 
@@ -903,12 +903,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
             <DialogTitle className="flex items-center gap-2"><Users className="h-4 w-4" /> Processed By</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <p className="text-xs text-muted-foreground">Select engineers who processed this sale (optional)</p>
+            <p className="text-xs text-muted-foreground">Select users who processed this sale (optional)</p>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 className="pl-8 h-9 text-sm"
-                placeholder="Search engineers..."
+                placeholder="Search users..."
                 value={engineerSearch}
                 onChange={(e) => { setEngineerSearch(e.target.value); fetchEngineers(e.target.value); }}
               />
@@ -917,7 +917,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
               {loadingEngineers ? (
                 <p className="text-xs text-muted-foreground px-3 py-4 text-center">Loading...</p>
               ) : engineers.length === 0 ? (
-                <p className="text-xs text-muted-foreground px-3 py-4 text-center">No engineers found</p>
+                <p className="text-xs text-muted-foreground px-3 py-4 text-center">No users found</p>
               ) : engineers.map((eng) => {
                 const checked = selectedEngineers.includes(eng._id);
                 return (
@@ -932,14 +932,14 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                     </div>
                     <div>
                       <p className="text-sm font-medium">{eng.name}</p>
-                      {eng.engineerId && <p className="text-xs text-muted-foreground">{eng.engineerId}</p>}
+                      {eng.role && <p className="text-xs text-muted-foreground">{eng.role}{eng.engineerId ? ` - ${eng.engineerId}` : ""}</p>}
                     </div>
                   </button>
                 );
               })}
             </div>
             {selectedEngineers.length > 0 && (
-              <p className="text-xs text-primary font-medium">{selectedEngineers.length} engineer{selectedEngineers.length > 1 ? "s" : ""} selected</p>
+              <p className="text-xs text-primary font-medium">{selectedEngineers.length} user{selectedEngineers.length > 1 ? "s" : ""} selected</p>
             )}
           </div>
           <DialogFooter>

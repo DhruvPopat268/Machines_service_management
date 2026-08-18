@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { getAll, getById, createSale, exportToExcel, renewContract, addContract, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts } = require("./admin.soldMachine.controller");
+const { getAll, getById, createSale, exportToExcel, renewContract, addContract, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers } = require("./admin.soldMachine.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
 
 // Cron — no auth middleware
@@ -9,6 +9,7 @@ router.use(adminAuthMiddleware);
 
 router.get("/contract-expiry-status",     getContractExpiryStatus);
 
+router.get("/system-users",           getSystemUsers);
 router.get("/export",                 exportToExcel);
 router.get("/available-machines",     getAvailableMachines);
 router.get("/available-codes",        getAvailableCodes);
