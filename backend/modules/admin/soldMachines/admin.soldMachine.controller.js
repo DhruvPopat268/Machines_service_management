@@ -456,20 +456,29 @@ const createSale = async (req, res) => {
     const { currentPaymentStatus, paidAmount: rawPaidAmount, paymentDate, paymentMethod, companyId, processedBy } = req.body;
     let paidAmount = 0;
     let remainingAmount = grandTotalWithGst;
+    let finalPaymentStatus = currentPaymentStatus || "Unpaid";
 
-    if (currentPaymentStatus === "Paid") {
-      paidAmount = grandTotalWithGst;
+    // If grandTotalWithGst is 0, don't store payment fields at all
+    if (grandTotalWithGst === 0) {
+      paidAmount = 0;
       remainingAmount = 0;
-    } else if (currentPaymentStatus === "Partial-Paid") {
-      paidAmount = Math.round(Number(rawPaidAmount) * 100) / 100;
-      if (paidAmount >= grandTotalWithGst) return abort(400, "paidAmount must be less than grandTotalWithGst for Partial-Paid");
-      remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
+      finalPaymentStatus = null; // Don't store payment status if total is 0
+    } else {
+      // Normal payment logic when grandTotalWithGst > 0
+      if (finalPaymentStatus === "Paid") {
+        paidAmount = grandTotalWithGst;
+        remainingAmount = 0;
+      } else if (finalPaymentStatus === "Partial-Paid") {
+        paidAmount = Math.round(Number(rawPaidAmount) * 100) / 100;
+        if (paidAmount >= grandTotalWithGst) return abort(400, "paidAmount must be less than grandTotalWithGst for Partial-Paid");
+        remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
+      }
     }
 
-    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, grandTotalGstAmount, cogsTotalBase, currentPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
+    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, grandTotalGstAmount, cogsTotalBase, currentPaymentStatus: finalPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
 
     let transactionId = null;
-    if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
+    if (finalPaymentStatus && (finalPaymentStatus === "Paid" || finalPaymentStatus === "Partial-Paid")) {
       const [transaction] = await PaymentTransaction.create([{ soldMachineId: sale._id, amount: paidAmount, paymentDate: new Date(paymentDate), paymentMethod }], { session });
       transactionId = transaction._id;
     }
@@ -540,8 +549,9 @@ const createSale = async (req, res) => {
     let receiptNumber = null;
 
     // ── Generate sales invoice PDF first (so invoiceNumber is available for receipt) ──
+    // Skip invoice/receipt if grandTotalWithGst is 0
     let saleInvoiceNumber = "";
-    if (companyId) {
+    if (companyId && grandTotalWithGst > 0) {
       try {
         const company = await Company.findById(companyId).lean();
         if (company) {

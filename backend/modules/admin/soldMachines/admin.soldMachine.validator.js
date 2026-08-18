@@ -80,24 +80,32 @@ const validateCreateSale = (body) => {
 
   const { currentPaymentStatus, paidAmount, paymentDate } = body;
 
-  const validStatuses = ["Paid", "Unpaid", "Partial-Paid"];
-  if (!currentPaymentStatus || !validStatuses.includes(currentPaymentStatus))
-    return "currentPaymentStatus must be one of: Paid, Unpaid, Partial-Paid";
+  // If selling prices are all 0/negative, skip payment validation (will be handled in controller)
+  const hasAnyPositivePrice = machines.some(m => {
+    const price = Number(m.sellingPriceWithGst) || 0;
+    return price > 0;
+  });
 
-  if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
-    if (!paymentDate) return "paymentDate is required for Paid or Partial-Paid status";
-    if (isNaN(new Date(paymentDate).getTime())) return "paymentDate must be a valid date";
-    if (!body.paymentMethod || !["Cash", "Online"].includes(body.paymentMethod))
-      return "paymentMethod must be Cash or Online";
-    if (!body.companyId || !mongoose.isValidObjectId(body.companyId))
-      return "companyId is required for Paid or Partial-Paid status";
-  }
+  if (hasAnyPositivePrice) {
+    const validStatuses = ["Paid", "Unpaid", "Partial-Paid"];
+    if (!currentPaymentStatus || !validStatuses.includes(currentPaymentStatus))
+      return "currentPaymentStatus must be one of: Paid, Unpaid, Partial-Paid";
 
-  if (currentPaymentStatus === "Partial-Paid") {
-    if (paidAmount == null || isNaN(Number(paidAmount)))
-      return "paidAmount is required for Partial-Paid status";
-    if (Number(paidAmount) <= 0)
-      return "paidAmount must be greater than 0";
+    if (currentPaymentStatus === "Paid" || currentPaymentStatus === "Partial-Paid") {
+      if (!paymentDate) return "paymentDate is required for Paid or Partial-Paid status";
+      if (isNaN(new Date(paymentDate).getTime())) return "paymentDate must be a valid date";
+      if (!body.paymentMethod || !["Cash", "Online"].includes(body.paymentMethod))
+        return "paymentMethod must be Cash or Online";
+      if (!body.companyId || !mongoose.isValidObjectId(body.companyId))
+        return "companyId is required for Paid or Partial-Paid status";
+    }
+
+    if (currentPaymentStatus === "Partial-Paid") {
+      if (paidAmount == null || isNaN(Number(paidAmount)))
+        return "paidAmount is required for Partial-Paid status";
+      if (Number(paidAmount) <= 0)
+        return "paidAmount must be greater than 0";
+    }
   }
 
   return null;

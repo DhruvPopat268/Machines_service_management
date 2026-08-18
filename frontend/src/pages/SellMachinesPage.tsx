@@ -1402,11 +1402,12 @@ const SellMachinesPage = () => {
     { key: "grandTotalGstAmount", label: "Grand Total GST Amt", render: (s) => { const gstPct = (s.cgst?.percent || 0) + (s.sgst?.percent || 0) + (s.igst?.percent || 0); return <span>₹{(s.grandTotalGstAmount || 0).toLocaleString()} ({gstPct}%)</span>; } },
     { key: "grandTotalWithGst", label: "Grand Total (GST Incl.)", render: (s) => <span className="font-semibold">₹{s.grandTotalWithGst.toLocaleString()}</span> },
     { key: "currentPaymentStatus", label: "Payment", render: (s) => {
+      if (!s.currentPaymentStatus) return <span className="text-muted-foreground text-xs">—</span>;
       const color = s.currentPaymentStatus === "Paid" ? "text-green-600 bg-green-50 border-green-200" : s.currentPaymentStatus === "Partial-Paid" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
       return <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${color}`}>{s.currentPaymentStatus}</span>;
     }},
-    { key: "paidAmount", label: "Paid", render: (s) => <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
-    { key: "remainingAmount", label: "Remaining", render: (s) => <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
+    { key: "paidAmount", label: "Paid", render: (s) => !s.currentPaymentStatus || s.paidAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
+    { key: "remainingAmount", label: "Remaining", render: (s) => !s.currentPaymentStatus || s.remainingAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
     { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     { key: "processedBy", label: "Processed By", render: (s) => {
       const list = (s as any).processedBy as { _id: string; name: string }[] | undefined;
@@ -1416,25 +1417,31 @@ const SellMachinesPage = () => {
     {
       key: "actions", label: "Actions", sticky: true, render: (s) => (
         <div className="flex items-center gap-1">
-          {s.invoiceUrl
-            ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
-            : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
-          }
-          {s.currentPaymentStatus !== "Paid" && (
+          {s.grandTotalWithGst > 0 && (
+            <>
+              {s.invoiceUrl
+                ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
+                : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
+              }
+            </>
+          )}
+          {s.currentPaymentStatus !== "Paid" && s.currentPaymentStatus !== null && (
             <Button size="sm" variant="outline" className="text-xs h-7 text-blue-600 border-blue-300" onClick={() => { setPaymentDialog(s); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); }}>
               <CreditCard className="h-3 w-3" />
             </Button>
           )}
-          <Button size="sm" variant="outline" className="text-xs h-7 text-purple-600 border-purple-300" onClick={async () => {
-            setReceiptsDialog(s); setReceipts([]); setLoadingReceipts(true);
-            try {
-              const r = await api.get(`/admin/sales/${s._id}/payment-receipts`);
-              setReceipts(r.data.data);
-            } catch { toast.error("Failed to load receipts"); }
-            finally { setLoadingReceipts(false); }
-          }}>
-            <Eye className="h-3 w-3" />
-          </Button>
+          {s.grandTotalWithGst > 0 && (
+            <Button size="sm" variant="outline" className="text-xs h-7 text-purple-600 border-purple-300" onClick={async () => {
+              setReceiptsDialog(s); setReceipts([]); setLoadingReceipts(true);
+              try {
+                const r = await api.get(`/admin/sales/${s._id}/payment-receipts`);
+                setReceipts(r.data.data);
+              } catch { toast.error("Failed to load receipts"); }
+              finally { setLoadingReceipts(false); }
+            }}>
+              <Eye className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       )
     },

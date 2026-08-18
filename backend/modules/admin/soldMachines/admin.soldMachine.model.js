@@ -108,12 +108,13 @@ const soldMachineSchema = new mongoose.Schema(
     },
     machines:             { type: [soldMachineEntrySchema], required: true },
     processedBy:          { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "AdminUser" }], default: [] },
-    currentPaymentStatus: { type: String, enum: ["Paid", "Unpaid", "Partial-Paid"], default: "Unpaid" },
+    currentPaymentStatus: { type: String, enum: ["Paid", "Unpaid", "Partial-Paid"], default: null, sparse: true },
     paidAmount:           { type: Number, default: 0 },
     remainingAmount:      { type: Number, default: 0 },
   },
   { timestamps: true }
 );
+
 
 soldMachineSchema.index({ "customerInfo.name": 1 });
 soldMachineSchema.index({ "customerInfo.customerId": 1 });
