@@ -202,26 +202,11 @@ export function AppSidebar() {
                   )}
                 </SidebarMenu>
                 {machineItems.length > 0 && (
-                  collapsed ? (
-                    <SidebarMenu>
-                      {machineItems.map((item) => (
-                        <SidebarMenuItem key={item.title}>
-                          <SidebarMenuButton asChild>
-                            <NavLink to={item.url} end className={linkClass} activeClassName={activeClass}>
-                              <item.icon className="h-4 w-4 shrink-0" />
-                            </NavLink>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      ))}
-                    </SidebarMenu>
-                  ) : (
-                    <NestedCollapsible
-                      label="Items" icon={HardDrive}
-                      urls={["/machines", "/machines/add"]}
-                      items={machineItems}
-                      collapsed={false}
-                    />
-                  )
+                  <SidebarMenu>
+                    {machineItems.map((item) => (
+                      <SidebarLink key={item.title} to={item.url} icon={item.icon} label={item.title} collapsed={collapsed} />
+                    ))}
+                  </SidebarMenu>
                 )}
                 <SidebarMenu>
                   {hasPermission("inventory-logs") && (
