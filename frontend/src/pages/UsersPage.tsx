@@ -151,7 +151,7 @@ const formatDateTime = (iso: string) => {
   return { date, time };
 };
 
-const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null };
+const emptyForm = { name: "", email: "", phone: "", password: "", role: "" as SystemUser["role"] | "", status: "Active" as SystemUser["status"], dateOfJoining: "", engineerLocation: null as { address: string; latitude?: number; longitude?: number } | null, profilePhoto: null as File | null };
 
 // ─── Reset Password Popup ─────────────────────────────────────────────────────
 const ResetPasswordPopup = ({ open, onClose, userId, userEmail }: { open: boolean; onClose: () => void; userId: string; userEmail: string }) => {
@@ -333,6 +333,7 @@ const UsersPage = () => {
         fd.append("password", addForm.password);
         fd.append("role", addForm.role);
         fd.append("status", addForm.status);
+        if (addForm.dateOfJoining) fd.append("dateOfJoining", addForm.dateOfJoining);
         if (addForm.engineerLocation) fd.append("engineerLocation", JSON.stringify(addForm.engineerLocation));
         fd.append("profilePhoto", addForm.profilePhoto);
         payload = fd;
