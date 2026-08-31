@@ -77,6 +77,9 @@ const getAll = async (req, res) => {
       } else {
         query.machines = { $elemMatch: { $or: [ serialFilter, partsFilter ] } };
       }
+      
+      // Exclude cancelled purchases when filtering by inventory status
+      query.status = "active";
     } else if (machineFilter) {
       query.machines = machineFilter;
     }

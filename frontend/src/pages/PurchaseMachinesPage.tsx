@@ -584,6 +584,7 @@ const PurchaseMachinesPage = () => {
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division        = filters.division;
       if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId       = filters.machine;
       if (filters.inventoryStatus && filters.inventoryStatus !== "all" && filters.inventoryStatus !== "") p.inventoryStatus = filters.inventoryStatus;
+      if (filters.purchaseStatus && filters.purchaseStatus !== "all" && filters.purchaseStatus !== "") p.status = filters.purchaseStatus;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate)   p.toDate   = toISTDateParam(toDate);
       const res = await api.get("/admin/purchases", { params: p, signal: ctrl.signal });
@@ -620,6 +621,7 @@ const PurchaseMachinesPage = () => {
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division        = filters.division;
       if (filters.machine  && filters.machine  !== "all" && filters.machine  !== "") p.machineId       = filters.machine;
       if (filters.inventoryStatus && filters.inventoryStatus !== "all" && filters.inventoryStatus !== "") p.inventoryStatus = filters.inventoryStatus;
+      if (filters.purchaseStatus && filters.purchaseStatus !== "all" && filters.purchaseStatus !== "") p.status = filters.purchaseStatus;
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate)   p.toDate   = toISTDateParam(toDate);
       const res = await api.get("/admin/purchases/export", { params: p, responseType: "blob" });
@@ -633,6 +635,13 @@ const PurchaseMachinesPage = () => {
   const columns: Column<Purchase>[] = [
     { key: "_id",         label: "No.",      render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
+    {
+      key: "status", label: "Status", render: (p) => (
+        p.status === "cancelled"
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Cancelled</span>
+          : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Active</span>
+      ),
+    },
     { key: "createdAt",   label: "Purchased At", render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     { key: "invoiceNumber", label: "Invoice No.", render: (p) => <span className="font-mono text-sm">{p.invoiceNumber || "—"}</span> },
     { key: "machineName", label: "Item",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
@@ -652,7 +661,9 @@ const PurchaseMachinesPage = () => {
                 {items.length > 0 ? (
                   items.map((item, j) => (
                     <div key={j} className="flex items-center gap-1.5 font-mono text-xs">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${item.status === "sold" ? "bg-red-500" : "bg-green-500"}`} />
+                      {p.status !== "cancelled" && (
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${item.status === "sold" ? "bg-red-500" : "bg-green-500"}`} />
+                      )}
                       {item.code}
                     </div>
                   ))
@@ -680,13 +691,6 @@ const PurchaseMachinesPage = () => {
     { key: "grandTotalBase",     label: "Grand Total (Base)",  render: (p) => <span className="font-semibold">₹{p.grandTotalBase.toLocaleString()}</span> },
     { key: "grandTotalGstAmount", label: "GST Amount (Grand)",  render: (p) => <span className="font-semibold">₹{(p.grandTotalGstAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({p.gstConfig?.totalGst || 0}%)</span> },
     { key: "grandTotalWithGst",  label: "Grand Total (GST)",   render: (p) => <span className="font-semibold">₹{p.grandTotalWithGst.toLocaleString()}</span> },
-    {
-      key: "status", label: "Status", render: (p) => (
-        p.status === "cancelled"
-          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Cancelled</span>
-          : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Active</span>
-      ),
-    },
     {
       key: "actions", label: "Actions", sticky: true, render: (p) => (
         <div className="flex items-center gap-1">
@@ -805,6 +809,7 @@ const PurchaseMachinesPage = () => {
             <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={machineOptions}  value={filters.machine  ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:  v }))} onSearchChange={fetchMachines}   placeholder="Item"  searchPlaceholder="Search items..."   className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={[{ label: "Available", value: "available" }, { label: "Sold", value: "sold" }]} value={filters.inventoryStatus ?? ""} onChange={(v) => setFilters(p => ({ ...p, inventoryStatus: v }))} placeholder="Inventory Status" className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={[{ label: "Active", value: "active" }, { label: "Cancelled", value: "cancelled" }]} value={filters.purchaseStatus ?? ""} onChange={(v) => setFilters(p => ({ ...p, purchaseStatus: v }))} placeholder="Purchase Status" className="w-[160px] h-9 text-sm" />
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />
