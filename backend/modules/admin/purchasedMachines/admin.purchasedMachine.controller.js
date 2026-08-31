@@ -17,6 +17,16 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
   return lowStockThreshold < currentStock ? "In Stock" : "Low Stock";
 };
 
+// Returns true only if purchase is active and no stock has been consumed
+const computeCanCancel = (purchase) => {
+  if (purchase.status === "cancelled") return false;
+  return purchase.machines.every((m) => {
+    const hasSerials = m.serialNumbers && m.serialNumbers.length > 0;
+    if (hasSerials) return m.serialNumbers.every((sn) => sn.status === "available");
+    return (m.soldParts || 0) === 0;
+  });
+};
+
 const buildMachineFilter = (category, division, machineId) => {
   const f = {};
   if (category)  f.categoryId = category;
@@ -91,7 +101,7 @@ const getAll = async (req, res) => {
       PurchasedMachine.countDocuments(query),
     ]);
 
-    const allPurchases      = await PurchasedMachine.find(query).lean();
+    const allPurchases      = await PurchasedMachine.find({ ...query, status: "active" }).lean();
     const totalPurchased     = allPurchases.reduce((s, p) => s + p.grandTotalBase, 0);
     const totalMachines      = allPurchases.reduce((s, p) => s + p.machines.reduce((ms, m) => ms + m.quantity, 0), 0);
     const avgValue           = allPurchases.length > 0 ? Math.round(totalPurchased / allPurchases.length) : 0;
@@ -116,7 +126,7 @@ const getAll = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: purchases.map((p) => ({ ...p.toObject(), machinesCount: p.machines.length })),
+      data: purchases.map((p) => ({ ...p.toObject(), machinesCount: p.machines.length, canCancel: computeCanCancel(p) })),
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
       stats: {
         totalPurchased:        Math.round(totalPurchased * 100) / 100,
@@ -141,7 +151,7 @@ const getById = async (req, res) => {
     if (!purchase)
       return res.status(404).json({ success: false, message: "Purchase not found" });
 
-    res.status(200).json({ success: true, data: { ...purchase.toObject(), machinesCount: purchase.machines.length } });
+    res.status(200).json({ success: true, data: { ...purchase.toObject(), machinesCount: purchase.machines.length, canCancel: computeCanCancel(purchase) } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -286,6 +296,7 @@ const createPurchase = async (req, res) => {
       [{
         action: "purchased",
         vendorInfo,
+        purchaseId: purchase._id,
         machines: machineEntries.map((e) => ({
           machineId:     e.machineId,
           machineName:   e.machineName,
@@ -482,4 +493,75 @@ const exportToExcel = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createPurchase, verifySerialNumbers, exportToExcel };
+const cancelPurchase = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const abort = async (status, message) => {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(status).json({ success: false, message });
+    };
+
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return abort(400, "Invalid purchase ID");
+
+    const purchase = await PurchasedMachine.findById(id).session(session);
+    if (!purchase)
+      return abort(404, "Purchase not found");
+
+    if (purchase.status === "cancelled")
+      return abort(400, "Purchase is already cancelled");
+
+    if (!computeCanCancel(purchase))
+      return abort(400, "Cannot cancel this purchase because some items have already been sold or used");
+
+    // ── Deduct currentStock from Machine docs ──
+    for (const m of purchase.machines) {
+      const machine = await Machine.findById(m.machineId).session(session);
+      if (!machine) continue;
+      const newStock = Math.max(0, machine.currentStock - m.quantity);
+      await Machine.findByIdAndUpdate(
+        m.machineId,
+        { currentStock: newStock, stockStatus: resolveStockStatus(newStock, machine.lowStockThreshold) },
+        { session }
+      );
+
+      // For parts machines — reset availableParts to 0
+      if (!m.serialNumbers || m.serialNumbers.length === 0) {
+        await PurchasedMachine.updateOne(
+          { _id: purchase._id, "machines.machineId": m.machineId },
+          { $set: { "machines.$.availableParts": 0 } },
+          { session }
+        );
+      }
+    }
+
+    // ── Mark purchase as cancelled ──
+    await PurchasedMachine.findByIdAndUpdate(
+      id,
+      { $set: { status: "cancelled" } },
+      { session }
+    );
+
+    // ── Mark related inventory log as cancelled ──
+    await InventoryLog.updateOne(
+      { purchaseId: purchase._id },
+      { $set: { isCancelled: true } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({ success: true, message: "Purchase cancelled successfully" });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createPurchase, cancelPurchase, verifySerialNumbers, exportToExcel };

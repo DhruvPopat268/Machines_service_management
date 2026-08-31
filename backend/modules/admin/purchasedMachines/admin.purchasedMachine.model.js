@@ -53,6 +53,7 @@ const purchasedMachineSchema = new mongoose.Schema(
     grandTotalWithGst: { type: Number, default: 0 },
     grandTotalBase:    { type: Number, default: 0 },
     grandTotalGstAmount: { type: Number, default: 0 },
+    status:          { type: String, enum: ["active", "cancelled"], default: "active" },
   },
   { timestamps: true }
 );

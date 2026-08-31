@@ -46,6 +46,7 @@ interface InventoryLog {
   customerInfo?: CustomerInfo;
   machines: LogMachine[];
   machinesCount: number;
+  isCancelled: boolean;
   createdAt: string;
 }
 
@@ -370,6 +371,14 @@ const InventoryLogsPage = () => {
         const { date, time } = formatDateTime(l.createdAt);
         return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>;
       },
+    },
+    {
+      key: "isCancelled", label: "Status",
+      render: (l) => (
+        l.isCancelled
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Cancelled</span>
+          : <span className="text-muted-foreground text-sm">—</span>
+      ),
     },
   ];
 

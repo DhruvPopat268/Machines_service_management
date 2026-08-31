@@ -41,6 +41,9 @@ const inventoryLogSchema = new mongoose.Schema(
     },
 
     machines: { type: [machineEntrySchema], required: true },
+    isCancelled: { type: Boolean, default: false },
+    purchaseId: { type: mongoose.Schema.Types.ObjectId, ref: "PurchasedMachine", default: null },
+    soldId: { type: mongoose.Schema.Types.ObjectId, ref: "SoldMachine", default: null },
   },
   { timestamps: true }
 );

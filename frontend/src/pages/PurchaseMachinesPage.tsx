@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash } from "lucide-react";
+import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -28,7 +28,7 @@ interface PurchaseMachine {
   availableParts?: number;
   soldParts?: number;
 }
-interface Purchase { _id: string; invoiceNumber?: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; grandTotalGstAmount: number; createdAt: string; }
+interface Purchase { _id: string; invoiceNumber?: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; grandTotalGstAmount: number; status: "active" | "cancelled"; canCancel: boolean; createdAt: string; }
 interface Stats { totalPurchased: number; totalMachinesPurchased: number; totalAvailable: number; totalSold: number; avgPurchaseValue: number; }
 interface Vendor { _id: string; name: string; companyName: string; phone: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
@@ -520,6 +520,8 @@ const PurchaseMachinesPage = () => {
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
+  const [cancelDialog, setCancelDialog]       = useState<Purchase | null>(null);
+  const [cancelling, setCancelling]           = useState(false);
   const [codesPopup, setCodesPopup]           = useState<{ title: string; isParts: boolean; items: { code: string; status: string }[] } | null>(null);
   const [initialVendorId, setInitialVendorId] = useState("");
   const [vendorOptions, setVendorOptions]     = useState<{ label: string; value: string }[]>([]);
@@ -593,6 +595,21 @@ const PurchaseMachinesPage = () => {
 
   useEffect(() => { fetchPurchases(1); }, [fetchPurchases]);
 
+  const handleCancelPurchase = async () => {
+    if (!cancelDialog) return;
+    setCancelling(true);
+    try {
+      await api.patch(`/admin/purchases/${cancelDialog._id}/cancel`);
+      toast.success("Purchase cancelled successfully");
+      setCancelDialog(null);
+      fetchPurchases(pagination.page);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to cancel purchase");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handleExport = async () => {
     setExportDialog(false); toast.success("Download starting...");
     try {
@@ -663,6 +680,29 @@ const PurchaseMachinesPage = () => {
     { key: "grandTotalBase",     label: "Grand Total (Base)",  render: (p) => <span className="font-semibold">₹{p.grandTotalBase.toLocaleString()}</span> },
     { key: "grandTotalGstAmount", label: "GST Amount (Grand)",  render: (p) => <span className="font-semibold">₹{(p.grandTotalGstAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({p.gstConfig?.totalGst || 0}%)</span> },
     { key: "grandTotalWithGst",  label: "Grand Total (GST)",   render: (p) => <span className="font-semibold">₹{p.grandTotalWithGst.toLocaleString()}</span> },
+    {
+      key: "status", label: "Status", render: (p) => (
+        p.status === "cancelled"
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Cancelled</span>
+          : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Active</span>
+      ),
+    },
+    {
+      key: "actions", label: "Actions", sticky: true, render: (p) => (
+        <div className="flex items-center gap-1">
+          {p.canCancel && (
+            <Button
+              variant="ghost" size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="Cancel Purchase"
+              onClick={() => setCancelDialog(p)}
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -806,6 +846,27 @@ const PurchaseMachinesPage = () => {
           <DialogHeader><DialogTitle>Export Purchase Data</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground py-4">Do you want to download all purchase data as an Excel file?</p>
           <DialogFooter><Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button><Button onClick={handleExport}>Yes, Download</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Purchase Confirm Dialog */}
+      <Dialog open={!!cancelDialog} onOpenChange={(open) => { if (!open) setCancelDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Purchase</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to cancel the purchase with invoice{" "}
+            <span className="font-semibold text-foreground">{cancelDialog?.invoiceNumber || "—"}</span>?
+            <br /><br />
+            This will <span className="font-semibold text-destructive">deduct the stock</span> back from inventory. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialog(null)} disabled={cancelling}>Back</Button>
+            <Button variant="destructive" onClick={handleCancelPurchase} disabled={cancelling}>
+              {cancelling ? "Cancelling..." : "Yes, Cancel Purchase"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

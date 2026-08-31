@@ -532,6 +532,7 @@ const createSale = async (req, res) => {
       [{
         action: "sold",
         customerInfo,
+        soldId: sale._id,
         machines: machineEntries.map((e) => ({
           machineId: e.machineId,
           machineName: e.machineName,

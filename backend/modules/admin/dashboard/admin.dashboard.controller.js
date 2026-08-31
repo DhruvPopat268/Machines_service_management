@@ -66,7 +66,7 @@ const getStats = async (req, res) => {
       Customer.countDocuments({ status: "Active" }),
       Machine.countDocuments({ stockStatus: { $in: ["Low Stock", "Out of Stock"] } }),
       PurchasedMachine.aggregate([
-        { $match: dateCreated },
+        { $match: { ...dateCreated, status: "active" } },
         { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
       ]),
       SoldMachine.aggregate([
@@ -110,6 +110,7 @@ const getStats = async (req, res) => {
         { $group: { _id: null, totalCost: { $sum: "$machines.usedParts.buyingPriceBase" } } },
       ]),
       PurchasedMachine.aggregate([
+        { $match: { status: "active" } },
         { $unwind: "$machines" },
         { $project: {
           buyingPriceBase: "$machines.buyingPriceBase",
@@ -368,7 +369,7 @@ const getAccountCharts = async (req, res) => {
     const [categoryPurchaseRows, categorySaleRows, divisionPurchaseRows, divisionSaleRows, vendorRows, customerSaleRows, purchaseTrendRows, saleTrendRows, contractTypeRows, expenseCategoryRows] = await Promise.all([
       // Category-wise Purchase
       PurchasedMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.category": { $nin: [null, ""] } } },
         { $group: { _id: "$machines.category", purchaseAmount: { $sum: "$machines.buyingTotalBase" } } },
@@ -384,7 +385,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Division-wise Purchase
       PurchasedMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.division": { $nin: [null, ""] } } },
         { $group: { _id: "$machines.division", purchaseAmount: { $sum: "$machines.buyingTotalBase" } } },
@@ -400,7 +401,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Top 5 Vendors
       PurchasedMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $addFields: { vendorLabel: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$vendorInfo.companyName", ""] } }, 0] }, "$vendorInfo.companyName", "$vendorInfo.name"] } } },
         { $match: { vendorLabel: { $nin: [null, ""] } } },
         { $group: { _id: "$vendorLabel", totalAmount: { $sum: "$grandTotalBase" } } },
@@ -419,7 +420,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Monthly Purchase Trend
       PurchasedMachine.aggregate([
-        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd }, status: "active" } },
         { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, purchaseAmount: { $sum: "$grandTotalBase" } } },
       ]),
       // Monthly Sale Trend
