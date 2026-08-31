@@ -97,6 +97,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [companyId, setCompanyId] = useState("");
   const [processedByDialog, setProcessedByDialog] = useState(false);
   const [customerPORef, setCustomerPORef] = useState("");
+  const [saleInvoiceNumber, setSaleInvoiceNumber] = useState("");
   const [engineers, setEngineers] = useState<Engineer[]>([]);
   const [selectedEngineers, setSelectedEngineers] = useState<string[]>([]);
   const [engineerSearch, setEngineerSearch] = useState("");
@@ -347,14 +348,16 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   };
 
   const handleSaveAndSale = async () => {
+    if (!saleInvoiceNumber.trim()) { toast.error("Please enter an invoice number"); return; }
+
     const payload: any = {
       customerId,
       companyId,
+      invoiceNumber: saleInvoiceNumber.trim(),
       currentPaymentStatus: paymentStatus,
       ...(paymentStatus !== "Unpaid" && { paymentMethod, paymentDate }),
       ...(paymentStatus === "Partial-Paid" && { paidAmount: Number(paidAmount) }),
       processedBy: selectedEngineers,
-      ...(customerPORef.trim() && { customerPORef: customerPORef.trim() }),
       ...(customerPORef.trim() && { customerPORef: customerPORef.trim() }),
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
@@ -415,7 +418,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); setProcessedByDialog(false); setSelectedEngineers([]); setEngineerSearch(""); setCustomerPORef(""); onClose(); };
+  const handleClose = () => { setCustomerId(initialCustomerId); setCompanyId(""); setPaymentStatus("Unpaid"); setPaymentMethod("Cash"); setPaidAmount(""); setPaymentDate(new Date().toISOString().split("T")[0]); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setOutstanding([]); setOutstandingTotal(0); setOutstandingPopover(false); setProcessedByDialog(false); setSelectedEngineers([]); setEngineerSearch(""); setCustomerPORef(""); setSaleInvoiceNumber(""); onClose(); };
 
   const sellingTotal = entries.reduce((s, e) => {
     if (!e.quantity || !e.sellingPriceWithGst) return s;
@@ -907,6 +910,17 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">Invoice Number <span className="text-destructive">*</span></Label>
+              <Input
+                className="h-9 text-sm"
+                placeholder="e.g. INV-2024-001"
+                maxLength={100}
+                value={saleInvoiceNumber}
+                onChange={(e) => setSaleInvoiceNumber(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">Customer PO/Ref No (Optional)</Label>
               <Input
                 className="h-9 text-sm"
@@ -958,7 +972,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setProcessedByDialog(false); setEngineerSearch(""); }} disabled={submitting}>Back</Button>
-            <Button onClick={handleSaveAndSale} disabled={submitting} className="gap-2">
+            <Button onClick={handleSaveAndSale} disabled={submitting || !saleInvoiceNumber.trim()} className="gap-2">
               <ShoppingCart className="h-4 w-4" />{submitting ? "Recording..." : "Save & Sale"}
             </Button>
           </DialogFooter>
@@ -1201,6 +1215,7 @@ const SellMachinesPage = () => {
 
   const columns: Column<Sale>[] = [
     { key: "_id", label: "No.", render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
+    { key: "invoiceNumber", label: "Invoice No.", render: (s) => <span className="font-mono text-sm">{s.invoiceNumber || "—"}</span> },
     { key: "customerInfo", label: "Customer", render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
     { key: "machineName", label: "Machine", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "category", label: "Category", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
@@ -1493,6 +1508,7 @@ const SellMachinesPage = () => {
                     <li>• Model Number</li>
                     <li>• Serial Number</li>
                     <li>• Part Code</li>
+                    <li>• Invoice Number</li>
                   </ul>
                 </div>
               </div>

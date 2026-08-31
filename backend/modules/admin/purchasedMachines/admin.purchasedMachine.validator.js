@@ -1,10 +1,16 @@
 const mongoose = require("mongoose");
 
 const validateCreatePurchase = (body) => {
-  const { vendorId, machines } = body;
+  const { vendorId, machines, invoiceNumber } = body;
 
   if (!vendorId || !mongoose.isValidObjectId(vendorId))
     return "Invalid or missing vendor ID";
+
+  if (!invoiceNumber || typeof invoiceNumber !== "string" || !invoiceNumber.trim())
+    return "Invoice number is required";
+
+  if (invoiceNumber.trim().length > 100)
+    return "Invoice number must not exceed 100 characters";
 
   if (!Array.isArray(machines) || machines.length === 0)
     return "machines array is required and must not be empty";

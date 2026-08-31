@@ -28,7 +28,7 @@ interface PurchaseMachine {
   availableParts?: number;
   soldParts?: number;
 }
-interface Purchase { _id: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; grandTotalGstAmount: number; createdAt: string; }
+interface Purchase { _id: string; invoiceNumber?: string; vendorInfo: VendorInfo; machines: PurchaseMachine[]; machinesCount: number; grandTotalWithGst: number; grandTotalBase: number; grandTotalGstAmount: number; createdAt: string; }
 interface Stats { totalPurchased: number; totalMachinesPurchased: number; totalAvailable: number; totalSold: number; avgPurchaseValue: number; }
 interface Vendor { _id: string; name: string; companyName: string; phone: string; }
 interface Machine { _id: string; name: string; modelNumber: string; category?: { _id: string; name: string }; }
@@ -75,6 +75,8 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
   const [vendorForm, setVendorForm]         = useState({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" });
   const [codesDialog, setCodesDialog]       = useState<CodesDialogState | null>(null);
   const [gstConfig, setGstConfig]           = useState<{ cgst: number; sgst: number; igst: number } | null>(null);
+  const [invoiceNumber, setInvoiceNumber]   = useState("");
+  const [invoiceDialog, setInvoiceDialog]   = useState(false);
   const searchRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef  = useRef<HTMLDivElement>(null);
   const machineInputRef = useRef<HTMLInputElement>(null);
@@ -180,8 +182,17 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
       }
     }
 
+    // All validations passed — open invoice number prompt
+    setInvoiceNumber("");
+    setInvoiceDialog(true);
+  };
+
+  const handleConfirmPurchase = async () => {
+    if (!invoiceNumber.trim()) { toast.error("Please enter an invoice number"); return; }
+
     const payload = {
       vendorId,
+      invoiceNumber: invoiceNumber.trim(),
       machines: entries.map((e) => {
         const isParts = e.machine.category?._id !== PRODUCT_CATEGORY_ID;
         return {
@@ -197,6 +208,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     try {
       await api.post("/admin/purchases", payload);
       toast.success("Purchase recorded successfully");
+      setInvoiceDialog(false);
       onSuccess(); handleClose();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to record purchase");
@@ -216,7 +228,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     finally { setSubmitting(false); }
   };
 
-  const handleClose = () => { setVendorId(initialVendorId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); onClose(); };
+  const handleClose = () => { setVendorId(initialVendorId); setMachineSearch(""); setMachineResults([]); setDropdownOpen(false); setEntries([]); setInvoiceNumber(""); setInvoiceDialog(false); onClose(); };
 
   const buyingTotalWithGst = entries.reduce((sum, e) => {
     if (!e.quantity || !e.buyingPriceWithGst) return sum;
@@ -437,6 +449,38 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
         </Dialog>
       )}
 
+      {/* Invoice Number Dialog */}
+      <Dialog open={invoiceDialog} onOpenChange={(o) => { if (!o && !submitting) setInvoiceDialog(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enter Invoice Number</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Provide the vendor invoice number for this purchase. It must be unique across all purchase records.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="invoice-number">Invoice Number <span className="text-destructive">*</span></Label>
+              <Input
+                id="invoice-number"
+                placeholder="e.g. INV-2024-001"
+                value={invoiceNumber}
+                maxLength={100}
+                onChange={(e) => setInvoiceNumber(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleConfirmPurchase(); }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialog(false)} disabled={submitting}>Back</Button>
+            <Button onClick={handleConfirmPurchase} disabled={submitting || !invoiceNumber.trim()} className="gap-2">
+              <Plus className="h-4 w-4" />{submitting ? "Recording..." : "Record Purchase"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Vendor Dialog */}
       <Dialog open={createVendorDialog} onOpenChange={(o) => { if (!o) { setCreateVendorDialog(false); setVendorForm({ name: "", companyName: "", phone: "", email: "", address: "", gstNumber: "" }); } }}>
         <DialogContent className="max-w-lg">
@@ -573,6 +617,7 @@ const PurchaseMachinesPage = () => {
     { key: "_id",         label: "No.",      render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
     { key: "createdAt",   label: "Purchased At", render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    { key: "invoiceNumber", label: "Invoice No.", render: (p) => <span className="font-mono text-sm">{p.invoiceNumber || "—"}</span> },
     { key: "machineName", label: "Item",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "modelNumber", label: "Model No",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "partCode",    label: "Part Code", render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.partCode || "—"}{sep(i, p.machines.length)}</div>)}</div> },
@@ -682,7 +727,7 @@ const PurchaseMachinesPage = () => {
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1 max-w-sm">
               <Input 
-                placeholder="Search by vendor, item, model..." 
+                placeholder="Search by vendor, item, model, invoice..." 
                 value={search} 
                 onChange={(e) => setSearch(e.target.value)} 
                 className="" 
@@ -697,6 +742,7 @@ const PurchaseMachinesPage = () => {
                     <li>• Model Number</li>
                     <li>• Part Code</li>
                     <li>• Serial Number</li>
+                    <li>• Invoice Number</li>
                     <li>• Vendor Name</li>
                     <li>• Company Name</li>
                     <li>• Phone Number</li>

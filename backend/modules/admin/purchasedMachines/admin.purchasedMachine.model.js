@@ -34,6 +34,7 @@ const purchasedMachineEntrySchema = new mongoose.Schema(
 
 const purchasedMachineSchema = new mongoose.Schema(
   {
+    invoiceNumber: { type: String, trim: true, default: "" },
     vendorInfo: {
       vendorId:    { type: mongoose.Schema.Types.ObjectId, ref: "Vendor", default: null },
       name:        { type: String, trim: true, default: "" },
@@ -56,6 +57,7 @@ const purchasedMachineSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+purchasedMachineSchema.index({ invoiceNumber: 1 });
 purchasedMachineSchema.index({ "vendorInfo.name": 1 });
 purchasedMachineSchema.index({ "vendorInfo.vendorId": 1 });
 purchasedMachineSchema.index({ "machines.machineId": 1 });
