@@ -39,6 +39,7 @@ const getAll = async (req, res) => {
           { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
           { "machines.partCode":     { $regex: escaped, $options: "i" } },
           { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
+          { invoiceNumber:           { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
           { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
@@ -160,7 +161,15 @@ const createPurchase = async (req, res) => {
     const validationError = validateCreatePurchase(req.body);
     if (validationError) return abort(400, validationError);
 
-    const { vendorId, machines } = req.body;
+    const { vendorId, machines, invoiceNumber } = req.body;
+    const trimmedInvoice = invoiceNumber.trim();
+
+    // ── Case-insensitive duplicate invoice number check ──
+    const existingInvoice = await PurchasedMachine.findOne({
+      invoiceNumber: { $regex: `^${trimmedInvoice.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    }).session(session);
+    if (existingInvoice)
+      return abort(400, `Invoice number "${trimmedInvoice}" already exists in another purchase record`);
 
     const vendor = await Vendor.findById(vendorId).session(session);
     if (!vendor)                       return abort(404, "Vendor not found");
@@ -252,6 +261,7 @@ const createPurchase = async (req, res) => {
     };
 
     const [purchase] = await PurchasedMachine.create([{ 
+      invoiceNumber: trimmedInvoice,
       vendorInfo, 
       gstConfig: gstConfigData,
       machines: machineEntries, 
@@ -369,6 +379,7 @@ const exportToExcel = async (req, res) => {
         query.$or = [
           { "machines.machineName":  { $regex: escaped, $options: "i" } },
           { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
+          { invoiceNumber:           { $regex: escaped, $options: "i" } },
           { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
           { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
         ];
