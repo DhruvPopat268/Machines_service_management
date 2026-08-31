@@ -6,7 +6,7 @@ const customerSchema = new mongoose.Schema(
     name:           { type: String, required: true, trim: true },
     customerId:     { type: String, trim: true, unique: true, sparse: true },
     phone:          { type: String, required: true, trim: true, unique: true },
-    email:     { type: String, required: true, trim: true, lowercase: true, unique: true },
+    email:     { type: String, required: false, trim: true, lowercase: true, unique: true, sparse: true },
     password:  { type: String },
     zone:      { type: mongoose.Schema.Types.ObjectId, ref: "Zone", default: null },
     department:     { type: String, trim: true, default: "" },

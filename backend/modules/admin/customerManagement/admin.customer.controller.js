@@ -163,9 +163,10 @@ const create = async (req, res) => {
 
     const phoneExists = await Customer.findOne({ phone: phone.trim() });
     if (phoneExists) return res.status(409).json({ success: false, message: "Phone number already exists" });
-    const emailExists = await Customer.findOne({ email: email.trim().toLowerCase() });
-    if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
-
+    if (email && email.trim()) {
+      const emailExists = await Customer.findOne({ email: email.trim().toLowerCase() });
+      if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
+    }
     let zoneId = null;
     if (zone) {
       if (!mongoose.isValidObjectId(zone))
@@ -196,7 +197,8 @@ const create = async (req, res) => {
     let customer;
     try {
       customer = await Customer.create({
-        name: name.trim(), phone: phone.trim(), email: email.trim().toLowerCase(),
+        name: name.trim(), phone: phone.trim(),
+        ...(email && email.trim() && { email: email.trim().toLowerCase() }),
         zone: zoneId, gstNumber, status, source: "manual",
         customerId,
         password: hashedPassword,
@@ -219,7 +221,7 @@ const create = async (req, res) => {
       return res.status(500).json({ success: false, message: dbErr.message });
     }
 
-    await sendWelcomeCredentials(customer.name, customer.email, defaultPassword);
+    if (customer.email) await sendWelcomeCredentials(customer.name, customer.email, defaultPassword);
 
     const populated = await customer.populate("zone", "name code");
     res.status(201).json({ success: true, data: populated });
@@ -451,9 +453,11 @@ const importCustomers = async (req, res) => {
           if (gstExists) { skipped++; skippedReasons.push(`${doc.email}: GST number already exists`); continue; }
         }
         const phoneExists = await Customer.findOne({ phone: doc.phone });
-        if (phoneExists) { skipped++; skippedReasons.push(`${doc.email}: Phone number already exists`); continue; }
-        const emailExists = await Customer.findOne({ email: doc.email });
-        if (emailExists) { skipped++; skippedReasons.push(`${doc.email}: Email already exists`); continue; }
+        if (phoneExists) { skipped++; skippedReasons.push(`${doc.phone}: Phone number already exists`); continue; }
+        if (doc.email) {
+          const emailExists = await Customer.findOne({ email: doc.email });
+          if (emailExists) { skipped++; skippedReasons.push(`${doc.email}: Email already exists`); continue; }
+        }
 
         let zoneId = null;
         if (doc.zoneName) {
@@ -467,7 +471,8 @@ const importCustomers = async (req, res) => {
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
         const newCustomer = await Customer.create({
-          name: doc.name, phone: doc.phone, email: doc.email,
+          name: doc.name, phone: doc.phone,
+          ...(doc.email && { email: doc.email }),
           zone: zoneId,
           gstNumber: doc.gstNumber, totalPurchases: doc.totalPurchases, status: doc.status, source: "imported",
           customerId,
@@ -480,7 +485,7 @@ const importCustomers = async (req, res) => {
           ...(doc.contactPersonDesignation && { contactPersonDesignation: doc.contactPersonDesignation }),
         });
 
-        await sendWelcomeCredentials(newCustomer.name, newCustomer.email, defaultPassword);
+        if (newCustomer.email) await sendWelcomeCredentials(newCustomer.name, newCustomer.email, defaultPassword);
         imported++;
       } catch (rowErr) {
         if (rowErr.code === 11000) { 

@@ -175,7 +175,7 @@ const CustomerForm = ({ form, setForm, zoneOptions, existingPhoto }: CustomerFor
       <div className="space-y-2"><Label htmlFor="cust-name">Name <span className="text-destructive">*</span></Label><Input id="cust-name" placeholder="Company or customer name" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
       <div className="space-y-2"><Label htmlFor="cust-department">Department</Label><Input id="cust-department" placeholder="e.g. Sales, IT, Operations" value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} /></div>
       <div className="space-y-2"><Label htmlFor="cust-phone">Phone <span className="text-destructive">*</span></Label><Input id="cust-phone" placeholder="e.g. 9800000000" value={form.phone} onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))} /></div>
-      <div className="space-y-2"><Label htmlFor="cust-email">Email <span className="text-destructive">*</span></Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
+      <div className="space-y-2"><Label htmlFor="cust-email">Email</Label><Input id="cust-email" type="email" placeholder="email@example.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} /></div>
 
       {/* Address with Google Places autocomplete */}
       <div className="space-y-2">
@@ -331,7 +331,6 @@ const CustomersPage = () => {
   const handleAdd = async () => {
     if (!addForm.name)  return toast.error("Name is required");
     if (!addForm.phone) return toast.error("Phone is required");
-    if (!addForm.email) return toast.error("Email is required");
     setSubmitting(true);
     try {
       let payload: any;
@@ -373,7 +372,6 @@ const CustomersPage = () => {
     if (!editDialog) return;
     if (!editForm.name)  return toast.error("Name is required");
     if (!editForm.phone) return toast.error("Phone is required");
-    if (!editForm.email) return toast.error("Email is required");
     setSubmitting(true);
     try {
       let payload: any;
@@ -499,7 +497,7 @@ const CustomersPage = () => {
     { key: "customerId", label: "Customer ID",  render: (c) => <span className="text-sm font-mono">{c.customerId || "—"}</span> },
     { key: "name", label: "Name", render: (c) => <span className="font-medium">{c.name}</span> },
     { key: "phone", label: "Phone", render: (c) => <span className="text-sm">{c.phone}</span> },
-    { key: "email", label: "Email", render: (c) => <span className="text-sm">{c.email}</span> },
+    { key: "email", label: "Email", render: (c) => c.email ? <span className="text-sm">{c.email}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "address", label: "Address", render: (c) => {
       const addr = c.userLocation?.address || c.address || "";
       return addr ? (

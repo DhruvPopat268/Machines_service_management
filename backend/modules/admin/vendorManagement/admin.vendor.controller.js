@@ -90,12 +90,15 @@ const create = async (req, res) => {
 
     const phoneExists = await Vendor.findOne({ phone: phone.trim() });
     if (phoneExists) return res.status(409).json({ success: false, message: "Phone number already exists" });
-    const emailExists = await Vendor.findOne({ email: email.trim().toLowerCase() });
-    if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
+    if (email && email.trim()) {
+      const emailExists = await Vendor.findOne({ email: email.trim().toLowerCase() });
+      if (emailExists) return res.status(409).json({ success: false, message: "Email already exists" });
+    }
 
     const vendor = await Vendor.create({
       name: name.trim(), companyName: companyName.trim(),
-      phone: phone.trim(), email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      ...(email && email.trim() && { email: email.trim().toLowerCase() }),
       address, gstNumber: trimmedGst, status, source: "manual",
     });
     res.status(201).json({ success: true, data: vendor });
@@ -125,7 +128,8 @@ const update = async (req, res) => {
     if (name !== undefined)        updateData.name        = typeof name === "string" ? name.trim() : name;
     if (companyName !== undefined) updateData.companyName = typeof companyName === "string" ? companyName.trim() : companyName;
     if (phone !== undefined)       updateData.phone       = typeof phone === "string" ? phone.trim() : phone;
-    if (email !== undefined)       updateData.email       = typeof email === "string" ? email.trim().toLowerCase() : email;
+    if (email !== undefined && email !== null && email !== "")
+      updateData.email = typeof email === "string" ? email.trim().toLowerCase() : email;
     if (address !== undefined)     updateData.address     = address;
     if (gstNumber !== undefined)   updateData.gstNumber   = typeof gstNumber === "string" ? gstNumber.trim().toUpperCase() : gstNumber;
 
@@ -143,10 +147,17 @@ const update = async (req, res) => {
     }
     if (status !== undefined) updateData.status = status;
 
-    if (Object.keys(updateData).length === 0)
+    // Build the final mongoose update — if email was explicitly sent as "", unset it
+    const unsetFields = {};
+    if (email !== undefined && (email === null || email === "")) unsetFields.email = 1;
+
+    if (Object.keys(updateData).length === 0 && Object.keys(unsetFields).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
-    const vendor = await Vendor.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" });
+    const mongoUpdate = { $set: updateData };
+    if (Object.keys(unsetFields).length > 0) mongoUpdate.$unset = unsetFields;
+
+    const vendor = await Vendor.findByIdAndUpdate(id, mongoUpdate, { new: true, runValidators: true, context: "query" });
     if (!vendor)
       return res.status(404).json({ success: false, message: "Vendor not found" });
 
@@ -201,7 +212,7 @@ const importVendors = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "companyname", "phone", "email"];
+    const required = ["name", "companyname", "phone"];
     const headers = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing = required.filter((h) => !headers.includes(h));
     if (missing.length)
@@ -220,7 +231,7 @@ const importVendors = async (req, res) => {
         name:        String(normalized.name        || "").trim(),
         companyName: String(normalized.companyname || "").trim(),
         phone:       String(normalized.phone       || "").trim(),
-        email:       String(normalized.email       || "").trim().toLowerCase(),
+        ...(normalized.email && String(normalized.email).trim() && { email: String(normalized.email).trim().toLowerCase() }),
         address:     String(normalized.address     || "").trim(),
         gstNumber:   String(normalized.gstnumber   || "").trim().toUpperCase(),
         status:      String(normalized.status      || "").trim(),
@@ -238,8 +249,10 @@ const importVendors = async (req, res) => {
         }
         const phoneExists = await Vendor.findOne({ phone: doc.phone });
         if (phoneExists) { skipped++; continue; }
-        const emailExists = await Vendor.findOne({ email: doc.email });
-        if (emailExists) { skipped++; continue; }
+        if (doc.email) {
+          const emailExists = await Vendor.findOne({ email: doc.email });
+          if (emailExists) { skipped++; continue; }
+        }
         await Vendor.create({ ...doc, source: "imported" });
         imported++;
       } catch (rowErr) {

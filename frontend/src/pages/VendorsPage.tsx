@@ -49,7 +49,7 @@ const FormFields = ({ values, onChange }: { values: typeof emptyForm; onChange: 
     <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Contact person name" value={values.name} onChange={(e) => onChange("name", e.target.value)} /></div>
     <div className="space-y-2"><Label>Company Name <span className="text-destructive">*</span></Label><Input placeholder="Company / firm name" value={values.companyName} onChange={(e) => onChange("companyName", e.target.value)} /></div>
     <div className="space-y-2"><Label>Phone <span className="text-destructive">*</span></Label><Input placeholder="e.g. 9800000000" value={values.phone} onChange={(e) => onChange("phone", e.target.value)} /></div>
-    <div className="space-y-2"><Label>Email <span className="text-destructive">*</span></Label><Input type="email" placeholder="vendor@company.com" value={values.email} onChange={(e) => onChange("email", e.target.value)} /></div>
+    <div className="space-y-2"><Label>Email</Label><Input type="email" placeholder="vendor@company.com" value={values.email} onChange={(e) => onChange("email", e.target.value)} /></div>
     <div className="space-y-2"><Label>Address</Label><Input placeholder="Full address" value={values.address} onChange={(e) => onChange("address", e.target.value)} /></div>
     <div className="space-y-2"><Label>GST Number</Label><Input placeholder="e.g. 27AABCG1234A1Z5" value={values.gstNumber} onChange={(e) => onChange("gstNumber", e.target.value)} /></div>
     <div className="space-y-2">
@@ -142,8 +142,8 @@ const VendorsPage = () => {
   useEffect(() => { fetchVendors(1); }, [fetchVendors]);
 
   const handleAdd = async () => {
-    if (!addForm.name || !addForm.companyName || !addForm.phone || !addForm.email)
-      return toast.error("Name, company name, phone and email are required");
+    if (!addForm.name || !addForm.companyName || !addForm.phone)
+      return toast.error("Name, company name and phone are required");
     setSubmitting(true);
     try {
       await api.post("/admin/vendors", addForm);
@@ -160,8 +160,8 @@ const VendorsPage = () => {
 
   const handleEdit = async () => {
     if (!editDialog) return;
-    if (!editForm.name || !editForm.companyName || !editForm.phone || !editForm.email)
-      return toast.error("Name, company name, phone and email are required");
+    if (!editForm.name || !editForm.companyName || !editForm.phone)
+      return toast.error("Name, company name and phone are required");
     setSubmitting(true);
     try {
       await api.patch(`/admin/vendors/${editDialog._id}`, editForm);
@@ -256,7 +256,7 @@ const VendorsPage = () => {
     { key: "name", label: "Name", render: (v) => <span className="font-medium">{v.name}</span> },
     { key: "companyName", label: "Company Name", render: (v) => <span className="font-medium">{v.companyName}</span> },
     { key: "phone", label: "Phone" },
-    { key: "email", label: "Email" },
+    { key: "email", label: "Email", render: (v) => v.email ? <span className="text-sm">{v.email}</span> : <span className="text-muted-foreground text-sm">—</span> },
     { key: "address", label: "Address", render: (v) => <span className="max-w-[200px] truncate block">{v.address}</span> },
     { key: "gstNumber", label: "GST Number", render: (v) => <span className="font-mono text-sm">{v.gstNumber}</span> },
     {

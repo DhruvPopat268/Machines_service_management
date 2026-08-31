@@ -16,10 +16,12 @@ const validateCreateVendor = ({ name, companyName, phone, email, status }) => {
     return "Phone is required";
   if (!/^[0-9]{10}$/.test(phone.trim()))
     return "Phone must be exactly 10 digits";
-  if (!email || typeof email !== "string" || !email.trim())
-    return "Email is required";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-    return "Invalid email format";
+  if (email !== undefined && email !== null && email !== "") {
+    if (typeof email !== "string" || !email.trim())
+      return "Email must be a non-empty string if provided";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+      return "Invalid email format";
+  }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;
@@ -34,8 +36,8 @@ const validateUpdateVendor = ({ name, companyName, phone, email, status }) => {
     return "Phone must be a non-empty string";
   if (phone !== undefined && !/^[0-9]{10}$/.test(phone.trim()))
     return "Phone must be exactly 10 digits";
-  if (email !== undefined) {
-    if (typeof email !== "string" || !email.trim()) return "Email must be a non-empty string";
+  if (email !== undefined && email !== null && email !== "") {
+    if (typeof email !== "string" || !email.trim()) return "Email must be a non-empty string if provided";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return "Invalid email format";
   }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
@@ -53,8 +55,7 @@ const validateImportVendorRow = (row, rowNum) => {
   if (!companyName) return `Row ${rowNum}: companyName is required`;
   if (!phone)       return `Row ${rowNum}: phone is required`;
   if (!/^[0-9]{10}$/.test(phone)) return `Row ${rowNum}: phone must be exactly 10 digits`;
-  if (!email)       return `Row ${rowNum}: email is required`;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return `Row ${rowNum}: invalid email format`;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return `Row ${rowNum}: invalid email format`;
   if (!["Active", "Inactive"].includes(status)) return `Row ${rowNum}: status must be Active or Inactive`;
   return null;
 };
