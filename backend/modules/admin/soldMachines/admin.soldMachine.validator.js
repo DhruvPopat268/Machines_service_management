@@ -4,10 +4,16 @@ const PRODUCT_CATEGORY_ID  = process.env.PRODUCT_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = process.env.TSS_CONTRACT_TYPE_ID;
 
 const validateCreateSale = (body) => {
-  const { customerId, machines } = body;
+  const { customerId, machines, invoiceNumber } = body;
 
   if (!customerId || !mongoose.isValidObjectId(customerId))
     return "Invalid or missing customer ID";
+
+  if (!invoiceNumber || typeof invoiceNumber !== "string" || !invoiceNumber.trim())
+    return "Invoice number is required";
+
+  if (invoiceNumber.trim().length > 100)
+    return "Invoice number must not exceed 100 characters";
 
   if (!Array.isArray(machines) || machines.length === 0)
     return "machines array is required and must not be empty";

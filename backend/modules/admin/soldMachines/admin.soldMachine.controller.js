@@ -147,6 +147,7 @@ const getAll = async (req, res) => {
           { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
           { "machines.partCode": { $regex: escaped, $options: "i" } },
           { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
+          { invoiceNumber: { $regex: escaped, $options: "i" } },
           { "customerInfo.name": { $regex: escaped, $options: "i" } },
           { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
@@ -253,6 +254,15 @@ const createSale = async (req, res) => {
 
     const validationError = validateCreateSale(req.body);
     if (validationError) return abort(400, validationError);
+
+    const invoiceNumber = req.body.invoiceNumber.trim();
+
+    // ── Case-insensitive duplicate invoice number check ──
+    const existingInvoice = await SoldMachine.findOne({
+      invoiceNumber: { $regex: `^${invoiceNumber.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+    }).session(session);
+    if (existingInvoice)
+      return abort(400, `Invoice number "${invoiceNumber}" already exists in another sale record`);
 
     const customerInfo = {
       customerId: customer._id,
@@ -475,7 +485,7 @@ const createSale = async (req, res) => {
       }
     }
 
-    const [sale] = await SoldMachine.create([{ customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, grandTotalGstAmount, cogsTotalBase, currentPaymentStatus: finalPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
+    const [sale] = await SoldMachine.create([{ invoiceNumber, customerInfo, machines: machineEntries, grandTotalBase, grandTotalWithGst, grandTotalGstAmount, cogsTotalBase, currentPaymentStatus: finalPaymentStatus, paidAmount, remainingAmount, processedBy: Array.isArray(processedBy) ? processedBy.filter(id => mongoose.isValidObjectId(id)) : [] }], { session });
 
     let transactionId = null;
     if (finalPaymentStatus && (finalPaymentStatus === "Paid" || finalPaymentStatus === "Partial-Paid")) {
@@ -550,7 +560,7 @@ const createSale = async (req, res) => {
 
     // ── Generate sales invoice PDF first (so invoiceNumber is available for receipt) ──
     // Skip invoice/receipt if grandTotalWithGst is 0
-    let saleInvoiceNumber = "";
+    let saleInvoiceNumber = invoiceNumber;
     if (companyId && grandTotalWithGst > 0) {
       try {
         const company = await Company.findById(companyId).lean();
@@ -558,13 +568,6 @@ const createSale = async (req, res) => {
           const cgstNum = gstConfig?.cgst || 0;
           const sgstNum = gstConfig?.sgst || 0;
           const igstNum = gstConfig?.igst || 0;
-
-          const invoiceCounter = await Counter.findByIdAndUpdate(
-            "salesInvoice",
-            { $inc: { seq: 1 } },
-            { new: true, upsert: true }
-          );
-          saleInvoiceNumber = `INV-${invoiceCounter.seq}`;
 
           const companyInfo = {
             companyId: company._id,
@@ -1003,6 +1006,7 @@ const exportToExcel = async (req, res) => {
           { "machines.serialNumbers.serialNumber": { $regex: escaped, $options: "i" } },
           { "machines.partCode": { $regex: escaped, $options: "i" } },
           { "machines.partCodes.partCode": { $regex: escaped, $options: "i" } },
+          { invoiceNumber: { $regex: escaped, $options: "i" } },
           { "customerInfo.name": { $regex: escaped, $options: "i" } },
           { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
