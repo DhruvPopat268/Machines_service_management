@@ -70,7 +70,7 @@ const getStats = async (req, res) => {
         { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } } } },
       ]),
       SoldMachine.aggregate([
-        { $match: dateCreated },
+        { $match: { ...dateCreated, status: "active" } },
         { $group: { _id: null, totalAmount: { $sum: "$grandTotalBase" }, totalUnits: { $sum: { $sum: "$machines.quantity" } }, totalCogs: { $sum: "$cogsTotalBase" } } },
       ]),
       Expense.aggregate([
@@ -377,7 +377,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Category-wise Sale
       SoldMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.category": { $nin: [null, ""] } } },
         { $group: { _id: "$machines.category", saleAmount: { $sum: "$machines.sellingTotalBase" } } },
@@ -393,7 +393,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Division-wise Sale
       SoldMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.division": { $nin: [null, ""] } } },
         { $group: { _id: "$machines.division", saleAmount: { $sum: "$machines.sellingTotalBase" } } },
@@ -411,7 +411,7 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Top 5 Customers
       SoldMachine.aggregate([
-        { $match: { ...accountFilter, "customerInfo.customerId": { $nin: [null, ""] } } },
+        { $match: { ...accountFilter, status: "active", "customerInfo.customerId": { $nin: [null, ""] } } },
         { $group: { _id: "$customerInfo.customerId", totalAmount: { $sum: "$grandTotalBase" } } },
         { $sort: { totalAmount: -1 } },
         { $limit: 5 },
@@ -425,12 +425,12 @@ const getAccountCharts = async (req, res) => {
       ]),
       // Monthly Sale Trend
       SoldMachine.aggregate([
-        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd }, status: "active" } },
         { $group: { _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } }, saleAmount: { $sum: "$grandTotalBase" } } },
       ]),
       // Contract Type-wise Sales
       SoldMachine.aggregate([
-        { $match: accountFilter },
+        { $match: { ...accountFilter, status: "active" } },
         { $unwind: "$machines" },
         { $unwind: { path: "$machines.serialNumbers", includeArrayIndex: "snIdx" } },
         { $match: { "machines.serialNumbers.contractType.name": { $nin: [null, ""] } } },
@@ -534,7 +534,7 @@ const getNetProfitCharts = async (req, res) => {
     const [monthlySalesRows, monthlyServiceChargesRows, monthlyExpensesRows, monthlyIncentivesRows, monthlyFreeMaterialRows, monthlyPaidServicePartsRows] = await Promise.all([
       // Monthly sales revenue and COGS
       SoldMachine.aggregate([
-        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd } } },
+        { $match: { createdAt: { $gte: windowStart, $lt: windowEnd }, status: "active" } },
         {
           $group: {
             _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
@@ -711,7 +711,7 @@ const getNetProfitCharts = async (req, res) => {
     const [categorySalesRows, categoryServiceChargesRows, categoryPartsChargesRows, categoryFreeMaterialRows, categoryPaidServicePartsRows] = await Promise.all([
       // Category-wise sales revenue and COGS
       SoldMachine.aggregate([
-        { $match: dateFilter },
+        { $match: { ...dateFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.category": { $nin: [null, ""] } } },
         {
@@ -970,7 +970,7 @@ const getNetProfitCharts = async (req, res) => {
     const [divisionSalesRows, divisionServiceChargesRows, divisionPartsChargesRows, divisionFreeMaterialRows, divisionPaidServicePartsRows] = await Promise.all([
       // Division-wise sales revenue and COGS
       SoldMachine.aggregate([
-        { $match: dateFilter },
+        { $match: { ...dateFilter, status: "active" } },
         { $unwind: "$machines" },
         { $match: { "machines.division": { $nin: [null, ""] } } },
         {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -31,7 +31,7 @@ interface SaleMachine {
   serialNumbers?: { serialNumber: string; contractType: ContractTypeSnapshot | null; pagesCategories?: { pagesCategoryId: string; pagesCategory: string; costPerPage: number }[] }[];
   partCodes?: { partCode: string; buyingPriceBase: number } | null;
 }
-interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotalBase: number; grandTotalWithGst: number; grandTotalGstAmount: number; currentPaymentStatus: string; paidAmount: number; remainingAmount: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; }
+interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[]; machinesCount: number; grandTotalBase: number; grandTotalWithGst: number; grandTotalGstAmount: number; currentPaymentStatus: string; paidAmount: number; remainingAmount: number; createdAt: string; invoiceUrl?: string; invoiceNumber?: string; companyInfo?: { companyId: string; name?: string } | null; cgst?: { percent: number; amount: number } | null; sgst?: { percent: number; amount: number } | null; igst?: { percent: number; amount: number } | null; canCancel?: boolean; status?: "active" | "cancelled"; }
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; currentStock: number; category?: { _id: string; name: string }; }
@@ -1042,6 +1042,8 @@ const SellMachinesPage = () => {
   const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
   const [paymentDialog, setPaymentDialog] = useState<Sale | null>(null);
   const [receiptsDialog, setReceiptsDialog] = useState<Sale | null>(null);
+  const [cancelDialog, setCancelDialog] = useState<Sale | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [receipts, setReceipts] = useState<{ _id: string; amount: number; paymentMethod: string; paymentDate: string; receiptNumber: string; receiptUrl: string }[]>([]);
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] });
@@ -1211,12 +1213,34 @@ const SellMachinesPage = () => {
     } catch { toast.error("Export failed"); }
   };
 
+  const handleCancelSale = async () => {
+    if (!cancelDialog) return;
+    setCancelling(true);
+    try {
+      await api.patch(`/admin/sales/${cancelDialog._id}/cancel`);
+      toast.success("Sale cancelled successfully");
+      setCancelDialog(null);
+      fetchSales(pagination.page);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to cancel sale");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const sep = (i: number, total: number) => i < total - 1 ? <hr className="my-1 border-t border-border" /> : null;
 
   const columns: Column<Sale>[] = [
     { key: "_id", label: "No.", render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "invoiceNumber", label: "Invoice No.", render: (s) => <span className="font-mono text-sm">{s.invoiceNumber || "—"}</span> },
     { key: "customerInfo", label: "Customer", render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
+    {
+      key: "status", label: "Status", render: (s) => (
+        s.status === "cancelled"
+          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Cancelled</span>
+          : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Active</span>
+      ),
+    },
     { key: "machineName", label: "Machine", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "category", label: "Category", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "division", label: "Division", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, s.machines.length)}</div>)}</div> },
@@ -1455,6 +1479,16 @@ const SellMachinesPage = () => {
               finally { setLoadingReceipts(false); }
             }}>
               <Eye className="h-3 w-3" />
+            </Button>
+          )}
+          {s.canCancel && (
+            <Button
+              variant="ghost" size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              title="Cancel Sale"
+              onClick={() => setCancelDialog(s)}
+            >
+              <XCircle className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -1731,6 +1765,27 @@ const SellMachinesPage = () => {
           <DialogHeader><DialogTitle>Export Sales Data</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground py-4">Do you want to download all sales data as an Excel file?</p>
           <DialogFooter><Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button><Button onClick={handleExport}>Yes, Download</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Sale Confirm Dialog */}
+      <Dialog open={!!cancelDialog} onOpenChange={(open) => { if (!open) setCancelDialog(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Sale</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Are you sure you want to cancel the sale with invoice{" "}
+            <span className="font-semibold text-foreground">{cancelDialog?.invoiceNumber || "—"}</span>?
+            <br /><br />
+            This will <span className="font-semibold text-destructive">reverse the stock</span> back to inventory. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelDialog(null)} disabled={cancelling}>Back</Button>
+            <Button variant="destructive" onClick={handleCancelSale} disabled={cancelling}>
+              {cancelling ? "Cancelling..." : "Yes, Cancel Sale"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

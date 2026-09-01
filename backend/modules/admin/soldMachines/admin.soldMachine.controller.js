@@ -12,8 +12,9 @@ const InventoryLog = require("../inventoryLogs/admin.inventoryLog.model");
 const Company = require("../companyManagement/admin.company.model");
 const Zone = require("../zoneManagement/admin.zone.model");
 const Counter = require("../auth/counter.model");
+const ServiceCall = require("../../customer/calls/customer.serviceCall.model");
 const { validateCreateSale } = require("./admin.soldMachine.validator");
-const { sendContractExpiryAlert, sendSaleConfirmationEmail, sendPaymentReceivedEmail } = require("../../../utils/emailService");
+const { sendContractExpiryAlert, sendSaleConfirmationEmail, sendPaymentReceivedEmail, sendSaleCancellationEmail } = require("../../../utils/emailService");
 
 const GstConfig = require("../gstConfig/admin.gstConfig.model");
 const PaymentTransaction = require("../paymentTransactions/admin.paymentTransaction.model");
@@ -53,6 +54,36 @@ const buildMachineFilter = (category, division, machineId) => {
   if (division) f.divisionId = division;
   if (machineId) f.machineId = machineId;
   return Object.keys(f).length > 0 ? { $elemMatch: f } : null;
+};
+
+const computeCanCancelSale = async (sale) => {
+  // Already cancelled, cannot cancel again
+  if (sale.status === "cancelled") return false;
+
+  // Check each machine in the sale
+  for (const machine of sale.machines) {
+    const serialNumbers = machine.serialNumbers || [];
+    
+    // If no serial numbers (parts machine), can always cancel
+    if (serialNumbers.length === 0) continue;
+
+    // For machines with serial numbers, check if any are used in non-cancelled service calls
+    for (const snObj of serialNumbers) {
+      const serialNumber = snObj.serialNumber;
+      
+      // ServiceCall stores serial at machines.serialNumber (not machines.serialNumbers.serialNumber)
+      const serviceCallExists = await ServiceCall.exists({
+        "machines.serialNumber": serialNumber,
+        status: { $ne: "Cancelled" }
+      });
+
+      if (serviceCallExists) {
+        return false; // Cannot cancel if serial is used in active service call
+      }
+    }
+  }
+
+  return true; // All checks passed, can cancel
 };
 
 const getAvailableMachines = async (req, res) => {
@@ -199,14 +230,23 @@ const getAll = async (req, res) => {
       SoldMachine.countDocuments(query),
     ]);
 
-    const allSales = await SoldMachine.find(query).lean();
+    // Compute canCancel for each sale
+    const salesWithCanCancel = await Promise.all(
+      sales.map(async (s) => ({
+        ...s.toObject(),
+        machinesCount: s.machines.length,
+        canCancel: await computeCanCancelSale(s)
+      }))
+    );
+
+    const allSales = await SoldMachine.find({ ...query, status: "active" }).lean();
     const totalSales = allSales.reduce((s, sale) => s + (sale.grandTotalBase || 0), 0);
     const totalMachines = allSales.reduce((s, sale) => s + sale.machines.reduce((ms, m) => ms + m.quantity, 0), 0);
     const avgValue = allSales.length > 0 ? Math.round((totalSales / allSales.length) * 100) / 100 : 0;
 
     res.status(200).json({
       success: true,
-      data: sales.map((s) => ({ ...s.toObject(), machinesCount: s.machines.length })),
+      data: salesWithCanCancel,
       pagination: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
       stats: {
         totalSales: Math.round(totalSales * 100) / 100,
@@ -1720,4 +1760,137 @@ const getSystemUsers = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers };
+const cancelSale = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const abort = async (status, message) => {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(status).json({ success: false, message });
+    };
+
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return abort(400, "Invalid sale ID");
+
+    const sale = await SoldMachine.findById(id).session(session);
+    if (!sale)
+      return abort(404, "Sale not found");
+
+    if (sale.status === "cancelled")
+      return abort(400, "Sale is already cancelled");
+
+    const canCancel = await computeCanCancelSale(sale);
+    if (!canCancel)
+      return abort(400, "Cannot cancel this sale because some machines have active service calls");
+
+    // ── Reverse stock for each machine ──
+    for (const m of sale.machines) {
+      const machine = await Machine.findById(m.machineId).session(session);
+      if (!machine) continue;
+
+      const newStock = machine.currentStock + m.quantity;
+      const stockStatus = newStock === 0
+        ? "Out of Stock"
+        : machine.lowStockThreshold === -1
+          ? "In Stock"
+          : newStock <= machine.lowStockThreshold
+            ? "Low Stock"
+            : "In Stock";
+
+      await Machine.updateOne(
+        { _id: m.machineId },
+        { $set: { currentStock: newStock, stockStatus } },
+        { session }
+      );
+
+      const serialNumbers = m.serialNumbers || [];
+
+      if (serialNumbers.length > 0) {
+        // Product machine — reset each serial number status back to "available" in PurchasedMachine
+        for (const snObj of serialNumbers) {
+          await PurchasedMachine.updateOne(
+            { "machines.serialNumbers.serialNumber": snObj.serialNumber },
+            { $set: { "machines.$[outer].serialNumbers.$[inner].status": "available" } },
+            {
+              arrayFilters: [
+                { "outer.serialNumbers.serialNumber": snObj.serialNumber },
+                { "inner.serialNumber": snObj.serialNumber }
+              ],
+              session
+            }
+          );
+        }
+      } else {
+        // Parts machine — increment availableParts, decrement soldParts in PurchasedMachine
+        // Find the purchase doc that has this machineId with soldParts > 0
+        await PurchasedMachine.updateOne(
+          { "machines.machineId": m.machineId, "machines.soldParts": { $gt: 0 } },
+          {
+            $inc: {
+              "machines.$.availableParts": m.quantity,
+              "machines.$.soldParts": -m.quantity,
+            },
+          },
+          { session }
+        );
+      }
+    }
+
+    // ── Mark sale as cancelled ──
+    await SoldMachine.findByIdAndUpdate(
+      id,
+      { $set: { status: "cancelled" } },
+      { session }
+    );
+
+    // ── Mark related inventory log as cancelled ──
+    await InventoryLog.updateOne(
+      { soldId: sale._id },
+      { $set: { isCancelled: true } },
+      { session }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ── Send cancellation email to customer (after transaction) ──
+    try {
+      const customerEmail = sale.customerInfo?.email;
+      if (customerEmail) {
+        const company = await Company.findOne().lean();
+        const saleDate = new Date(sale.createdAt).toLocaleDateString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata"
+        });
+        const cancellationDate = new Date().toLocaleDateString("en-IN", {
+          day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata"
+        });
+        await sendSaleCancellationEmail({
+          customerName:     sale.customerInfo.name,
+          customerEmail,
+          invoiceNumber:    sale.invoiceNumber || "N/A",
+          saleDate,
+          cancellationDate,
+          grandTotal:       sale.grandTotalWithGst || 0,
+          paidAmount:       sale.paidAmount || 0,
+          companyName:      company?.name || "",
+          companyEmail:     company?.email || "",
+          companyPhone:     company?.phone || "",
+        });
+      }
+    } catch (emailErr) {
+      console.error("Sale cancellation email failed:", emailErr.message);
+      // Don't fail the request if email fails
+    }
+
+    return res.status(200).json({ success: true, message: "Sale cancelled successfully" });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createSale, cancelSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers };

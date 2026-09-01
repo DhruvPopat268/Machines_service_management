@@ -285,7 +285,7 @@ const getCustomerMachines = async (req, res) => {
     if (contractTypeId && !mongoose.isValidObjectId(contractTypeId))
       return res.status(400).json({ success: false, message: "Invalid contractTypeId" });
 
-    const soldRecords = await SoldMachine.find(customerId ? { "customerInfo.customerId": customerId } : {}).sort({ createdAt: -1 });
+    const soldRecords = await SoldMachine.find(customerId ? { "customerInfo.customerId": customerId, status: "active" } : { status: "active" }).sort({ createdAt: -1 });
     if (soldRecords.length === 0)
       return res.status(200).json({ success: true, data: [], pagination: { total: 0, page: 1, limit: parseInt(limit), totalPages: 0 } });
 

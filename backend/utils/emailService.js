@@ -577,4 +577,35 @@ const sendMail = async ({ to, subject, html }) => {
   });
 };
 
-module.exports = { sendMail, sendSaleConfirmationEmail, sendPaymentReceivedEmail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
+const sendSaleCancellationEmail = async (data) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/saleCancellation.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    html = html
+      .replace(/{{customerName}}/g,      data.customerName)
+      .replace(/{{invoiceNumber}}/g,      data.invoiceNumber || "N/A")
+      .replace(/{{saleDate}}/g,           data.saleDate)
+      .replace(/{{cancellationDate}}/g,   data.cancellationDate)
+      .replace(/{{grandTotal}}/g,         fmt(data.grandTotal))
+      .replace(/{{paidAmount}}/g,         fmt(data.paidAmount))
+      .replace(/{{companyName}}/g,        data.companyName || "")
+      .replace(/{{companyEmail}}/g,       data.companyEmail || "")
+      .replace(/{{companyPhone}}/g,       data.companyPhone || "");
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: data.customerEmail,
+      subject: `Sale Cancelled — ${data.invoiceNumber || "Invoice"}`,
+      html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Sale cancellation email error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendMail, sendSaleConfirmationEmail, sendSaleCancellationEmail, sendPaymentReceivedEmail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };

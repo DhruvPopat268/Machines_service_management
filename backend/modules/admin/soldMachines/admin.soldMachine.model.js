@@ -111,6 +111,7 @@ const soldMachineSchema = new mongoose.Schema(
     currentPaymentStatus: { type: String, enum: ["Paid", "Unpaid", "Partial-Paid"], default: null, sparse: true },
     paidAmount:           { type: Number, default: 0 },
     remainingAmount:      { type: Number, default: 0 },
+    status:               { type: String, enum: ["active", "cancelled"], default: "active" },
   },
   { timestamps: true }
 );
