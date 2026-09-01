@@ -1110,12 +1110,17 @@ const resendInvoiceEmail = async (req, res) => {
     const invoiceFilename = call.invoiceUrl ? call.invoiceUrl.split("/").pop() : null;
     const invoiceFilePath = invoiceFilename ? path.join(DOCS_DIR, invoiceFilename) : null;
 
+    // Images are saved by engineer controller to cloud/images (not the service-calls subdir)
+    const CALL_IMAGES_DIR = process.env.NODE_ENV === "production"
+      ? "/app/cloud/images"
+      : path.join(__dirname, "../../../cloud/images");
+
     // For Counter-Reading: derive local paths for before/after work images
     const beforeWorkImagePaths = isCounterReading
-      ? (call.beforeWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+      ? (call.beforeWorkImages || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()))
       : [];
     const afterWorkImagePaths = isCounterReading
-      ? (call.afterWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+      ? (call.afterWorkImages || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()))
       : [];
 
     const emailData = {
