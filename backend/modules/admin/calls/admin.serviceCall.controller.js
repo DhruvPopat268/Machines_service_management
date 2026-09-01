@@ -531,6 +531,7 @@ const raiseServiceCall = async (req, res) => {
     const soldRecords = await SoldMachine.find({
       "customerInfo.customerId": customerId,
       "machines.serialNumbers.serialNumber": { $in: serialNumbers },
+      status: "active",
     });
     if (soldRecords.length === 0)
       return res.status(404).json({ success: false, message: "No machines found for this customer" });
@@ -1115,13 +1116,9 @@ const resendInvoiceEmail = async (req, res) => {
       ? "/app/cloud/images"
       : path.join(__dirname, "../../../cloud/images");
 
-    // For Counter-Reading: derive local paths for before/after work images
-    const beforeWorkImagePaths = isCounterReading
-      ? (call.beforeWorkImages || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()))
-      : [];
-    const afterWorkImagePaths = isCounterReading
-      ? (call.afterWorkImages || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()))
-      : [];
+    // Derive local paths for before/after work images (all call types)
+    const beforeWorkImagePaths = (call.beforeWorkImages || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()));
+    const afterWorkImagePaths  = (call.afterWorkImages  || []).map(url => path.join(CALL_IMAGES_DIR, url.split("/").pop()));
 
     const emailData = {
       invoiceNumber: call.invoiceNumber,

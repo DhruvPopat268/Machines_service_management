@@ -429,23 +429,21 @@ const sendServiceCallInvoiceEmail = async (data) => {
       });
     }
 
-    // For Counter-Reading calls, attach before/after work images as named files
-    if (data.isCounterReading) {
-      (data.beforeWorkImagePaths || []).forEach((imgPath, i) => {
-        attachments.push({
-          filename:    `before_work_image_${i + 1}.webp`,
-          path:        imgPath,
-          contentType: "image/webp",
-        });
+    // For all call types, attach before/after work images as named files
+    (data.beforeWorkImagePaths || []).forEach((imgPath, i) => {
+      attachments.push({
+        filename:    `before_work_image_${i + 1}.webp`,
+        path:        imgPath,
+        contentType: "image/webp",
       });
-      (data.afterWorkImagePaths || []).forEach((imgPath, i) => {
-        attachments.push({
-          filename:    `after_work_image_${i + 1}.webp`,
-          path:        imgPath,
-          contentType: "image/webp",
-        });
+    });
+    (data.afterWorkImagePaths || []).forEach((imgPath, i) => {
+      attachments.push({
+        filename:    `after_work_image_${i + 1}.webp`,
+        path:        imgPath,
+        contentType: "image/webp",
       });
-    }
+    });
 
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
