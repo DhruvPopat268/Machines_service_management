@@ -1639,6 +1639,14 @@ const completeCall = async (req, res) => {
           });
 
           if (doSendEmail) {
+            // Derive local file paths for before/after work images (Counter-Reading only)
+            const beforeWorkImagePaths = isCR
+              ? (updatedCall.beforeWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+              : [];
+            const afterWorkImagePaths = isCR
+              ? (updatedCall.afterWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+              : [];
+
             await sendServiceCallInvoiceEmail({
               invoiceNumber,
               invoiceDate,
@@ -1662,6 +1670,8 @@ const completeCall = async (req, res) => {
               invoiceUrl,
               invoiceFilePath: filepath,
               invoiceFileName: filename,
+              beforeWorkImagePaths,
+              afterWorkImagePaths,
               companyName:    company?.name      || updatedCall.companyInfo?.name    || "",
               companyAddress: company?.address   || updatedCall.companyInfo?.address || "",
               companyPhone:   company?.phone     || updatedCall.companyInfo?.phone   || "",

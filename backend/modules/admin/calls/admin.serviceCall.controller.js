@@ -1102,10 +1102,21 @@ const resendInvoiceEmail = async (req, res) => {
     const companyId = call.companyInfo?.companyId;
     const company = companyId ? await Company.findById(companyId) : null;
 
-    // Build email data - NO file attachment (invoiceFilePath is null/undefined)
     const isCounterReading = call.callType === "Counter-Reading";
     const isServiceCall = call.callType === "Service-Call";
     const isInstallation = call.callType === "Installation" || call.callType === "Dis-installation";
+
+    // Derive invoice PDF local path from invoiceUrl
+    const invoiceFilename = call.invoiceUrl ? call.invoiceUrl.split("/").pop() : null;
+    const invoiceFilePath = invoiceFilename ? path.join(DOCS_DIR, invoiceFilename) : null;
+
+    // For Counter-Reading: derive local paths for before/after work images
+    const beforeWorkImagePaths = isCounterReading
+      ? (call.beforeWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+      : [];
+    const afterWorkImagePaths = isCounterReading
+      ? (call.afterWorkImages || []).map(url => path.join(IMAGES_DIR, url.split("/").pop()))
+      : [];
 
     const emailData = {
       invoiceNumber: call.invoiceNumber,
@@ -1131,7 +1142,10 @@ const resendInvoiceEmail = async (req, res) => {
       igstAmount: call.igst?.amount ?? 0,
       grandTotal: call.invoiceGrandTotal ?? 0,
       invoiceUrl: call.invoiceUrl,
-      // NO invoiceFilePath - will make attachment optional
+      invoiceFilePath,
+      invoiceFileName: invoiceFilename,
+      beforeWorkImagePaths,
+      afterWorkImagePaths,
       companyName: company?.name || call.companyInfo?.name || "",
       companyAddress: company?.address || call.companyInfo?.address || "",
       companyPhone: company?.phone || call.companyInfo?.phone || "",
@@ -1146,7 +1160,6 @@ const resendInvoiceEmail = async (req, res) => {
       isInstallation,
     };
 
-    // Send email without attachment
     const result = await sendServiceCallInvoiceEmail(emailData);
     
     if (!result.success) {
