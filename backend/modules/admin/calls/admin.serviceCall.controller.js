@@ -350,7 +350,7 @@ const getCustomerMachineDetail = async (req, res) => {
     if (!serialNumber?.trim())
       return res.status(400).json({ success: false, message: "serialNumber is required" });
 
-    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": serialNumber.trim() });
+    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": serialNumber.trim(), status: "active" });
     if (!soldRecord)
       return res.status(404).json({ success: false, message: "Machine not found for this serial number" });
 
