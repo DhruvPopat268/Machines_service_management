@@ -523,7 +523,7 @@ const PurchaseMachinesPage = () => {
   const [pendingFromDate, setPendingFromDate] = useState("");
   const [pendingToDate, setPendingToDate]     = useState("");
   const [loading, setLoading]                 = useState(true);
-  const [pageSize]                            = useState(10);
+  const [pageSize, setPageSize]                       = useState(25);
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
@@ -639,7 +639,7 @@ const PurchaseMachinesPage = () => {
 
   const columns: Column<Purchase>[] = [
     { key: "_id",         label: "No.",      render: (_p, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
-    { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
+    { key: "invoiceNumber", label: "Invoice No.", render: (p) => <span className="font-mono text-sm">{p.invoiceNumber || "—"}</span> },
     {
       key: "status", label: "Status", render: (p) => (
         p.status === "cancelled"
@@ -648,7 +648,7 @@ const PurchaseMachinesPage = () => {
       ),
     },
     { key: "createdAt",   label: "Purchased At", render: (p) => { const { date, time } = formatDateTime(p.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
-    { key: "invoiceNumber", label: "Invoice No.", render: (p) => <span className="font-mono text-sm">{p.invoiceNumber || "—"}</span> },
+    { key: "vendorInfo",  label: "Vendor",   render: (p) => <div><p className="font-medium text-sm">{p.vendorInfo.companyName}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.name}</p><p className="text-xs text-muted-foreground">{p.vendorInfo.phone}</p></div> },
     { key: "machineName", label: "Item",   render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "modelNumber", label: "Model No",  render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, p.machines.length)}</div>)}</div> },
     { key: "partCode",    label: "Part Code", render: (p) => <div>{p.machines.map((m, i) => <div key={i}>{m.partCode || "—"}{sep(i, p.machines.length)}</div>)}</div> },
@@ -805,7 +805,22 @@ const PurchaseMachinesPage = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-muted-foreground">
+                Total Records: <span className="font-semibold text-foreground">{pagination.total}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); fetchPurchases(1); }}>
+                  <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+              </Select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
             <SearchableSelect options={vendorOptions}   value={pendingFilters.vendor   ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, vendor:   v }))} onSearchChange={fetchVendors}    placeholder="Vendor"    searchPlaceholder="Search vendors..."    className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={categoryOptions} value={pendingFilters.category ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
             <SearchableSelect options={divisionOptions} value={pendingFilters.division ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions}  placeholder="Division" searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
@@ -839,6 +854,7 @@ const PurchaseMachinesPage = () => {
                 </Button>
               </div>
             )}
+            </div>
           </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />

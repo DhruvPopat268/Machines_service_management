@@ -45,7 +45,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   const [stats, setStats]                   = useState<CallStats | undefined>();
   const [pagination, setPagination]         = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading]               = useState(true);
-  const limit       = Number(getParam("limit")) || 10;
+  const limit       = Number(getParam("limit")) || 25;
   const showStats   = getParam("showStats")   !== "false";
   const showFilters  = getParam("showFilters")  !== "false";
 
@@ -597,9 +597,23 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <div className="space-y-6">
           {/* Row 1: Search + Date Range */}
           <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search by call ID, customer, mobile, engineer..." value={pendingSearch} onChange={(e) => setPendingSearch(e.target.value)} className="pl-9" />
+            <div className="flex items-center gap-2 flex-1 max-w-sm">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Search by call ID, customer, mobile, engineer..." value={pendingSearch} onChange={(e) => setPendingSearch(e.target.value)} className="pl-9" />
+              </div>
+              <div className="text-xs text-muted-foreground cursor-help group relative shrink-0">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-muted-foreground text-[10px] hover:bg-muted hover:border-foreground transition-colors">?</span>
+                <div className="invisible group-hover:visible absolute top-full right-0 mt-2 w-48 bg-slate-900 text-white text-xs rounded-lg p-2 z-50 whitespace-normal">
+                  <p className="font-semibold mb-1">Searchable fields:</p>
+                  <ul className="text-[11px] space-y-0.5">
+                    <li>• Call ID</li>
+                    <li>• Customer Name</li>
+                    <li>• Customer Phone</li>
+                    <li>• Engineer Name</li>
+                  </ul>
+                </div>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={pendingFromDate} onChange={(e) => setPendingFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
@@ -656,14 +670,19 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
           {/* Records per page + Apply / Clear */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-muted-foreground">
+                Total Records: <span className="font-semibold text-foreground">{pagination.total}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
               <Select value={String(limit)} onValueChange={(v) => updateParam("limit", v === "10" ? "" : v)}>
                 <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
                 </SelectContent>
               </Select>
+              </div>
             </div>
             {(() => {
               const hasAny = !!pendingSearch || !!pendingSerial || !!pendingFromDate || !!pendingToDate ||

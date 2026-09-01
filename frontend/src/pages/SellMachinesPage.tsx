@@ -1044,7 +1044,7 @@ const SellMachinesPage = () => {
   const [pendingFilterEngineers, setPendingFilterEngineers] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(25);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportDialog, setExportDialog] = useState(false);
@@ -1280,7 +1280,6 @@ const SellMachinesPage = () => {
   const columns: Column<Sale>[] = [
     { key: "_id", label: "No.", render: (_s, i) => <span className="font-medium">{(pagination.page - 1) * pageSize + i + 1}</span> },
     { key: "invoiceNumber", label: "Invoice No.", render: (s) => <span className="font-mono text-sm">{s.invoiceNumber || "—"}</span> },
-    { key: "customerInfo", label: "Customer", render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
     {
       key: "status", label: "Status", render: (s) => (
         s.status === "cancelled"
@@ -1288,7 +1287,9 @@ const SellMachinesPage = () => {
           : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Active</span>
       ),
     },
-    { key: "machineName", label: "Machine", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
+    { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
+    { key: "customerInfo", label: "Customer", render: (s) => <div><p className="font-medium text-sm">{s.customerInfo.name}</p><p className="text-xs text-muted-foreground">{s.customerInfo.phone}</p><p className="text-xs text-muted-foreground">{s.customerInfo.email}</p></div> },
+    { key: "machineName", label: "Item", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.machineName}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "category", label: "Category", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.category || "—"}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "division", label: "Division", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.division || "—"}{sep(i, s.machines.length)}</div>)}</div> },
     { key: "modelNumber", label: "Model No", render: (s) => <div>{s.machines.map((m, i) => <div key={i}>{m.modelNumber || "—"}{sep(i, s.machines.length)}</div>)}</div> },
@@ -1494,7 +1495,6 @@ const SellMachinesPage = () => {
     }},
     { key: "paidAmount", label: "Paid", render: (s) => !s.currentPaymentStatus || s.paidAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
     { key: "remainingAmount", label: "Remaining", render: (s) => !s.currentPaymentStatus || s.remainingAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
-    { key: "createdAt", label: "Sold At", render: (s) => { const { date, time } = formatDateTime(s.createdAt); return <div><p className="text-sm">{date}</p><p className="text-xs text-muted-foreground">{time}</p></div>; } },
     { key: "processedBy", label: "Processed By", render: (s) => {
       const list = (s as any).processedBy as { _id: string; name: string }[] | undefined;
       if (!list?.length) return <span className="text-muted-foreground text-xs">—</span>;
@@ -1683,19 +1683,35 @@ const SellMachinesPage = () => {
             </div>
           </div>
 
-          {/* Apply / Clear Filters row */}
-          {(hasPendingFilters || hasAppliedFilters) && (
-            <div className="flex items-center justify-end gap-2">
-              {hasPendingFilters && (
-                <Button size="sm" onClick={handleApplyFilters} className="h-9 gap-1.5">
-                  <Search className="h-3.5 w-3.5" /> Apply Filters
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={handleClearFilters} className="h-9 gap-1.5">
-                <X className="h-3.5 w-3.5" /> Clear
-              </Button>
+          {/* Total Records + Records per page + Apply / Clear Filters row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-muted-foreground">
+                Total Records: <span className="font-semibold text-foreground">{pagination.total}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); fetchSales(1); }}>
+                  <SelectTrigger className="w-[80px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[10, 25, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          )}
+            {(hasPendingFilters || hasAppliedFilters) && (
+              <div className="flex items-center gap-2">
+                {hasPendingFilters && (
+                  <Button size="sm" onClick={handleApplyFilters} className="h-9 gap-1.5">
+                    <Search className="h-3.5 w-3.5" /> Apply Filters
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={handleClearFilters} className="h-9 gap-1.5">
+                  <X className="h-3.5 w-3.5" /> Clear
+                </Button>
+              </div>
+            )}
+          </div>
 
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={pageSize} onPageChange={fetchSales} />
