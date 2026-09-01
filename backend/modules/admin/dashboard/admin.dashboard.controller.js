@@ -119,11 +119,7 @@ const getStats = async (req, res) => {
               $filter: { input: { $ifNull: ["$machines.serialNumbers", []] }, as: "s", cond: { $eq: ["$$s.status", "available"] } }
             }
           },
-          availablePartCount: {
-            $size: {
-              $filter: { input: { $ifNull: ["$machines.partCodes", []] }, as: "p", cond: { $eq: ["$$p.status", "available"] } }
-            }
-          },
+          availablePartCount: { $ifNull: ["$machines.availableParts", 0] },
         }},
         { $project: {
           availableValue: {

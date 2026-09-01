@@ -1028,11 +1028,21 @@ const SellMachinesPage = () => {
   const [searchParams] = useSearchParams();
   const [data, setData] = useState<Sale[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+
+  // ── Applied (API-triggering) filter state ────────────────────────────────
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [selectedFilterEngineers, setSelectedFilterEngineers] = useState<string[]>([]);
+
+  // ── Pending (UI-only) filter state ───────────────────────────────────────
+  const [pendingSearch, setPendingSearch] = useState("");
+  const [pendingFilters, setPendingFilters] = useState<Record<string, string>>({});
+  const [pendingFromDate, setPendingFromDate] = useState("");
+  const [pendingToDate, setPendingToDate] = useState("");
+  const [pendingFilterEngineers, setPendingFilterEngineers] = useState<string[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [pageSize] = useState(10);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
@@ -1057,7 +1067,6 @@ const SellMachinesPage = () => {
   const [divisionOptions, setDivisionOptions] = useState<{ label: string; value: string }[]>([]);
   const [machineOptions, setMachineOptions] = useState<{ label: string; value: string }[]>([]);
   const [filterEngineers, setFilterEngineers] = useState<{ _id: string; name: string; engineerId?: string; role?: string }[]>([]);
-  const [selectedFilterEngineers, setSelectedFilterEngineers] = useState<string[]>([]);
   const [engineerFilterSearch, setEngineerFilterSearch] = useState("");
   const [engineerFilterOpen, setEngineerFilterOpen] = useState(false);
   const engineerFilterRef = useRef<HTMLDivElement>(null);
@@ -1068,7 +1077,43 @@ const SellMachinesPage = () => {
   const divisionAbortRef = useRef<AbortController | null>(null);
   const machineAbortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => { const t = setTimeout(() => setDebouncedSearch(search), 500); return () => clearTimeout(t); }, [search]);
+  // Derived: whether any pending filter has a value (controls Apply/Clear visibility)
+  const hasPendingFilters =
+    pendingSearch.trim() !== "" ||
+    pendingFromDate !== "" ||
+    pendingToDate !== "" ||
+    pendingFilterEngineers.length > 0 ||
+    Object.values(pendingFilters).some((v) => v && v !== "all");
+
+  // Also show Clear when applied filters are active (so user can always reset)
+  const hasAppliedFilters =
+    search !== "" ||
+    fromDate !== "" ||
+    toDate !== "" ||
+    selectedFilterEngineers.length > 0 ||
+    Object.values(filters).some((v) => v && v !== "all");
+
+  const handleApplyFilters = () => {
+    setSearch(pendingSearch);
+    setFilters(pendingFilters);
+    setFromDate(pendingFromDate);
+    setToDate(pendingToDate);
+    setSelectedFilterEngineers(pendingFilterEngineers);
+  };
+
+  const handleClearFilters = () => {
+    setPendingSearch("");
+    setPendingFilters({});
+    setPendingFromDate("");
+    setPendingToDate("");
+    setPendingFilterEngineers([]);
+    setSearch("");
+    setFilters({});
+    setFromDate("");
+    setToDate("");
+    setSelectedFilterEngineers([]);
+  };
+
   useEffect(() => { const cid = searchParams.get("customerId"); if (cid) { setInitialCustomerId(cid); setDialogOpen(true); } }, [searchParams]);
 
   useEffect(() => {
@@ -1175,12 +1220,13 @@ const SellMachinesPage = () => {
     setLoading(true);
     try {
       const p: Record<string, string> = { page: String(page), limit: String(pageSize) };
-      if (debouncedSearch) p.search = debouncedSearch;
+      if (search) p.search = search;
       if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
       if (filters.zone && filters.zone !== "all" && filters.zone !== "") p.zoneId = filters.zone;
       if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
+      if (filters.saleStatus && filters.saleStatus !== "all" && filters.saleStatus !== "") p.status = filters.saleStatus;
       if (filters.paymentStatus && filters.paymentStatus !== "all" && filters.paymentStatus !== "") p.paymentStatus = filters.paymentStatus;
       if (selectedFilterEngineers.length > 0) p.processedBy = selectedFilterEngineers.join(",");
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
@@ -1190,7 +1236,7 @@ const SellMachinesPage = () => {
       setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
     } catch (err: any) { if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") toast.error("Failed to fetch sales"); }
     finally { if (!ctrl.signal.aborted) setLoading(false); }
-  }, [debouncedSearch, filters, fromDate, toDate, pageSize, selectedFilterEngineers]);
+  }, [search, filters, fromDate, toDate, pageSize, selectedFilterEngineers]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
 
@@ -1198,12 +1244,13 @@ const SellMachinesPage = () => {
     setExportDialog(false); toast.success("Download starting...");
     try {
       const p: Record<string, string> = {};
-      if (debouncedSearch) p.search = debouncedSearch;
+      if (search) p.search = search;
       if (filters.customer && filters.customer !== "all" && filters.customer !== "") p.customerId = filters.customer;
       if (filters.zone && filters.zone !== "all" && filters.zone !== "") p.zoneId = filters.zone;
       if (filters.category && filters.category !== "all" && filters.category !== "") p.category = filters.category;
       if (filters.division && filters.division !== "all" && filters.division !== "") p.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") p.machineId = filters.machine;
+      if (filters.saleStatus && filters.saleStatus !== "all" && filters.saleStatus !== "") p.status = filters.saleStatus;
       if (selectedFilterEngineers.length > 0) p.processedBy = selectedFilterEngineers.join(",");
       if (fromDate) p.fromDate = toISTDateParam(fromDate);
       if (toDate) p.toDate = toISTDateParam(toDate);
@@ -1459,18 +1506,18 @@ const SellMachinesPage = () => {
           {s.grandTotalWithGst > 0 && (
             <>
               {s.invoiceUrl
-                ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
-                : <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
+                ? <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" title="View Invoice" onClick={() => window.open(s.invoiceUrl, "_blank")}><FileText className="h-3 w-3" /></Button>
+                : <Button size="sm" variant="outline" className="text-xs h-7" title="Generate Invoice" onClick={() => { setInvoiceDialog(s); setInvoiceForm({ companyId: s.companyInfo?.companyId ?? "", cgst: s.cgst?.percent != null ? String(s.cgst.percent) : "", sgst: s.sgst?.percent != null ? String(s.sgst.percent) : "", igst: s.igst?.percent != null ? String(s.igst.percent) : "" }); }}><FileText className="h-3 w-3" /></Button>
               }
             </>
           )}
           {s.currentPaymentStatus !== "Paid" && s.currentPaymentStatus !== null && (
-            <Button size="sm" variant="outline" className="text-xs h-7 text-blue-600 border-blue-300" onClick={() => { setPaymentDialog(s); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); }}>
+            <Button size="sm" variant="outline" className="text-xs h-7 text-blue-600 border-blue-300" title="Add Payment" onClick={() => { setPaymentDialog(s); setPaymentForm({ paidAmount: "", paymentMethod: "Cash", paymentDate: new Date().toISOString().split("T")[0] }); }}>
               <CreditCard className="h-3 w-3" />
             </Button>
           )}
           {s.grandTotalWithGst > 0 && (
-            <Button size="sm" variant="outline" className="text-xs h-7 text-purple-600 border-purple-300" onClick={async () => {
+            <Button size="sm" variant="outline" className="text-xs h-7 text-purple-600 border-purple-300" title="View Receipts" onClick={async () => {
               setReceiptsDialog(s); setReceipts([]); setLoadingReceipts(true);
               try {
                 const r = await api.get(`/admin/sales/${s._id}/payment-receipts`);
@@ -1483,12 +1530,12 @@ const SellMachinesPage = () => {
           )}
           {s.canCancel && (
             <Button
-              variant="ghost" size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+              size="sm" variant="outline"
+              className="text-xs h-7 text-red-600 border-red-300"
               title="Cancel Sale"
               onClick={() => setCancelDialog(s)}
             >
-              <XCircle className="h-4 w-4" />
+              <XCircle className="h-3 w-3" />
             </Button>
           )}
         </div>
@@ -1529,7 +1576,7 @@ const SellMachinesPage = () => {
             <div className="flex items-center gap-2 flex-1 max-w-sm">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Search by customer, item, model..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                <Input placeholder="Search by customer, item, model..." value={pendingSearch} onChange={(e) => setPendingSearch(e.target.value)} className="pl-9" />
               </div>
               <div className="text-xs text-muted-foreground cursor-help group relative shrink-0">
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-muted-foreground text-[10px] hover:bg-muted hover:border-foreground transition-colors">?</span>
@@ -1548,21 +1595,22 @@ const SellMachinesPage = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
-              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
-              {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all") || selectedFilterEngineers.length > 0) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); setSelectedFilterEngineers([]); }} className="h-9"><X className="h-4 w-4 mr-1" /> Clear</Button>
-              )}
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">From</Label><Input type="date" value={pendingFromDate} onChange={(e) => setPendingFromDate(e.target.value)} className="h-9 text-sm w-40" /></div>
+              <div className="flex items-center gap-2"><Label className="text-xs text-muted-foreground whitespace-nowrap">To</Label><Input type="date" value={pendingToDate} onChange={(e) => setPendingToDate(e.target.value)} className="h-9 text-sm w-40" /></div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <SearchableSelect options={customerOptions} value={filters.customer ?? ""} onChange={(v) => setFilters(p => ({ ...p, customer: v }))} onSearchChange={fetchCustomers} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={zoneOptions} value={filters.zone ?? ""} onChange={(v) => setFilters(p => ({ ...p, zone: v }))} onSearchChange={fetchZones} placeholder="Zone" searchPlaceholder="Search zones..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={categoryOptions} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={divisionOptions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machineOptions} value={filters.machine ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine: v }))} onSearchChange={fetchMachines} placeholder="Item" searchPlaceholder="Search items..." className="w-[160px] h-9 text-sm" />
-            <Select value={filters.paymentStatus ?? ""} onValueChange={(v) => setFilters(p => ({ ...p, paymentStatus: v }))}>
+            <SearchableSelect options={customerOptions} value={pendingFilters.customer ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, customer: v }))} onSearchChange={fetchCustomers} placeholder="Customer" searchPlaceholder="Search customers..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={zoneOptions} value={pendingFilters.zone ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, zone: v }))} onSearchChange={fetchZones} placeholder="Zone" searchPlaceholder="Search zones..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={categoryOptions} value={pendingFilters.category ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisionOptions} value={pendingFilters.division ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machineOptions} value={pendingFilters.machine ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, machine: v }))} onSearchChange={fetchMachines} placeholder="Item" searchPlaceholder="Search items..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={[{ label: "Active", value: "active" }, { label: "Cancelled", value: "cancelled" }]} value={pendingFilters.saleStatus ?? ""} onChange={(v) => setPendingFilters(p => ({ ...p, saleStatus: v }))} placeholder="Sale Status" className="w-[160px] h-9 text-sm" />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <Select value={pendingFilters.paymentStatus ?? ""} onValueChange={(v) => setPendingFilters(p => ({ ...p, paymentStatus: v }))}>
               <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue placeholder="Payment Status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
@@ -1579,7 +1627,7 @@ const SellMachinesPage = () => {
                 onClick={() => { setEngineerFilterOpen(p => !p); if (!engineerFilterOpen) { setEngineerFilterSearch(""); fetchFilterEngineers(""); } }}
                 className="flex items-center justify-between w-[160px] h-9 px-3 rounded-md border border-input text-sm bg-background text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
-                <span className="truncate">{selectedFilterEngineers.length > 0 ? `Processed By (${selectedFilterEngineers.length})` : "Processed By"}</span>
+                <span className="truncate">{pendingFilterEngineers.length > 0 ? `Processed By (${pendingFilterEngineers.length})` : "Processed By"}</span>
                 <svg className="h-4 w-4 opacity-50 shrink-0 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
               </button>
               {engineerFilterOpen && (
@@ -1599,13 +1647,13 @@ const SellMachinesPage = () => {
                     {filterEngineers.length === 0 ? (
                       <p className="text-xs text-muted-foreground px-3 py-3 text-center">No engineers found</p>
                     ) : filterEngineers.map((eng) => {
-                      const checked = selectedFilterEngineers.includes(eng._id);
+                      const checked = pendingFilterEngineers.includes(eng._id);
                       return (
                         <button
                           key={eng._id}
                           type="button"
                           className={`w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
-                          onClick={() => setSelectedFilterEngineers(prev => checked ? prev.filter(id => id !== eng._id) : [...prev, eng._id])}
+                          onClick={() => setPendingFilterEngineers(prev => checked ? prev.filter(id => id !== eng._id) : [...prev, eng._id])}
                         >
                           <div className={`h-3.5 w-3.5 rounded border-2 flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
                             {checked && <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
@@ -1622,10 +1670,10 @@ const SellMachinesPage = () => {
                       );
                     })}
                   </div>
-                  {selectedFilterEngineers.length > 0 && (
+                  {pendingFilterEngineers.length > 0 && (
                     <div className="px-3 py-2 border-t flex items-center justify-between">
-                      <span className="text-xs text-primary font-medium">{selectedFilterEngineers.length} selected</span>
-                      <button type="button" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => setSelectedFilterEngineers([])}>
+                      <span className="text-xs text-primary font-medium">{pendingFilterEngineers.length} selected</span>
+                      <button type="button" className="text-xs text-muted-foreground hover:text-destructive" onClick={() => setPendingFilterEngineers([])}>
                         Clear
                       </button>
                     </div>
@@ -1634,6 +1682,20 @@ const SellMachinesPage = () => {
               )}
             </div>
           </div>
+
+          {/* Apply / Clear Filters row */}
+          {(hasPendingFilters || hasAppliedFilters) && (
+            <div className="flex items-center justify-end gap-2">
+              {hasPendingFilters && (
+                <Button size="sm" onClick={handleApplyFilters} className="h-9 gap-1.5">
+                  <Search className="h-3.5 w-3.5" /> Apply Filters
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={handleClearFilters} className="h-9 gap-1.5">
+                <X className="h-3.5 w-3.5" /> Clear
+              </Button>
+            </div>
+          )}
 
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={pageSize} onPageChange={fetchSales} />

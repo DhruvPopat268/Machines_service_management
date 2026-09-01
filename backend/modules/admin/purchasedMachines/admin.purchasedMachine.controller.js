@@ -383,7 +383,7 @@ const verifyPartCodes = async (req, res) => {
 
 const exportToExcel = async (req, res) => {
   try {
-    const { search, vendorId, category, division, machineId, inventoryStatus, fromDate, toDate } = req.query;
+    const { search, vendorId, category, division, machineId, inventoryStatus, fromDate, toDate, status } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -401,6 +401,8 @@ const exportToExcel = async (req, res) => {
     }
 
     if (vendorId && mongoose.isValidObjectId(vendorId)) query["vendorInfo.vendorId"] = vendorId;
+
+    if (status && ["active", "cancelled"].includes(status)) query.status = status;
 
     const machineFilter = buildMachineFilter(category, division, machineId);
     if (inventoryStatus === "available" || inventoryStatus === "sold") {
@@ -426,7 +428,7 @@ const exportToExcel = async (req, res) => {
 
     const purchases = await PurchasedMachine.find(query).sort({ createdAt: -1 }).lean();
 
-    const COLS = ["Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Part Code", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Available Parts", "Sold Parts", "Purchase Date", "Purchase Time"];
+    const COLS = ["Invoice No", "Status", "Vendor Company", "Vendor Name", "Vendor Phone", "Machine Name", "Model Number", "Part Code", "Category", "Division", "Quantity", "Buying Price (Base)", "Buying Price (With GST)", "Buying Total (Base)", "Buying Total (With GST)", "Available Parts", "Sold Parts", "Purchase Date", "Purchase Time"];
 
     const rows = [];
     const merges = [];
@@ -444,6 +446,8 @@ const exportToExcel = async (req, res) => {
         const isPurchaseFirst = machineStartRow === purchaseStartRow;
         
         rows.push({
+          "Invoice No":               isPurchaseFirst ? p.invoiceNumber || "" : "",
+          "Status":                   isPurchaseFirst ? (p.status === "cancelled" ? "Cancelled" : "Active") : "",
           "Vendor Company":           isPurchaseFirst ? p.vendorInfo.companyName || "" : "",
           "Vendor Name":              isPurchaseFirst ? p.vendorInfo.name        || "" : "",
           "Vendor Phone":             isPurchaseFirst ? p.vendorInfo.phone       || "" : "",
@@ -476,7 +480,7 @@ const exportToExcel = async (req, res) => {
       const sheetPurchaseStart = purchaseStartRow + 1;
       const sheetPurchaseEnd   = rows.length;
       if (sheetPurchaseStart < sheetPurchaseEnd) {
-        ["Vendor Company", "Vendor Name", "Vendor Phone", "Purchase Date", "Purchase Time"].forEach((col) => {
+        ["Invoice No", "Status", "Vendor Company", "Vendor Name", "Vendor Phone", "Purchase Date", "Purchase Time"].forEach((col) => {
           const c = COLS.indexOf(col);
           merges.push({ s: { r: sheetPurchaseStart, c }, e: { r: sheetPurchaseEnd, c } });
         });

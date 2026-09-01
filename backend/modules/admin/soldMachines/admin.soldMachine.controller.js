@@ -165,7 +165,7 @@ const getAvailableCodes = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, customerId, zoneId, category, division, machineId, paymentStatus, processedBy, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, paymentStatus, processedBy, fromDate, toDate, status, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -204,6 +204,9 @@ const getAll = async (req, res) => {
 
     if (paymentStatus && ["Paid", "Unpaid", "Partial-Paid"].includes(paymentStatus))
       query.currentPaymentStatus = paymentStatus;
+
+    if (status && ["active", "cancelled"].includes(status))
+      query.status = status;
 
     if (processedBy) {
       const ids = String(processedBy).split(",").filter(id => mongoose.isValidObjectId(id.trim())).map(id => new mongoose.Types.ObjectId(id.trim()));
@@ -1034,7 +1037,7 @@ const addContract = async (req, res) => {
 
 const exportToExcel = async (req, res) => {
   try {
-    const { search, customerId, zoneId, category, division, machineId, fromDate, toDate } = req.query;
+    const { search, customerId, zoneId, category, division, machineId, fromDate, toDate, status } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -1057,6 +1060,9 @@ const exportToExcel = async (req, res) => {
     if (customerId && mongoose.isValidObjectId(customerId))
       query["customerInfo.customerId"] = customerId;
 
+    if (status && ["active", "cancelled"].includes(status))
+      query.status = status;
+
     if (zoneId && mongoose.isValidObjectId(zoneId)) {
       const zone = await Zone.findById(zoneId, { name: 1 }).lean();
       if (zone) query["customerInfo.zone"] = zone.name;
@@ -1078,7 +1084,7 @@ const exportToExcel = async (req, res) => {
 
     const sales = await SoldMachine.find(query).sort({ createdAt: -1 }).lean();
 
-    const COLS = ["Customer Name", "Customer Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Selling Price", "Discounted Selling Price", "Selling Total", "Serial / Part Code", "Contract Type", "Contract Code", "Free Service", "Free Parts", "Valid From", "Valid To", "Sale Date", "Sale Time"];
+    const COLS = ["Invoice No", "Status", "Customer Name", "Customer Phone", "Machine Name", "Model Number", "Category", "Division", "Quantity", "Selling Price", "Discounted Selling Price", "Selling Total", "Serial / Part Code", "Contract Type", "Contract Code", "Free Service", "Free Parts", "Valid From", "Valid To", "Sale Date", "Sale Time"];
 
     const rows = [];
     const merges = [];
@@ -1101,6 +1107,8 @@ const exportToExcel = async (req, res) => {
           const isMachineFirst = ci === 0;
           const isSaleFirst = isMachineFirst && machineStartRow === saleStartRow;
           rows.push({
+            "Invoice No": isSaleFirst ? sale.invoiceNumber || "" : "",
+            "Status": isSaleFirst ? (sale.status === "cancelled" ? "Cancelled" : "Active") : "",
             "Customer Name": isSaleFirst ? sale.customerInfo.name || "" : "",
             "Customer Phone": isSaleFirst ? sale.customerInfo.phone || "" : "",
             "Machine Name": isMachineFirst ? m.machineName || "" : "",
@@ -1136,7 +1144,7 @@ const exportToExcel = async (req, res) => {
       const sheetSaleStart = saleStartRow + 1;
       const sheetSaleEnd = saleEndRow + 1;
       if (sheetSaleStart < sheetSaleEnd) {
-        ["Customer Name", "Customer Phone", "Sale Date", "Sale Time"].forEach((col) => {
+        ["Invoice No", "Status", "Customer Name", "Customer Phone", "Sale Date", "Sale Time"].forEach((col) => {
           const c = COLS.indexOf(col);
           merges.push({ s: { r: sheetSaleStart, c }, e: { r: sheetSaleEnd, c } });
         });
