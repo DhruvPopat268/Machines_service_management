@@ -37,7 +37,7 @@ const buildMachineFilter = (category, division, machineId) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search, vendorId, category, division, machineId, inventoryStatus, fromDate, toDate, page = 1, limit = 10 } = req.query;
+    const { search, vendorId, category, division, machineId, inventoryStatus, status, fromDate, toDate, page = 1, limit = 10 } = req.query;
     const query = {};
 
     if (typeof search === "string") {
@@ -82,6 +82,11 @@ const getAll = async (req, res) => {
       query.status = "active";
     } else if (machineFilter) {
       query.machines = machineFilter;
+    }
+
+    // Purchase status filter (active / cancelled)
+    if (status === "active" || status === "cancelled") {
+      query.status = status;
     }
 
     if (fromDate || toDate) {
