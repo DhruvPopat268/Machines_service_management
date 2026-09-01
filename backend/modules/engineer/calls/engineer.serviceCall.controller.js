@@ -1861,12 +1861,15 @@ const completeCall = async (req, res) => {
           const companyId = updatedCall.companyInfo?.companyId;
           const company   = companyId ? await Company.findById(companyId) : null;
 
+          const isDisInstallation = updatedCall.callType === "Dis-Installation";
+          const counterKey    = isDisInstallation ? "disInstallationInvoice" : "installationInvoice";
+          const invoicePrefix = isDisInstallation ? "DIS-INV" : "INST-INV";
           const counter = await Counter.findByIdAndUpdate(
-            "installationInvoice",
+            counterKey,
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const invoiceNumber = `INST-INV-${counter.seq}`;
+          const invoiceNumber = `${invoicePrefix}-${counter.seq}`;
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
