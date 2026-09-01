@@ -1073,4 +1073,91 @@ const getCounterReadingInvoice = async (req, res) => {
   }
 };
 
-module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice };
+const resendInvoiceEmail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sendServiceCallInvoiceEmail } = require("../../../utils/emailService");
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid callId" });
+    }
+
+    const call = await ServiceCall.findById(id).lean();
+    if (!call) {
+      return res.status(404).json({ success: false, message: "Call not found" });
+    }
+
+    // Validation: Only completed calls can have invoice resent
+    if (call.status !== "Completed") {
+      return res.status(400).json({ success: false, message: "Only completed calls can have invoice resent" });
+    }
+
+    // Validation: Call must have invoice details
+    if (!call.invoiceNumber || !call.invoiceUrl) {
+      return res.status(400).json({ success: false, message: "Invoice not yet generated for this call" });
+    }
+
+    // Fetch company info
+    const Company = require("../companyManagement/admin.company.model");
+    const companyId = call.companyInfo?.companyId;
+    const company = companyId ? await Company.findById(companyId) : null;
+
+    // Build email data - NO file attachment (invoiceFilePath is null/undefined)
+    const isCounterReading = call.callType === "Counter-Reading";
+    const isServiceCall = call.callType === "Service-Call";
+    const isInstallation = call.callType === "Installation" || call.callType === "Dis-installation";
+
+    const emailData = {
+      invoiceNumber: call.invoiceNumber,
+      invoiceDate: call.invoiceDate || new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+      customerName: call.customerInfo?.name || "",
+      customerEmail: call.customerInfo?.email || "",
+      callId: call.callId,
+      callType: call.callType,
+      completedDate: call.dates?.completed
+        ? new Date(call.dates.completed).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+        : new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),
+      engineerName: call.engineerInfo?.name || "",
+      totalServiceCharges: call.totalServiceCharges ?? 0,
+      totalPartsCharges: call.totalPartsCharges ?? 0,
+      totalCounterReadingCharges: call.totalCounterReadingCharges ?? 0,
+      totalInstallationCharges: call.totalInstallationCharges ?? 0,
+      basicTotal: call.totalCharges ?? 0,
+      cgstPercent: call.cgst?.percent ?? 0,
+      cgstAmount: call.cgst?.amount ?? 0,
+      sgstPercent: call.sgst?.percent ?? 0,
+      sgstAmount: call.sgst?.amount ?? 0,
+      igstPercent: call.igst?.percent ?? 0,
+      igstAmount: call.igst?.amount ?? 0,
+      grandTotal: call.invoiceGrandTotal ?? 0,
+      invoiceUrl: call.invoiceUrl,
+      // NO invoiceFilePath - will make attachment optional
+      companyName: company?.name || call.companyInfo?.name || "",
+      companyAddress: company?.address || call.companyInfo?.address || "",
+      companyPhone: company?.phone || call.companyInfo?.phone || "",
+      companyGst: company?.gstNumber || call.companyInfo?.gstNumber || "",
+      companyEmail: company?.email || call.companyInfo?.email || "",
+      machines: (call.machines || []).map(m => ({
+        machineName: m.machineName || "",
+        serialNumber: m.serialNumber || "",
+      })),
+      isCounterReading,
+      isServiceCall,
+      isInstallation,
+    };
+
+    // Send email without attachment
+    const result = await sendServiceCallInvoiceEmail(emailData);
+    
+    if (!result.success) {
+      return res.status(500).json({ success: false, message: "Failed to send invoice email", error: result.error });
+    }
+
+    return res.json({ success: true, message: "Invoice email sent successfully" });
+  } catch (error) {
+    console.error("Resend invoice email error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice, resendInvoiceEmail };

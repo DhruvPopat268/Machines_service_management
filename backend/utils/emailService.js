@@ -420,18 +420,21 @@ const sendServiceCallInvoiceEmail = async (data) => {
     html = data.isServiceCall    ? html.replace(/{{#if isServiceCall}}([\.\s\S]*?){{\/if}}/g,    "$1") : html.replace(/{{#if isServiceCall}}[\.\s\S]*?{{\/if}}/g,    "");
     html = data.isInstallation   ? html.replace(/{{#if isInstallation}}([\.\s\S]*?){{\/if}}/g,   "$1") : html.replace(/{{#if isInstallation}}[\.\s\S]*?{{\/if}}/g,   "");
 
+    const attachments = [];
+    if (data.invoiceFilePath) {
+      attachments.push({
+        filename: data.invoiceFileName,
+        path:     data.invoiceFilePath,
+        contentType: "application/pdf",
+      });
+    }
+
     const mailOptions = {
       from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
       to: data.customerEmail,
       subject: `Service Call Invoice — ${data.invoiceNumber} (${data.callId})`,
       html,
-      attachments: [
-        {
-          filename: data.invoiceFileName,
-          path:     data.invoiceFilePath,
-          contentType: "application/pdf",
-        },
-      ],
+      attachments,
     };
 
     await transporter.sendMail(mailOptions);

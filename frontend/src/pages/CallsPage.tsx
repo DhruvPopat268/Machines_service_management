@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DataTable, Column } from "@/components/DataTable";
-import { Eye, UserPlus, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText } from "lucide-react";
+import { Eye, UserPlus, PhoneCall, FolderOpen, UserCog, Loader, PauseCircle, CheckCircle, XCircle, Search, X, FileText, Send } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -105,6 +105,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
   const [cancelTarget, setCancelTarget] = useState<ServiceCall | null>(null);
   const [cancelling, setCancelling]     = useState(false);
+  
+  const [sendInvoiceTarget, setSendInvoiceTarget] = useState<ServiceCall | null>(null);
+  const [sendingInvoice, setSendingInvoice]       = useState(false);
 
   const [problemTypes, setProblemTypes]     = useState<DropdownOption[]>([]);
   const [machines, setMachines]             = useState<DropdownOption[]>([]);
@@ -278,6 +281,19 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       setCompanies(compRes.data.data);
     } catch {}
     finally { setAssignDialogLoading(false); }
+  };
+
+  const handleSendInvoice = async (call: ServiceCall) => {
+    setSendingInvoice(true);
+    try {
+      await api.post(`/admin/service-calls/${call._id}/resend-invoice`);
+      toast.success(`Invoice email sent successfully for call ${call.callId}`);
+      setSendInvoiceTarget(null);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to send invoice email");
+    } finally {
+      setSendingInvoice(false);
+    }
   };
 
   const abortRef = useRef<AbortController | null>(null);
@@ -526,19 +542,23 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
       sticky: true,
       render: (c) => (
         <div className="flex items-center gap-1">
-          <Button size="icon" variant="ghost" className="h-8 w-8" title="View" onClick={() => navigate(`/calls/${c._id}`)}
-          ><Eye className="h-4 w-4" /></Button>
+          <Button size="sm" variant="outline" className="text-xs h-7" title="View" onClick={() => navigate(`/calls/${c._id}`)}
+          ><Eye className="h-3 w-3" /></Button>
           {c.status === "Open" && (
-            <Button size="icon" variant="ghost" className="h-8 w-8" title="Assign Engineer" onClick={() => openAssignDialog(c)}
-            ><UserCog className="h-4 w-4" /></Button>
+            <Button size="sm" variant="outline" className="text-xs h-7" title="Assign Engineer" onClick={() => openAssignDialog(c)}
+            ><UserCog className="h-3 w-3" /></Button>
           )}
           {c.invoiceUrl && (
-            <Button size="icon" variant="ghost" className="h-8 w-8" title="Invoice" onClick={() => window.open(c.invoiceUrl, "_blank")}
-            ><FileText className="h-4 w-4" /></Button>
+            <Button size="sm" variant="outline" className="text-xs h-7 text-green-600 border-green-300" title="View Invoice" onClick={() => window.open(c.invoiceUrl, "_blank")}
+            ><FileText className="h-3 w-3" /></Button>
+          )}
+          {c.status === "Completed" && c.invoiceUrl && (
+            <Button size="sm" variant="outline" className="text-xs h-7 text-blue-600 border-blue-300" title="Send Invoice Email" onClick={() => setSendInvoiceTarget(c)}
+            ><Send className="h-3 w-3" /></Button>
           )}
           {c.status !== "Completed" && c.status !== "Cancelled" && (
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 hover:text-red-600" title="Cancel Call" onClick={() => setCancelTarget(c)}
-            ><XCircle className="h-4 w-4" /></Button>
+            <Button size="sm" variant="outline" className="text-xs h-7 text-red-600 border-red-300" title="Cancel Call" onClick={() => setCancelTarget(c)}
+            ><XCircle className="h-3 w-3" /></Button>
           )}
         </div>
       ),
@@ -800,6 +820,28 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                   }}
                 >
                   {cancelling ? "Cancelling..." : "Yes, Cancel Call"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={!!sendInvoiceTarget} onOpenChange={() => setSendInvoiceTarget(null)}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Send Invoice Email — {sendInvoiceTarget?.callId}</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-muted-foreground py-2">Send the invoice email to {sendInvoiceTarget?.customerInfo?.email}? The email will include a download link to the invoice.</p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSendInvoiceTarget(null)}>Cancel</Button>
+                <Button
+                  variant="default"
+                  disabled={sendingInvoice}
+                  onClick={() => {
+                    if (!sendInvoiceTarget) return;
+                    handleSendInvoice(sendInvoiceTarget);
+                  }}
+                >
+                  {sendingInvoice ? "Sending..." : "Send Invoice"}
                 </Button>
               </DialogFooter>
             </DialogContent>
