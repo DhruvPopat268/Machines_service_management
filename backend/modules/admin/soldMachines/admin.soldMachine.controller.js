@@ -128,7 +128,7 @@ const getAvailableCodes = async (req, res) => {
     const isParts = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
 
     const allRecords = await PurchasedMachine.find(
-      { "machines.machineId": new mongoose.Types.ObjectId(machineId) },
+      { "machines.machineId": new mongoose.Types.ObjectId(machineId), status: "active" },
       { "machines": 1 }
     ).lean();
 
