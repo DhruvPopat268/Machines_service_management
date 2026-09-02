@@ -408,11 +408,25 @@ const getAccountCharts = async (req, res) => {
       // Top 5 Customers
       SoldMachine.aggregate([
         { $match: { ...accountFilter, status: "active", "customerInfo.customerId": { $nin: [null, ""] } } },
-        { $group: { _id: "$customerInfo.customerId", totalAmount: { $sum: "$grandTotalBase" } } },
+        { $group: {
+          _id:              "$customerInfo.customerId",
+          totalAmount:      { $sum: "$grandTotalBase" },
+          customerName:     { $first: "$customerInfo.name" },
+          customerUniqueId: { $first: "$customerInfo.customerUniqueId" },
+        }},
         { $sort: { totalAmount: -1 } },
         { $limit: 5 },
-        { $lookup: { from: "customers", localField: "_id", foreignField: "_id", as: "cust" } },
-        { $project: { _id: 0, customer: { $ifNull: [{ $arrayElemAt: ["$cust.customerId", 0] }, "Unknown"] }, totalAmount: 1 } },
+        { $project: {
+          _id: 0,
+          totalAmount: 1,
+          customer: {
+            $cond: [
+              { $gt: [{ $strLenCP: { $ifNull: ["$customerName", ""] } }, 0] },
+              "$customerName",
+              { $ifNull: ["$customerUniqueId", "Unknown"] }
+            ]
+          },
+        }},
       ]),
       // Monthly Purchase Trend
       PurchasedMachine.aggregate([
