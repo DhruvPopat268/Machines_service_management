@@ -259,6 +259,10 @@ const RaiseCallPage = () => {
       render: (m) => <span className="font-medium">{m.machineName}</span>,
     },
     {
+      key: "modelNumber", label: "Model Number",
+      render: (m) => <span className="font-mono text-sm">{m.modelNumber || "—"}</span>,
+    },
+    {
       key: "serialNumber", label: "Serial Number",
       render: (m) => <span>{m.serialNumber || "—"}</span>,
     },
@@ -314,7 +318,7 @@ const RaiseCallPage = () => {
         const isExpired = validToIST ? nowIST > validToIST : false;
         return (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}&modelNumber=${encodeURIComponent(m.modelNumber)}`)}>
               <Eye className="h-4 w-4" /> View
             </Button>
             {!m.disInstalled && isExpired && (
@@ -328,7 +332,7 @@ const RaiseCallPage = () => {
               </Button>
             )}
             {!m.disInstalled && (
-              <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.serialNumber)}`)}>
+              <Button size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/detail?serialNumber=${encodeURIComponent(m.serialNumber)}&modelNumber=${encodeURIComponent(m.modelNumber)}`)}>
                 <PhoneCall className="h-3.5 w-3.5" /> Raise Call
               </Button>
             )}

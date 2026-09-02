@@ -56,11 +56,10 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const caseInsensitiveRegex = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
 
-const isMachineDuplicate = async (name, category, division, modelNumber, excludeId = null) => {
+const isMachineDuplicate = async (name, category, modelNumber, excludeId = null) => {
   const query = {
     name:        caseInsensitiveRegex(name),
     category,
-    division:    division || null,
     modelNumber: caseInsensitiveRegex(modelNumber || ""),
   };
   if (excludeId) query._id = { $ne: excludeId };
@@ -162,7 +161,7 @@ const create = async (req, res) => {
     const error = validateCreateMachine({ name, modelNumber, category, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
-    const duplicate = await isMachineDuplicate(name, category, division, modelNumber);
+    const duplicate = await isMachineDuplicate(name, category, modelNumber);
     if (duplicate)
       return res.status(409).json({ success: false, message: "A machine with the same name, category, division and model number already exists" });
 
@@ -219,9 +218,8 @@ const update = async (req, res) => {
 
     const dupName     = name        !== undefined ? name        : machine.name;
     const dupCategory = category    !== undefined ? category    : machine.category;
-    const dupDivision = division    !== undefined ? division    : machine.division;
     const dupModel    = modelNumber !== undefined ? modelNumber : machine.modelNumber;
-    const duplicate   = await isMachineDuplicate(dupName, dupCategory, dupDivision, dupModel, id);
+    const duplicate   = await isMachineDuplicate(dupName, dupCategory, dupModel, id);
     if (duplicate)
       return res.status(409).json({ success: false, message: "A machine with the same name, category, division and model number already exists" });
 
@@ -370,7 +368,7 @@ const importMachines = async (req, res) => {
         rowErrors.push(`Row ${rowNum}: status must be Active or Inactive`); continue;
       }
 
-      const key = `${name.toLowerCase()}||${category.toLowerCase()}||${division.toLowerCase()}||${modelNumber.toLowerCase()}`;
+      const key = `${name.toLowerCase()}||${category.toLowerCase()}||${modelNumber.toLowerCase()}`;
       if (!machineMap.has(key)) machineMap.set(key, { firstRowNum: rowNum, row });
     }
 
@@ -396,7 +394,6 @@ const importMachines = async (req, res) => {
         const existingMachine = await Machine.findOne({
           name:        caseInsensitiveRegex(row.name),
           category:    categoryId,
-          division:    divisionId,
           modelNumber: caseInsensitiveRegex(modelNumber),
         });
 

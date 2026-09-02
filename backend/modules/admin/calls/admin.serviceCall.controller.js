@@ -29,6 +29,7 @@ const getCalls = async (req, res) => {
         { "customerInfo.name": { $regex: s, $options: "i" } },
         { "customerInfo.phone": { $regex: s, $options: "i" } },
         { "engineerInfo.name": { $regex: s, $options: "i" } },
+        { "supportiveEngineers.name": { $regex: s, $options: "i" } },
       ];
     }
 
@@ -37,7 +38,18 @@ const getCalls = async (req, res) => {
     if (partId && mongoose.isValidObjectId(partId)) query["machines.usedParts.machineId"] = new mongoose.Types.ObjectId(partId);
     if (req.query.serialNumber) query["machines.serialNumber"] = { $regex: escapeRegex(req.query.serialNumber.trim()), $options: "i" };
     if (customerName) query["customerInfo.name"] = { $regex: escapeRegex(customerName), $options: "i" };
-    if (engineerName) query["engineerInfo.name"] = { $regex: escapeRegex(engineerName), $options: "i" };
+    if (engineerName) {
+      const engOr = [
+        { "engineerInfo.name": { $regex: escapeRegex(engineerName), $options: "i" } },
+        { "supportiveEngineers.name": { $regex: escapeRegex(engineerName), $options: "i" } },
+      ];
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, { $or: engOr }];
+        delete query.$or;
+      } else {
+        query.$or = engOr;
+      }
+    }
     if (category && mongoose.isValidObjectId(category)) query["machines.categoryId"] = new mongoose.Types.ObjectId(category);
     if (division && mongoose.isValidObjectId(division)) query["machines.divisionId"] = new mongoose.Types.ObjectId(division);
 
@@ -80,7 +92,7 @@ const getCalls = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find(query)
-        .select("callId customerInfo machines status priority engineerInfo dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber note engineerCompleteRemarks")
+        .select("callId customerInfo machines status priority engineerInfo supportiveEngineers dates createdAt updatedAt callType createdBy invoiceUrl invoiceNumber note engineerCompleteRemarks")
         .sort({ [sortKey]: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -132,10 +144,13 @@ const getCallDetail = async (req, res) => {
 const assignEngineer = async (req, res) => {
   try {
     const { id } = req.params;
-    const { engineerId, companyId, customerPORef } = req.body;
+    const { engineerId, companyId, customerPORef, supportiveEngineerIds } = req.body;
 
     if (!mongoose.isValidObjectId(engineerId))
       return res.status(400).json({ success: false, message: "Invalid engineerId" });
+
+    if (!companyId || !mongoose.isValidObjectId(companyId))
+      return res.status(400).json({ success: false, message: "companyId is required" });
 
     const engineer = await AdminUser.findOne({ _id: engineerId, role: "Engineer", status: "Active" })
       .select("_id engineerId name email phone");
@@ -146,6 +161,23 @@ const assignEngineer = async (req, res) => {
     if (!call)
       return res.status(400).json({ success: false, message: "Call not found or cannot be assigned in current status" });
 
+    // Resolve supportive engineers
+    let supportiveEngineers = [];
+    if (Array.isArray(supportiveEngineerIds) && supportiveEngineerIds.length > 0) {
+      const validIds = supportiveEngineerIds.filter(sid => mongoose.isValidObjectId(sid) && sid !== engineerId);
+      const suppEngineers = await AdminUser.find({
+        _id: { $in: validIds },
+        role: "Engineer",
+        status: "Active",
+      }).select("_id engineerId name email phone");
+      supportiveEngineers = suppEngineers.map(e => ({
+        _id:        e._id,
+        identityId: e.engineerId,
+        name:       e.name,
+        email:      e.email,
+        phone:      e.phone,
+      }));
+    }
     // Resolve company
     let companyInfo = call.companyInfo ?? null;
     if (companyId !== undefined) {
@@ -190,6 +222,7 @@ const assignEngineer = async (req, res) => {
         email: engineer.email,
         phone: engineer.phone,
       },
+      supportiveEngineers,
       status: "Assigned",
       "dates.assigned": new Date(),
       companyInfo,
@@ -343,19 +376,67 @@ const getCustomerMachines = async (req, res) => {
   }
 };
 
-const getCustomerMachineDetail = async (req, res) => {
+const getCustomerMachinesBySerial = async (req, res) => {
   try {
-    const { serialNumber } = req.query;
+    const { serialNumber, customerId, excludeModelNumbers } = req.query;
 
     if (!serialNumber?.trim())
       return res.status(400).json({ success: false, message: "serialNumber is required" });
 
-    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": serialNumber.trim(), status: "active" });
+    const query = { "machines.serialNumbers.serialNumber": serialNumber.trim(), status: "active" };
+    if (customerId) {
+      if (!mongoose.isValidObjectId(customerId))
+        return res.status(400).json({ success: false, message: "Invalid customerId" });
+      query["customerInfo.customerId"] = customerId;
+    }
+
+    const excludeModels = excludeModelNumbers
+      ? (Array.isArray(excludeModelNumbers) ? excludeModelNumbers : excludeModelNumbers.split(",")).map(m => m.trim().toLowerCase())
+      : [];
+
+    const soldRecords = await SoldMachine.find(query).lean();
+
+    const results = [];
+    for (const record of soldRecords) {
+      for (const machine of record.machines) {
+        if (excludeModels.includes((machine.modelNumber || "").toLowerCase())) continue;
+        const entry = (machine.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
+        if (!entry) continue;
+        results.push({
+          machineId:   machine.machineId,
+          machineName: machine.machineName,
+          modelNumber: machine.modelNumber,
+          category:    machine.category,
+          division:    machine.division,
+          serialNumber: entry.serialNumber,
+          contractType: entry.contractType,
+        });
+      }
+    }
+
+    return res.status(200).json({ success: true, data: results });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const getCustomerMachineDetail = async (req, res) => {
+  try {
+    const { serialNumber, modelNumber } = req.query;
+
+    if (!serialNumber?.trim())
+      return res.status(400).json({ success: false, message: "serialNumber is required" });
+
+    const query = { "machines.serialNumbers.serialNumber": serialNumber.trim(), status: "active" };
+    if (modelNumber?.trim()) query["machines.modelNumber"] = modelNumber.trim();
+
+    const soldRecord = await SoldMachine.findOne(query);
     if (!soldRecord)
       return res.status(404).json({ success: false, message: "Machine not found for this serial number" });
 
     let resultMachine = null;
     for (const machine of soldRecord.machines) {
+      if (modelNumber?.trim() && machine.modelNumber !== modelNumber.trim()) continue;
       const entry = (machine.serialNumbers || []).find(e => e.serialNumber === serialNumber.trim());
       if (entry) {
         let images = [];
@@ -381,16 +462,22 @@ const getCustomerMachineDetail = async (req, res) => {
     }
 
     // Fetch last counter readings from most recent completed Counter-Reading call
-    const lastCounterCall = await ServiceCall.findOne({
+    const counterQuery = {
       "machines.serialNumber": serialNumber.trim(),
       "machines.counterReadings.serialNumber": serialNumber.trim(),
-    })
+    };
+    if (modelNumber?.trim()) counterQuery["machines.modelNumber"] = modelNumber.trim();
+
+    const lastCounterCall = await ServiceCall.findOne(counterQuery)
       .sort({ "dates.completed": -1, createdAt: -1 })
-      .select("machines.serialNumber machines.counterReadings");
+      .select("machines.serialNumber machines.modelNumber machines.counterReadings");
 
     let lastReadings = [];
     if (lastCounterCall) {
-      const machine = lastCounterCall.machines.find(m => m.serialNumber === serialNumber.trim());
+      const machine = lastCounterCall.machines.find(m =>
+        m.serialNumber === serialNumber.trim() &&
+        (!modelNumber?.trim() || m.modelNumber === modelNumber.trim())
+      );
       const counterReading = machine?.counterReadings?.find(cr => cr.serialNumber === serialNumber.trim());
       if (counterReading?.categories?.length) {
         lastReadings = counterReading.categories.map(c => ({
@@ -402,17 +489,23 @@ const getCustomerMachineDetail = async (req, res) => {
     }
 
     // Fetch last service call readings from most recent completed Service-Call
-    const lastServiceCall = await ServiceCall.findOne({
+    const serviceCallQuery = {
       "machines.serialNumber": serialNumber.trim(),
       callType: "Service-Call",
       status: "Completed",
-    })
+    };
+    if (modelNumber?.trim()) serviceCallQuery["machines.modelNumber"] = modelNumber.trim();
+
+    const lastServiceCall = await ServiceCall.findOne(serviceCallQuery)
       .sort({ "dates.completed": -1 })
-      .select("machines.serialNumber machines.serviceCallReadings dates.completed");
+      .select("machines.serialNumber machines.modelNumber machines.serviceCallReadings dates.completed");
 
     let lastServiceCallReadings = [];
     if (lastServiceCall) {
-      const machine = lastServiceCall.machines.find(m => m.serialNumber === serialNumber.trim());
+      const machine = lastServiceCall.machines.find(m =>
+        m.serialNumber === serialNumber.trim() &&
+        (!modelNumber?.trim() || m.modelNumber === modelNumber.trim())
+      );
       if (machine?.serviceCallReadings?.length) {
         const lastReadingDate = lastServiceCall.dates?.completed
           ? (() => { const d = new Date(lastServiceCall.dates.completed); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`; })()
@@ -1175,4 +1268,4 @@ const resendInvoiceEmail = async (req, res) => {
   }
 };
 
-module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice, resendInvoiceEmail };
+module.exports = { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachinesBySerial, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice, resendInvoiceEmail };

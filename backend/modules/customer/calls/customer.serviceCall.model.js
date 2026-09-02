@@ -165,6 +165,18 @@ const serviceCallSchema = new mongoose.Schema(
         }
       ],
     },
+    supportiveEngineers: {
+      type: [
+        {
+          _id:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          identityId: { type: String, trim: true },
+          name:       { type: String, trim: true },
+          phone:      { type: String, trim: true },
+          email:      { type: String, trim: true },
+        }
+      ],
+      default: [],
+    },
     dates: {
       created:         { type: Date, required: true, default: Date.now },
       assigned:        { type: Date },
@@ -206,6 +218,7 @@ serviceCallSchema.index({ "machines.serialNumber": 1 });
 serviceCallSchema.index({ "machines.counterReadings.serialNumber": 1 });
 serviceCallSchema.index({ "machines.contractType.contractTypeId": 1 });
 serviceCallSchema.index({ "engineerInfo._id": 1 });
+serviceCallSchema.index({ "supportiveEngineers._id": 1 });
 serviceCallSchema.index({ status: 1 });
 serviceCallSchema.index({ priority: 1 });
 serviceCallSchema.index({ "dates.created": -1 });

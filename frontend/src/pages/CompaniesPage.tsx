@@ -107,7 +107,7 @@ const CompaniesPage = () => {
   useEffect(() => { fetchCompanies(1); }, [fetchCompanies]);
 
   const handleAdd = async () => {
-    if (!addForm.name || !addForm.address || !addForm.phone || !addForm.email || !addForm.gstNumber)
+    if (!addForm.name || !addForm.address || !addForm.phone || !addForm.email)
       return toast.error("All fields are required");
     setSubmitting(true);
     try {
@@ -248,8 +248,8 @@ const CompaniesPage = () => {
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${prefix}-gstNumber`}>GST Number <span className="text-destructive">*</span></Label>
-        <Input id={`${prefix}-gstNumber`} placeholder="e.g. 27AABCG1234A1Z5" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} />
+        <Label htmlFor={`${prefix}-gstNumber`}>GST Number</Label>
+        <Input id={`${prefix}-gstNumber`} placeholder="e.g. 27AABCG1234A1Z5 (optional)" value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} />
       </div>
 
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">Bank Details</p>

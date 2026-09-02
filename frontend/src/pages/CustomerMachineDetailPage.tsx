@@ -69,6 +69,7 @@ const CustomerMachineDetailPage = () => {
   const [searchParams] = useSearchParams();
   const navigate        = useNavigate();
   const initialSerial   = searchParams.get("serialNumber") || "";
+  const initialModel    = searchParams.get("modelNumber")  || "";
 
   const [callType, setCallType]         = useState("Service-Call");
   const [serialInput, setSerialInput]   = useState("");
@@ -76,6 +77,7 @@ const CustomerMachineDetailPage = () => {
   const [submitting, setSubmitting]     = useState(false);
   const [problemTypes, setProblemTypes] = useState<ProblemType[]>([]);
   const [machines, setMachines]         = useState<MachineEntry[]>([]);
+  const [pickerResults, setPickerResults] = useState<{ machineId: string; machineName: string; modelNumber: string; serialNumber: string; category: string; division: string }[]>([]);
 
   const serialInputRef   = useRef<HTMLInputElement>(null);
   const addressInputRef  = useRef<HTMLInputElement>(null);
@@ -126,7 +128,7 @@ const CustomerMachineDetailPage = () => {
   // Auto-load initial serial from URL
   useEffect(() => {
     if (!initialSerial) return;
-    fetchAndAddMachine(initialSerial);
+    fetchAndAddMachine(initialSerial, initialModel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -170,22 +172,23 @@ const CustomerMachineDetailPage = () => {
     });
   };
 
-  const fetchAndAddMachine = useCallback(async (sn: string) => {
+  // Called from URL auto-load — modelNumber known, add directly
+  const fetchAndAddMachine = useCallback(async (sn: string, modelNumber?: string) => {
     const trimmed = sn.trim();
     if (!trimmed) return;
 
-    // Prevent duplicates
-    if (machines.some(m => m.detail.machine.serialNumber === trimmed)) {
-      toast.error("Machine already added");
-      return;
-    }
-
     setSearching(true);
     try {
-      const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: trimmed } });
+      const params: Record<string, string> = { serialNumber: trimmed };
+      if (modelNumber?.trim()) params.modelNumber = modelNumber.trim();
+      const res = await api.get("/admin/service-calls/customer-machines/detail", { params });
       const detail: MachineDetail = res.data.data;
 
-      // Ensure all machines belong to the same customer
+      if (machines.some(m => m.detail.machine.serialNumber === trimmed && m.detail.machine.modelNumber === detail.machine.modelNumber)) {
+        toast.error("Machine already added");
+        return;
+      }
+
       if (customerInfo && detail.customerInfo.customerId !== customerInfo.customerId) {
         toast.error("All machines must belong to the same customer");
         return;
@@ -193,7 +196,6 @@ const CustomerMachineDetailPage = () => {
 
       setMachines(prev => [...prev, { detail, problemTypeIds: [], issueDescription: "", images: [], previewUrls: [] }]);
       setSerialInput("");
-      // Fetch live customer address on first machine added
       if (!customerInfo) {
         api.get(`/admin/customers/${detail.customerInfo.customerId}`)
           .then(res => {
@@ -210,6 +212,84 @@ const CustomerMachineDetailPage = () => {
       setSearching(false);
     }
   }, [machines, customerInfo]);
+
+  // Called from manual search — show picker list
+  const searchBySerial = useCallback(async () => {
+    const trimmed = serialInput.trim();
+    if (!trimmed) return;
+
+    setPickerResults([]);
+    setSearching(true);
+    try {
+      const params: Record<string, string> = { serialNumber: trimmed };
+      if (customerInfo?.customerId) params.customerId = customerInfo.customerId;
+
+      // Build excludeModelNumbers from already-added machines with same serial
+      const excludeModelNumbers = machines
+        .filter(m => m.detail.machine.serialNumber === trimmed)
+        .map(m => m.detail.machine.modelNumber)
+        .filter(Boolean);
+      if (excludeModelNumbers.length > 0)
+        params.excludeModelNumbers = excludeModelNumbers.join(",");
+
+      const res = await api.get("/admin/service-calls/customer-machines/by-serial", { params });
+      const results = res.data.data;
+
+      if (!results.length) {
+        toast.error("No machines found for this serial number");
+        return;
+      }
+
+      setPickerResults(results);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Search failed");
+    } finally {
+      setSearching(false);
+    }
+  }, [serialInput, machines, customerInfo]);
+
+  // Called when user clicks Add on a picker row
+  const addMachineFromPicker = useCallback(async (modelNumber: string) => {
+    const trimmed = serialInput.trim();
+    if (!trimmed) return;
+
+    setSearching(true);
+    try {
+      const res = await api.get("/admin/service-calls/customer-machines/detail", {
+        params: { serialNumber: trimmed, modelNumber },
+      });
+      const detail: MachineDetail = res.data.data;
+
+      if (customerInfo && detail.customerInfo.customerId !== customerInfo.customerId) {
+        toast.error("All machines must belong to the same customer");
+        return;
+      }
+
+      setMachines(prev => [...prev, { detail, problemTypeIds: [], issueDescription: "", images: [], previewUrls: [] }]);
+      // Remove added item from picker list
+      setPickerResults(prev => prev.filter(r => r.modelNumber !== modelNumber));
+      // Clear input and picker if no more results
+      setPickerResults(prev => {
+        if (prev.length === 0) setSerialInput("");
+        return prev;
+      });
+
+      if (!customerInfo) {
+        api.get(`/admin/customers/${detail.customerInfo.customerId}`)
+          .then(res => {
+            const loc = res.data.data?.userLocation;
+            setLiveAddress(loc?.address || res.data.data?.address || null);
+            if (loc?.latitude && loc?.longitude)
+              setCustomerLocation({ address: loc.address, latitude: loc.latitude, longitude: loc.longitude });
+          })
+          .catch(() => {});
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || "Failed to add machine");
+    } finally {
+      setSearching(false);
+    }
+  }, [serialInput, customerInfo]);
 
   const removeMachine = (idx: number) => {
     setMachines(prev => {
@@ -274,7 +354,7 @@ const CustomerMachineDetailPage = () => {
       // Refresh the machine detail
       const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: renewDialog.detail.machine.serialNumber } });
       setMachines(prev => prev.map(m =>
-        m.detail.machine.serialNumber === renewDialog.detail.machine.serialNumber
+        m.detail.machine.serialNumber === renewDialog.detail.machine.serialNumber && m.detail.machine.modelNumber === renewDialog.detail.machine.modelNumber
           ? { ...m, detail: res.data.data }
           : m
       ));
@@ -615,15 +695,33 @@ const CustomerMachineDetailPage = () => {
             ref={serialInputRef}
             placeholder="Search by serial number..."
             value={serialInput}
-            onChange={e => setSerialInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && fetchAndAddMachine(serialInput)}
+            onChange={e => { setSerialInput(e.target.value); setPickerResults([]); }}
+            onKeyDown={e => e.key === "Enter" && searchBySerial()}
             className="pl-9"
           />
         </div>
-        <Button onClick={() => fetchAndAddMachine(serialInput)} disabled={searching || !serialInput.trim()}>
-          {searching ? <Spinner /> : "Add"}
+        <Button onClick={searchBySerial} disabled={searching || !serialInput.trim()}>
+          {searching ? <Spinner /> : "Search"}
         </Button>
       </div>
+
+      {/* Picker results */}
+      {pickerResults.length > 0 && (
+        <div className="border rounded-lg divide-y text-sm">
+          {pickerResults.map((r) => (
+            <div key={`${r.modelNumber}-${r.serialNumber}`} className="flex items-center justify-between px-3 py-2.5 hover:bg-muted/40">
+              <div>
+                <p className="font-medium">{r.machineName}</p>
+                <p className="text-xs text-muted-foreground">Model: <span className="font-mono">{r.modelNumber || "—"}</span> · S/N: <span className="font-mono">{r.serialNumber}</span></p>
+                <p className="text-xs text-muted-foreground">{r.category}{r.division ? ` · ${r.division}` : ""}</p>
+              </div>
+              <Button size="sm" variant="outline" className="shrink-0 ml-3" onClick={() => addMachineFromPicker(r.modelNumber)}>
+                Add
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Machine Cards */}
       {machines.map((entry, idx) => {
@@ -641,6 +739,7 @@ const CustomerMachineDetailPage = () => {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-semibold">{machine.machineName}</p>
+                  <p className="text-xs text-muted-foreground">Model: <span className="font-mono">{machine.modelNumber || "—"}</span></p>
                   <p className="text-xs text-muted-foreground">
                     S/N: <span className="font-mono">{machine.serialNumber}</span>
                     {" · "}{machine.category}{" · "}{machine.division}
@@ -845,6 +944,7 @@ const CustomerMachineDetailPage = () => {
                   <div key={i} className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">{machine.machineName}</p>
+                      <p className="text-xs text-muted-foreground">Model: <span className="font-mono">{machine.modelNumber || "—"}</span></p>
                       <p className="text-xs text-muted-foreground font-mono">{machine.serialNumber} · <span className={isExp ? "text-red-600" : "text-orange-600"}>{isExp ? "Expired" : "Non-free service"}</span></p>
                     </div>
                     <span className="text-sm font-semibold text-green-600">₹{machines[i].serviceCharge}</span>

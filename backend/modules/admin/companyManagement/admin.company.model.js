@@ -7,7 +7,7 @@ const companySchema = new mongoose.Schema(
     address:           { type: String, required: true, trim: true },
     phone:             { type: String, required: true, trim: true },
     email:             { type: String, required: true, trim: true, lowercase: true },
-    gstNumber:         { type: String, trim: true, required: true, unique: true, set: (v) => (v && v.trim() ? v.trim().toUpperCase() : undefined) },
+    gstNumber:         { type: String, trim: true, default: "", unique: true, sparse: true, set: (v) => (v && v.trim() ? v.trim().toUpperCase() : undefined) },
     bankAccountNumber: { type: String, trim: true, default: "" },
     bankName:          { type: String, trim: true, default: "" },
     ifscCode:          { type: String, trim: true, uppercase: true, default: "" },

@@ -137,6 +137,7 @@ const getAll = async (req, res) => {
 const create = async (req, res) => {
   try {
     const { name, phone, email, zone, status, department, pincode, type, contactPersonName, contactPersonPhone, contactPersonDesignation } = req.body;
+    console.log("CREATE CUSTOMER BODY:", JSON.stringify(req.body, null, 2));
     const gstNumber = req.body.gstNumber ? String(req.body.gstNumber).trim().toUpperCase() : "";
 
     let userLocation;
@@ -263,7 +264,7 @@ const update = async (req, res) => {
     const updateData = {};
     if (name      !== undefined) updateData.name      = String(name).trim();
     if (phone     !== undefined) updateData.phone     = String(phone).trim();
-    if (email     !== undefined) updateData.email     = String(email).trim().toLowerCase();
+    if (email     !== undefined && email !== null && String(email).trim() !== "") updateData.email = String(email).trim().toLowerCase();
     if (status    !== undefined) updateData.status    = status;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
     if (userLocation !== undefined) updateData.userLocation = userLocation;

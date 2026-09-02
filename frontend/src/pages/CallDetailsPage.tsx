@@ -11,7 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText, X } from "lucide-react";
+import { ArrowLeft, User, Wrench, Paperclip, UserPlus, UserCog, StickyNote, Flag, Building2, FileText, X, ChevronsUpDown, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState } from "react";
 import Spinner from "@/components/Spinner";
@@ -47,6 +51,7 @@ const CallDetailsPage = () => {
   const [selectedPriority, setSelectedPriority] = useState("");
   const [cancelDialog, setCancelDialog] = useState(false);
 
+  const [selectedSupportiveEngineerIds, setSelectedSupportiveEngineerIds] = useState<string[]>([]);
   const [engineers, setEngineers] = useState<{ _id: string; name: string; isOnline?: boolean; distanceKm?: number; estimatedTimeMin?: number }[]>([]);
   const [companies, setCompanies] = useState<{ _id: string; name: string; gstNumber?: string }[]>([]);
   const [assignDialogLoading, setAssignDialogLoading] = useState(false);
@@ -65,6 +70,7 @@ const CallDetailsPage = () => {
     setSelectedEngineerId(call.engineerInfo?._id || "");
     setSelectedCompanyId((call as any).companyInfo?.companyId || "");
     setCustomerPORef("");
+    setSelectedSupportiveEngineerIds((call as any).supportiveEngineers?.map((e: any) => e._id) || []);
     setAssignDialog(true);
     setAssignDialogLoading(true);
     try {
@@ -130,12 +136,19 @@ const CallDetailsPage = () => {
                   finally { setGeneratingInvoice(false); }
                 }}><FileText className="h-4 w-4" />{generatingInvoice ? "Generating..." : "Generate Invoice"}</Button>
           )}
-          {(call.status === "Open" || call.status === "Assigned") && (
+          {call.status === "Open" && (
           <Button variant="outline" size="sm" className="gap-2" onClick={openAssignDialog}>
-            {call.status === "Open" ? <UserPlus className="h-4 w-4" /> : <UserCog className="h-4 w-4" />}
-            {call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"}
+            <UserPlus className="h-4 w-4" />
+            Assign Engineer
           </Button>
           )}
+          {/* Reassign button — temporarily disabled
+          {call.status === "Assigned" && (
+          <Button variant="outline" size="sm" className="gap-2" onClick={openAssignDialog}>
+            <UserCog className="h-4 w-4" />
+            Reassign Engineer
+          </Button>
+          )} */}
           {call.status !== "Completed" && call.status !== "Cancelled" && (
             <Button variant="outline" size="sm" className="gap-2 border-red-300 text-red-600 hover:bg-red-50" onClick={() => setCancelDialog(true)}>
               <X className="h-4 w-4" /> Mark As Cancelled
@@ -187,6 +200,19 @@ const CallDetailsPage = () => {
                     <div><p className="text-muted-foreground">Phone</p><p className="font-medium">{call.engineerInfo.phone || "N/A"}</p></div>
                     <div><p className="text-muted-foreground">Email</p><p className="font-medium">{call.engineerInfo.email || "N/A"}</p></div>
                   </>
+                )}
+                {(call as any).supportiveEngineers?.length > 0 && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground mb-1">Supportive Engineers</p>
+                    <div className="flex flex-wrap gap-2">
+                      {(call as any).supportiveEngineers.map((e: any) => (
+                        <span key={e._id} className="inline-flex items-center gap-1.5 text-xs bg-muted px-2 py-1 rounded-md font-medium">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                          {e.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             </CardContent>
@@ -754,7 +780,7 @@ const CallDetailsPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={assignDialog} onOpenChange={(o) => { if (!o) { setAssignDialog(false); setCustomerPORef(""); } }}>
+      <Dialog open={assignDialog} onOpenChange={(o) => { if (!o) { setAssignDialog(false); setCustomerPORef(""); setSelectedSupportiveEngineerIds([]); } }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{call.status === "Open" ? "Assign Engineer" : "Reassign Engineer"} — {call.callId}</DialogTitle>
@@ -788,22 +814,123 @@ const CallDetailsPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Select Engineer</Label>
-              <Select value={selectedEngineerId} onValueChange={setSelectedEngineerId}>
-                <SelectTrigger><SelectValue placeholder="Choose engineer" /></SelectTrigger>
-                <SelectContent>
-                  {engineers.map((e) => (
-                    <SelectItem key={e._id} value={e._id}>
-                      <span className="flex items-center gap-2">
-                        <span className={`h-2 w-2 rounded-full shrink-0 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
-                        <span>{e.name}</span>
-                        {e.distanceKm != null && (
-                          <span className="ml-auto text-xs text-muted-foreground">{e.distanceKm} km{e.estimatedTimeMin != null ? ` · ${e.estimatedTimeMin} min` : ""}</span>
-                        )}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" className="w-full justify-between font-normal h-9">
+                    {selectedEngineerId ? (
+                      (() => {
+                        const eng = engineers.find(e => e._id === selectedEngineerId);
+                        return eng ? (
+                          <span className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${eng.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                            <span>{eng.name}</span>
+                          </span>
+                        ) : <span className="text-muted-foreground">Choose engineer</span>;
+                      })()
+                    ) : (
+                      <span className="text-muted-foreground">Choose engineer</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start" onWheel={(e) => e.stopPropagation()}>
+                  <Command>
+                    <CommandInput placeholder="Search engineers..." />
+                    <CommandList className="max-h-52">
+                      <CommandEmpty>No engineers found.</CommandEmpty>
+                      <CommandGroup>
+                        {engineers.map((e) => (
+                          <CommandItem
+                            key={e._id}
+                            value={e.name}
+                            onSelect={() => {
+                              setSelectedEngineerId(e._id);
+                              setSelectedSupportiveEngineerIds(prev => prev.filter(id => id !== e._id));
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4 shrink-0", selectedEngineerId === e._id ? "opacity-100" : "opacity-0")} />
+                            <span className={`h-2 w-2 rounded-full shrink-0 mr-1.5 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                            <span className="flex-1">{e.name}</span>
+                            {e.distanceKm != null && (
+                              <span className="ml-auto text-xs text-muted-foreground">{e.distanceKm} km{e.estimatedTimeMin != null ? ` · ${e.estimatedTimeMin} min` : ""}</span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Supportive Engineers <span className="text-muted-foreground font-normal text-xs">(Optional)</span></Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" role="combobox" disabled={!selectedEngineerId} className="w-full justify-between font-normal min-h-9 h-auto disabled:opacity-50 disabled:cursor-not-allowed">
+                    {selectedSupportiveEngineerIds.length === 0 ? (
+                      <span className="text-muted-foreground">Select supportive engineers...</span>
+                    ) : (
+                      <span className="flex flex-wrap gap-1">
+                        {selectedSupportiveEngineerIds.map((sid) => {
+                          const eng = engineers.find(e => e._id === sid);
+                          return eng ? (
+                            <Badge key={sid} variant="secondary" className="text-xs font-normal gap-1">
+                              {eng.name}
+                              <span
+                                role="button"
+                                className="cursor-pointer hover:text-destructive"
+                                onPointerDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSelectedSupportiveEngineerIds(prev => prev.filter(id => id !== sid));
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </span>
+                            </Badge>
+                          ) : null;
+                        })}
                       </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start" onWheel={(e) => e.stopPropagation()}>
+                  <Command>
+                    <CommandInput placeholder="Search engineers..." />
+                    <CommandList className="max-h-52">
+                      <CommandEmpty>No engineers found.</CommandEmpty>
+                      <CommandGroup>
+                        {engineers.filter(e => e._id !== selectedEngineerId).map((e) => {
+                          const checked = selectedSupportiveEngineerIds.includes(e._id);
+                          return (
+                            <CommandItem
+                              key={e._id}
+                              value={e.name}
+                              onSelect={() =>
+                                setSelectedSupportiveEngineerIds(prev =>
+                                  checked ? prev.filter(id => id !== e._id) : [...prev, e._id]
+                                )
+                              }
+                            >
+                              <Check className={cn("mr-2 h-4 w-4 shrink-0", checked ? "opacity-100" : "opacity-0")} />
+                              <span className={`h-2 w-2 rounded-full shrink-0 mr-1.5 ${e.isOnline ? "bg-green-500" : "bg-gray-300"}`} />
+                              <span className="flex-1">{e.name}</span>
+                              {e.distanceKm != null && (
+                                <span className="ml-auto text-xs text-muted-foreground">{e.distanceKm} km{e.estimatedTimeMin != null ? ` · ${e.estimatedTimeMin} min` : ""}</span>
+                              )}
+                            </CommandItem>
+                          );
+                        })}
+                        {engineers.filter(e => e._id !== selectedEngineerId).length === 0 && (
+                          <p className="text-xs text-muted-foreground px-2 py-3 text-center">No other engineers available</p>
+                        )}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             </>
             )}
@@ -816,7 +943,7 @@ const CallDetailsPage = () => {
                 if (!id) return;
                 setSaving(true);
                 try {
-                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId, customerPORef || undefined);
+                  await serviceCallsApi.assignEngineer(id, selectedEngineerId, selectedCompanyId, customerPORef || undefined, selectedSupportiveEngineerIds.length ? selectedSupportiveEngineerIds : undefined);
                   toast.success(`Engineer assigned to ${call.callId}`);
                   queryClient.invalidateQueries({ queryKey: ["serviceCall", id] });
                   setAssignDialog(false);

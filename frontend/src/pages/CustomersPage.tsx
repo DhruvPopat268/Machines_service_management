@@ -338,7 +338,7 @@ const CustomersPage = () => {
         const fd = new FormData();
         fd.append("name", addForm.name);
         fd.append("phone", addForm.phone);
-        fd.append("email", addForm.email);
+        if (addForm.email) fd.append("email", addForm.email);
         if (addForm.userLocation) fd.append("userLocation", JSON.stringify(addForm.userLocation));
         if (addForm.zone) fd.append("zone", addForm.zone);
         if (addForm.gstNumber) fd.append("gstNumber", addForm.gstNumber.toUpperCase());
@@ -355,6 +355,7 @@ const CustomersPage = () => {
         const { address: _a, profilePhoto: _p, ...rest } = addForm;
         payload = { ...rest, gstNumber: rest.gstNumber.toUpperCase(), zone: rest.zone || undefined, type: rest.type !== "none" ? rest.type : undefined };
         if (!addForm.userLocation) delete payload.userLocation;
+        if (!payload.email) delete payload.email;
       }
       await api.post("/admin/customers", payload);
       toast.success("Customer added successfully");
@@ -379,7 +380,7 @@ const CustomersPage = () => {
         const fd = new FormData();
         fd.append("name", editForm.name);
         fd.append("phone", editForm.phone);
-        fd.append("email", editForm.email);
+        if (editForm.email) fd.append("email", editForm.email);
         if (editForm.userLocation) fd.append("userLocation", JSON.stringify(editForm.userLocation));
         if (editForm.zone) fd.append("zone", editForm.zone);
         if (editForm.gstNumber) fd.append("gstNumber", editForm.gstNumber.toUpperCase());
@@ -396,6 +397,8 @@ const CustomersPage = () => {
         const { address: _a, profilePhoto: _p, ...rest } = editForm;
         payload = { ...rest, gstNumber: rest.gstNumber ? rest.gstNumber.toUpperCase() : "", zone: rest.zone || null, type: rest.type !== "none" ? rest.type : undefined };
         if (!editForm.userLocation) delete payload.userLocation;
+        if (!payload.email) delete payload.email;
+        if (!payload.gstNumber) delete payload.gstNumber;
       }
       await api.patch(`/admin/customers/${editDialog._id}`, payload);
       toast.success("Customer updated successfully");

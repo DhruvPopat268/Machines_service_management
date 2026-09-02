@@ -1,6 +1,6 @@
 const express = require("express");
 const multer  = require("multer");
-const { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice, resendInvoiceEmail } = require("./admin.serviceCall.controller");
+const { getCalls, getCallDetail, assignEngineer, updateCall, getCustomerMachines, getCustomerMachinesBySerial, getCustomerMachineDetail, raiseServiceCall, getServiceCallInvoice, getCounterReadingInvoice, resendInvoiceEmail } = require("./admin.serviceCall.controller");
 const authMiddleware = require("../../../middleware/admin.auth.middleware");
 
 const upload = multer({
@@ -18,6 +18,7 @@ router.use(authMiddleware);
 
 router.post("/raise", upload.any(), raiseServiceCall);
 router.get("/customer-machines", getCustomerMachines);
+router.get("/customer-machines/by-serial", getCustomerMachinesBySerial);
 router.get("/customer-machines/detail", getCustomerMachineDetail);
 router.get("/", getCalls);
 

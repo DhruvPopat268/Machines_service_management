@@ -19,8 +19,10 @@ const validateCreateCompany = ({ name, address, phone, email, gstNumber, status 
     return "Email is required";
   if (!emailRegex.test(email.trim()))
     return "Invalid email format";
-  if (!gstNumber || typeof gstNumber !== "string" || !gstNumber.trim())
-    return "GST number is required";
+  if (gstNumber && gstNumber.trim()) {
+    const gstErr = validateGST(gstNumber.trim());
+    if (gstErr) return gstErr;
+  }
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;

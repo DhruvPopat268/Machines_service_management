@@ -42,6 +42,7 @@ interface MachineEntry {
 
 interface CodesDialogState {
   mi: number;
+  machineId: string;
   machineName: string;
   isParts: boolean;
   quantity: number;
@@ -137,12 +138,12 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     if (isParts) return; // Parts don't need codes, only serial numbers needed
     const qty    = Number(e.quantity) || 0;
     const codes  = e.serialNumbers.length > 0 ? [...e.serialNumbers] : Array.from({ length: qty }, () => "");
-    setCodesDialog({ mi, machineName: e.machine.name, isParts: false, quantity: qty, codes: codes.slice(0, qty), saving: false });
+    setCodesDialog({ mi, machineId: e.machine._id, machineName: e.machine.name, isParts: false, quantity: qty, codes: codes.slice(0, qty), saving: false });
   };
 
   const saveCodes = async () => {
     if (!codesDialog) return;
-    const { mi, codes, quantity, isParts } = codesDialog;
+    const { mi, codes, quantity, isParts, machineId } = codesDialog;
     for (let i = 0; i < quantity; i++) {
       if (!codes[i]?.trim()) { toast.error(`${isParts ? "Part code" : "Serial number"} ${i + 1} is empty`); return; }
     }
@@ -154,7 +155,7 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
     try {
       const endpoint = isParts ? "/admin/purchases/verify-part-codes" : "/admin/purchases/verify-serial-numbers";
       const key      = isParts ? "partCodes" : "serialNumbers";
-      const res      = await api.post(endpoint, { [key]: trimmed });
+      const res      = await api.post(endpoint, { [key]: trimmed, machineId });
       if (!res.data.available) {
         toast.error(`Already exist: ${res.data.duplicates.join(", ")}`);
         setCodesDialog((prev) => prev ? { ...prev, saving: false } : prev);

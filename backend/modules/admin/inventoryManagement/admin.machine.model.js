@@ -20,7 +20,7 @@ const machineSchema = new mongoose.Schema(
 );
 
 machineSchema.index(
-  { name: 1, category: 1, division: 1, modelNumber: 1 },
+  { name: 1, category: 1, modelNumber: 1 },
   { unique: true, sparse: false }
 );
 

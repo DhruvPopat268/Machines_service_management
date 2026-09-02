@@ -211,12 +211,46 @@ const createPurchase = async (req, res) => {
     const allSerialNumbers = machines.flatMap((m) => m.serialNumbers || []).map((s) => s.trim());
 
     if (allSerialNumbers.length > 0) {
-      const unique = new Set(allSerialNumbers.map((s) => s.toUpperCase()));
-      if (unique.size !== allSerialNumbers.length)
-        return abort(400, "Duplicate serial numbers in submitted list");
-      const existing = await PurchasedMachine.findOne({ "machines.serialNumbers.serialNumber": { $in: allSerialNumbers } }).session(session);
-      if (existing)
-        return abort(400, `One or more serial numbers already exist in a purchase record`);
+      // Check duplicates within each machine's own serial list
+      for (const m of machines) {
+        const sns = (m.serialNumbers || []).map(s => s.trim());
+        const unique = new Set(sns.map(s => s.toUpperCase()));
+        if (unique.size !== sns.length)
+          return abort(400, "Duplicate serial numbers in submitted list for the same machine");
+      }
+
+      // Check duplicates across machines with same modelNumber within this request
+      const modelSnMap = new Map(); // modelNumber -> Set of serial numbers
+      for (const m of machines) {
+        const machineDoc = await Machine.findById(m.machineId, { modelNumber: 1 }).lean();
+        if (!machineDoc) continue;
+        const modelNo = machineDoc.modelNumber?.toUpperCase();
+        if (!modelSnMap.has(modelNo)) modelSnMap.set(modelNo, new Set());
+        for (const sn of (m.serialNumbers || [])) {
+          const snUpper = sn.trim().toUpperCase();
+          if (modelSnMap.get(modelNo).has(snUpper))
+            return abort(400, `Duplicate serial number "${sn.trim()}" for model "${machineDoc.modelNumber}" in submitted list`);
+          modelSnMap.get(modelNo).add(snUpper);
+        }
+      }
+
+      // Group serial numbers by modelNumber and check uniqueness per model
+      for (const m of machines) {
+        const sns = (m.serialNumbers || []).map((s) => s.trim()).filter(Boolean);
+        if (!sns.length) continue;
+
+        const machine = await Machine.findById(m.machineId, { modelNumber: 1 }).lean();
+        if (!machine) continue;
+
+        const existing = await PurchasedMachine.findOne({
+          status: "active",
+          "machines.modelNumber": machine.modelNumber,
+          "machines.serialNumbers.serialNumber": { $in: sns },
+        }).session(session);
+
+        if (existing)
+          return abort(400, `One or more serial numbers already exist for model "${machine.modelNumber}"`);
+      }
     }
 
     // ── Build machine entries ──
@@ -334,20 +368,33 @@ const createPurchase = async (req, res) => {
 
 const verifySerialNumbers = async (req, res) => {
   try {
-    const { serialNumbers } = req.body;
+    const { serialNumbers, machineId } = req.body;
     if (!Array.isArray(serialNumbers) || serialNumbers.length === 0)
       return res.status(400).json({ success: false, message: "serialNumbers must be a non-empty array" });
+
+    if (!machineId || !mongoose.isValidObjectId(machineId))
+      return res.status(400).json({ success: false, message: "Valid machineId is required" });
 
     const trimmed = serialNumbers.map((s) => s.trim()).filter(Boolean);
     const unique  = new Set(trimmed.map((s) => s.toUpperCase()));
     if (unique.size !== trimmed.length)
       return res.status(400).json({ success: false, message: "Duplicate serial numbers in submitted list" });
 
+    const machine = await Machine.findById(machineId, { modelNumber: 1 }).lean();
+    if (!machine)
+      return res.status(404).json({ success: false, message: "Machine not found" });
+
     const existing = await PurchasedMachine.find(
-      { "machines.serialNumbers.serialNumber": { $in: trimmed } },
-      { "machines.serialNumbers": 1 }
+      {
+        status: "active",
+        "machines.modelNumber": machine.modelNumber,
+        "machines.serialNumbers.serialNumber": { $in: trimmed },
+      },
+      { "machines.serialNumbers": 1, "machines.modelNumber": 1 }
     );
-    const foundCodes = existing.flatMap((p) => p.machines.flatMap((m) => (m.serialNumbers || []).map(e => e.serialNumber))).map((s) => s.toUpperCase());
+    const foundCodes = existing
+      .flatMap((p) => p.machines.filter((m) => m.modelNumber === machine.modelNumber).flatMap((m) => (m.serialNumbers || []).map((e) => e.serialNumber)))
+      .map((s) => s.toUpperCase());
     const duplicates = trimmed.filter((s) => foundCodes.includes(s.toUpperCase()));
 
     if (duplicates.length > 0)

@@ -325,23 +325,56 @@ const createSale = async (req, res) => {
 
     // Check serial numbers: must exist in purchase as available, must not already be sold
     if (allSerialNumbers.length > 0) {
-      const uniqueSet = new Set(allSerialNumbers.map((s) => s.toUpperCase()));
-      if (uniqueSet.size !== allSerialNumbers.length)
-        return abort(400, "Duplicate serial numbers in submitted list");
+      // Check duplicates within each machine's own serial list
+      for (const m of machines) {
+        const sns = (m.serialNumbers || []).map(e => e.serialNumber.trim());
+        const uniqueSet = new Set(sns.map(s => s.toUpperCase()));
+        if (uniqueSet.size !== sns.length)
+          return abort(400, "Duplicate serial numbers in submitted list for the same machine");
+      }
 
-      const purchaseDocs = await PurchasedMachine.find(
-        { "machines.serialNumbers.serialNumber": { $in: allSerialNumbers } },
-        { "machines.serialNumbers": 1 }
-      ).session(session);
+      // Check duplicates across machines with same modelNumber within this request
+      const modelSnMap = new Map(); // modelNumber -> Set of serial numbers
+      for (const m of machines) {
+        const machineDoc = await Machine.findById(m.machineId, { modelNumber: 1 }).lean();
+        if (!machineDoc) continue;
+        const modelNo = machineDoc.modelNumber?.toUpperCase();
+        if (!modelSnMap.has(modelNo)) modelSnMap.set(modelNo, new Set());
+        for (const sEntry of (m.serialNumbers || [])) {
+          const sn = sEntry.serialNumber.trim().toUpperCase();
+          if (modelSnMap.get(modelNo).has(sn))
+            return abort(400, `Duplicate serial number "${sEntry.serialNumber.trim()}" for model "${machineDoc.modelNumber}" in submitted list`);
+          modelSnMap.get(modelNo).add(sn);
+        }
+      }
 
-      const foundEntries = purchaseDocs.flatMap(p => p.machines.flatMap(m => m.serialNumbers || []));
-      const notInPurchase = allSerialNumbers.filter(sn => !foundEntries.some(e => e.serialNumber.toUpperCase() === sn.toUpperCase()));
-      if (notInPurchase.length > 0)
-        return abort(400, `Serial numbers not found in any purchase: ${notInPurchase.join(", ")}`);
+      for (const m of machines) {
+        const sns = (m.serialNumbers || []).map(e => e.serialNumber.trim()).filter(Boolean);
+        if (!sns.length) continue;
 
-      const alreadySold = allSerialNumbers.filter(sn => foundEntries.some(e => e.serialNumber.toUpperCase() === sn.toUpperCase() && e.status === "sold"));
-      if (alreadySold.length > 0)
-        return abort(400, `Serial numbers already sold: ${alreadySold.join(", ")}`);
+        const machine = await Machine.findById(m.machineId, { modelNumber: 1 }).lean();
+        if (!machine) return abort(404, `Machine "${m.machineId}" not found`);
+
+        const purchaseDocs = await PurchasedMachine.find(
+          {
+            status: "active",
+            "machines.modelNumber": machine.modelNumber,
+            "machines.serialNumbers.serialNumber": { $in: sns },
+          },
+          { "machines.serialNumbers": 1, "machines.modelNumber": 1 }
+        ).session(session);
+
+        const foundEntries = purchaseDocs
+          .flatMap(p => p.machines.filter(me => me.modelNumber === machine.modelNumber).flatMap(me => me.serialNumbers || []));
+
+        const notInPurchase = sns.filter(sn => !foundEntries.some(e => e.serialNumber.toUpperCase() === sn.toUpperCase()));
+        if (notInPurchase.length > 0)
+          return abort(400, `Serial numbers not found in any purchase for model "${machine.modelNumber}": ${notInPurchase.join(", ")}`);
+
+        const alreadySold = sns.filter(sn => foundEntries.some(e => e.serialNumber.toUpperCase() === sn.toUpperCase() && e.status === "sold"));
+        if (alreadySold.length > 0)
+          return abort(400, `Serial numbers already sold: ${alreadySold.join(", ")}`);
+      }
     }
 
     // ── Fetch GST config ──
