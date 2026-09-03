@@ -156,14 +156,21 @@ const getEngineerCallTimeline = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
     const skip     = (pageNum - 1) * limitNum;
 
+    const engineerQuery = {
+      $or: [
+        { "engineerInfo._id": engineerId },
+        { "supportiveEngineers._id": new mongoose.Types.ObjectId(engineerId) },
+      ],
+    };
+
     const [calls, total] = await Promise.all([
-      ServiceCall.find({ "engineerInfo._id": engineerId })
-        .select("callId callType status priority customerInfo.name customerInfo.phone dates onHoldReason")
+      ServiceCall.find(engineerQuery)
+        .select("callId callType status priority customerInfo.name customerInfo.phone supportiveEngineers dates onHoldReason")
         .sort({ "dates.assigned": -1 })
         .skip(skip)
         .limit(limitNum)
         .lean(),
-      ServiceCall.countDocuments({ "engineerInfo._id": engineerId }),
+      ServiceCall.countDocuments(engineerQuery),
     ]);
 
     const callTimelines = calls.map(call => {
@@ -179,12 +186,13 @@ const getEngineerCallTimeline = async (req, res) => {
       ];
 
       return {
-        callId:       call.callId,
-        callType:     call.callType,
-        status:       call.status,
-        priority:     call.priority,
-        customerName: call.customerInfo?.name,
-        customerPhone:call.customerInfo?.phone,
+        callId:            call.callId,
+        callType:          call.callType,
+        status:            call.status,
+        priority:          call.priority,
+        customerName:      call.customerInfo?.name,
+        customerPhone:     call.customerInfo?.phone,
+        supportiveEngineers: (call.supportiveEngineers || []).map(e => ({ _id: e._id, name: e.name })),
         timeline,
       };
     });
@@ -208,7 +216,7 @@ const getAllEngineersCallTimeline = async (req, res) => {
 
     const [calls, total] = await Promise.all([
       ServiceCall.find({ "engineerInfo._id": { $exists: true } })
-        .select("callId callType status priority engineerInfo.name engineerInfo._id dates onHoldReason")
+        .select("callId callType status priority engineerInfo.name engineerInfo._id supportiveEngineers dates onHoldReason")
         .sort({ "dates.assigned": -1 })
         .skip(skip)
         .limit(limitNum)
@@ -228,11 +236,12 @@ const getAllEngineersCallTimeline = async (req, res) => {
         ...(d.cancelled ? [{ label: "Cancelled", date: formatIST(d.cancelled) }] : []),
       ];
       return {
-        callId:       call.callId,
-        callType:     call.callType,
-        status:       call.status,
-        priority:     call.priority,
-        engineerName: call.engineerInfo?.name ?? "",
+        callId:              call.callId,
+        callType:            call.callType,
+        status:              call.status,
+        priority:            call.priority,
+        engineerName:        call.engineerInfo?.name ?? "",
+        supportiveEngineers: (call.supportiveEngineers || []).map(e => ({ _id: e._id, name: e.name })),
         timeline,
       };
     });

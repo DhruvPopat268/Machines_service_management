@@ -390,8 +390,8 @@ const remove = async (req, res) => {
 
 const downloadSample = (req, res) => {
   const ws = xlsx.utils.aoa_to_sheet([
-    ["name", "department", "phone", "email", "zoneName", "address", "pincode", "gstNumber", "type (Jobber/Govt/Pvt/Edun)", "contactPersonName", "contactPersonPhone", "contactPersonDesignation", "totalPurchases", "status (Active/Inactive)"],
-    ["Acme Corp", "Sales", "9800000000", "acme@example.com", "North Zone", "123 Business Park", "400001", "27AABCA1234A1Z5", "Pvt", "John Doe", "9800000001", "Manager", 5, "Active"],
+    ["name", "department", "phone", "email", "zoneName", "pincode", "gstNumber", "type (Jobber/Govt/Pvt/Edun)", "contactPersonName", "contactPersonPhone", "contactPersonDesignation", "totalPurchases", "status (Active/Inactive)"],
+    ["Acme Corp", "Sales", "9800000000", "acme@example.com", "North Zone", "400001", "27AABCA1234A1Z5", "Pvt", "John Doe", "9800000001", "Manager", 5, "Active"],
   ]);
   const wb = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(wb, ws, "Customers");
@@ -564,7 +564,6 @@ const exportCustomers = async (req, res) => {
         phone: c.phone, 
         email: c.email,
         zone: c.zone?.name || "",
-        address: c.userLocation?.address || c.address || "", 
         pincode: c.pincode || "",
         gstNumber: c.gstNumber || "",
         type: c.type || "",
