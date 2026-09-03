@@ -773,7 +773,7 @@ const getPartsMachines = async (req, res) => {
     // Filter for machines that are parts machines (have availableParts > 0) and not product category
     const query = {
       "machines.availableParts": { $gt: 0 },
-      "status": "Active",
+      status: "active",
     };
 
     // Add search filter if provided
@@ -785,6 +785,7 @@ const getPartsMachines = async (req, res) => {
     }
 
     const purchaseRecords = await PurchasedMachine.find(query);
+    console.log(`Found ${purchaseRecords.length} purchase records matching search "${search}"`);
 
     // Group by partCode and aggregate availableParts
     const partCodeMap = new Map(); // partCode -> { machineId, machineName, modelNumber, categoryId, category, divisionId, division, availableQuantity }
