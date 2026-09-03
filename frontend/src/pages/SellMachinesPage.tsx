@@ -6,10 +6,11 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -35,6 +36,7 @@ interface Sale { _id: string; customerInfo: CustomerInfo; machines: SaleMachine[
 interface Stats { totalSales: number; totalMachinesSold: number; avgSaleValue: number; }
 interface Customer { _id: string; name: string; phone: string; email: string; }
 interface Machine { _id: string; name: string; modelNumber: string; currentStock: number; category?: { _id: string; name: string }; }
+interface MachineOption { _id: string; name: string; }
 interface ContractType { _id: string; name: string; code: string; freeService: boolean; freeParts: boolean; }
 interface ActiveCompany { _id: string; name: string; }
 
@@ -88,6 +90,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const [submitting, setSubmitting] = useState(false);
   const [createCustomerDialog, setCreateCustomerDialog] = useState(false);
   const [customerForm, setCustomerForm] = useState({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null as File | null });
+  const [createMachineDialog, setCreateMachineDialog] = useState(false);
+  const [machineCategories, setMachineCategories] = useState<MachineOption[]>([]);
+  const [machineDivisions, setMachineDivisions] = useState<MachineOption[]>([]);
+  const [newMachineForm, setNewMachineForm] = useState({ name: "", modelNumber: "", partCode: "", hsnCode: "", category: "", division: "", lowStockThreshold: "", status: "Active", notes: "" });
+  const [newMachineImages, setNewMachineImages] = useState<File[]>([]);
+  const [creatingMachine, setCreatingMachine] = useState(false);
   const [zones, setZones] = useState<{ label: string; value: string }[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
   const [activePagesCats, setActivePagesCats] = useState<PagesCategory[]>([]);
@@ -168,6 +176,19 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     catch { toast.error("Failed to load companies"); }
   };
 
+  const fetchMachineFormOptions = async () => {
+    try {
+      const [categoriesResponse, divisionsResponse] = await Promise.all([
+        api.get("/admin/machine-categories", { params: { status: "Active", limit: 100 } }),
+        api.get("/admin/machine-divisions", { params: { status: "Active", limit: 100 } }),
+      ]);
+      setMachineCategories(categoriesResponse.data.data);
+      setMachineDivisions(divisionsResponse.data.data);
+    } catch {
+      toast.error("Failed to load machine form options");
+    }
+  };
+
   useEffect(() => {
     if (!customerId) { setOutstanding([]); setOutstandingTotal(0); return; }
     api.get(`/admin/sales/customer/${customerId}/outstanding-due`)
@@ -204,6 +225,49 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Item already added"); return; }
     setEntries((prev) => [...prev, { machine, quantity: "", sellingPriceWithGst: "", discountPercentage: "", availableCodes: [], loadingCodes: false, units: [] }]);
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
+  };
+
+  const resetNewMachineForm = () => {
+    setNewMachineForm({ name: "", modelNumber: "", partCode: "", hsnCode: "", category: "", division: "", lowStockThreshold: "", status: "Active", notes: "" });
+    setNewMachineImages([]);
+  };
+
+  const openCreateMachineDialog = () => {
+    resetNewMachineForm();
+    setCreateMachineDialog(true);
+    fetchMachineFormOptions();
+  };
+
+  const handleCreateMachine = async () => {
+    if (!newMachineForm.name.trim() || !newMachineForm.modelNumber.trim() || !newMachineForm.category || !newMachineForm.division) {
+      toast.error("Name, model number, category and division are required");
+      return;
+    }
+
+    setCreatingMachine(true);
+    try {
+      const formData = new FormData();
+      formData.append("name", newMachineForm.name.trim());
+      formData.append("modelNumber", newMachineForm.modelNumber.trim());
+      formData.append("partCode", newMachineForm.partCode);
+      formData.append("hsnCode", newMachineForm.hsnCode);
+      formData.append("category", newMachineForm.category);
+      formData.append("division", newMachineForm.division);
+      formData.append("lowStockThreshold", newMachineForm.lowStockThreshold || "-1");
+      formData.append("status", newMachineForm.status);
+      formData.append("notes", newMachineForm.notes);
+      newMachineImages.forEach((image) => formData.append("images", image));
+
+      await api.post("/admin/machines", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      await fetchMachines();
+      toast.success("Item created. Record a purchase to add stock before selling it.");
+      setCreateMachineDialog(false);
+      resetNewMachineForm();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create item");
+    } finally {
+      setCreatingMachine(false);
+    }
   };
 
   const removeMachine = (id: string) => setEntries((prev) => prev.filter((e) => e.machine._id !== id));
@@ -567,7 +631,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
               {/* Machine search */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Item</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add Item</Label>
+                  <button type="button" className="text-xs text-primary hover:underline flex items-center gap-1" onClick={openCreateMachineDialog}>
+                    <Plus className="h-3 w-3" /> New
+                  </button>
+                </div>
                 <div className="relative" ref={wrapperRef}>
                   <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
                   <Input ref={machineInputRef} className="pl-8 h-9 text-sm bg-background" placeholder="Search by name..." value={machineSearch}
@@ -1015,6 +1084,46 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCreateCustomerDialog(false); setCustomerForm({ name: "", phone: "", email: "", address: "", zone: "", gstNumber: "", profilePhoto: null }); }} disabled={submitting}>Cancel</Button>
             <Button onClick={handleCreateCustomer} disabled={submitting}>{submitting ? "Creating..." : "Create Customer"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Machine Dialog */}
+      <Dialog open={createMachineDialog} onOpenChange={(open) => { if (!open && !creatingMachine) { setCreateMachineDialog(false); resetNewMachineForm(); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create New Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Basic Information</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Item name" value={newMachineForm.name} onChange={(e) => setNewMachineForm((form) => ({ ...form, name: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Model Number <span className="text-destructive">*</span></Label><Input placeholder="e.g. X200" value={newMachineForm.modelNumber} onChange={(e) => setNewMachineForm((form) => ({ ...form, modelNumber: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Part Code</Label><Input placeholder="e.g. PC001" value={newMachineForm.partCode} onChange={(e) => setNewMachineForm((form) => ({ ...form, partCode: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={newMachineForm.hsnCode} onChange={(e) => setNewMachineForm((form) => ({ ...form, hsnCode: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Low Stock Threshold</Label><Input type="number" min={-1} placeholder="5 or -1 to disable" value={newMachineForm.lowStockThreshold} onChange={(e) => setNewMachineForm((form) => ({ ...form, lowStockThreshold: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Status</Label><Select value={newMachineForm.status} onValueChange={(status) => setNewMachineForm((form) => ({ ...form, status }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Active">Active</SelectItem><SelectItem value="Inactive">Inactive</SelectItem></SelectContent></Select></div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t pt-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Classification</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Category <span className="text-destructive">*</span></Label><Select value={newMachineForm.category} onValueChange={(category) => setNewMachineForm((form) => ({ ...form, category }))}><SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger><SelectContent>{machineCategories.map((category) => <SelectItem key={category._id} value={category._id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label>Division <span className="text-destructive">*</span></Label><Select value={newMachineForm.division} onValueChange={(division) => setNewMachineForm((form) => ({ ...form, division }))}><SelectTrigger><SelectValue placeholder="Select division" /></SelectTrigger><SelectContent>{machineDivisions.map((division) => <SelectItem key={division._id} value={division._id}>{division.name}</SelectItem>)}</SelectContent></Select></div>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-t pt-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Images and Notes</p>
+              <div className="space-y-2"><Label>Images <span className="text-muted-foreground">(up to 5)</span></Label><label className="flex items-center justify-center gap-2 h-20 rounded-md border-2 border-dashed border-muted-foreground/30 cursor-pointer hover:border-primary/50"><ImagePlus className="h-4 w-4 text-muted-foreground" /><span className="text-sm text-muted-foreground">Choose images</span><input type="file" accept=".jpg,.jpeg,.png,.webp,.avif" multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); setNewMachineImages(files.slice(0, 5)); e.target.value = ""; }} /></label>{newMachineImages.length > 0 && <div className="flex flex-wrap gap-2">{newMachineImages.map((image, index) => <span key={`${image.name}-${index}`} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs">{image.name}<button type="button" onClick={() => setNewMachineImages((images) => images.filter((_, imageIndex) => imageIndex !== index))}><X className="h-3 w-3" /></button></span>)}</div>}</div>
+              <div className="space-y-2"><Label>Notes</Label><Textarea placeholder="Any additional notes about this item" value={newMachineForm.notes} onChange={(e) => setNewMachineForm((form) => ({ ...form, notes: e.target.value }))} /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCreateMachineDialog(false); resetNewMachineForm(); }} disabled={creatingMachine}>Cancel</Button>
+            <Button onClick={handleCreateMachine} disabled={creatingMachine}>{creatingMachine ? "Creating..." : "Create Item"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
