@@ -766,54 +766,39 @@ const getPartsStockDebug = async (req, res) => {
 const getPartsMachines = async (req, res) => {
   try {
     const productCategoryId = process.env.PRODUCT_CATEGORY_ID;
-    const { search } = req.query;
+    const searchTerm = req.query.search?.trim().toLowerCase() || "";
 
-    const escaped = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-    // Filter for machines that are parts machines (have availableParts > 0) and not product category
-    const query = {
+    // Fetch all active purchase records that have at least one machine with availableParts > 0
+    const purchaseRecords = await PurchasedMachine.find({
       "machines.availableParts": { $gt: 0 },
       status: "active",
-    };
-
-    // Add search filter if provided
-    if (search?.trim()) {
-      query.$or = [
-        { "machines.machineName": { $regex: escaped, $options: "i" } },
-        { "machines.partCode": { $regex: escaped, $options: "i" } },
-      ];
-    }
-
-    const purchaseRecords = await PurchasedMachine.find(query);
-    console.log(`Found ${purchaseRecords.length} purchase records matching search "${search}"`);
+    }).lean();
 
     // Group by partCode and aggregate availableParts
     const partCodeMap = new Map(); // partCode -> { machineId, machineName, modelNumber, categoryId, category, divisionId, division, availableQuantity }
 
     for (const record of purchaseRecords) {
       for (const machine of record.machines) {
-        // Skip if product category or no available parts
-        if (machine.categoryId?.toString() === productCategoryId) continue;
-        if (machine.availableParts <= 0) continue;
-        if (!machine.machineId) continue;
-        if (!machine.partCode) continue;
+        // Skip product category machines
+        if (productCategoryId && machine.categoryId?.toString() === productCategoryId) continue;
+        // Skip entries with no available stock
+        if ((machine.availableParts ?? 0) <= 0) continue;
+        // Skip entries missing required fields
+        if (!machine.machineId || !machine.partCode) continue;
 
-        // Apply search filter on client side for grouped results
-        if (search?.trim()) {
-          const s = search.trim().toLowerCase();
-          const matchesPartCode   = machine.partCode?.toLowerCase().includes(s) || false;
-          const matchesMachineName = machine.machineName.toLowerCase().includes(s);
+        // Apply search filter per machine entry (consistent for both search and no-search paths)
+        if (searchTerm) {
+          const matchesPartCode    = machine.partCode.toLowerCase().includes(searchTerm);
+          const matchesMachineName = machine.machineName?.toLowerCase().includes(searchTerm) || false;
           if (!matchesPartCode && !matchesMachineName) continue;
         }
 
         const partCode = machine.partCode;
 
         if (partCodeMap.has(partCode)) {
-          // Part code already exists, add to available quantity
-          const existing = partCodeMap.get(partCode);
-          existing.availableQuantity += machine.availableParts;
+          // Aggregate available quantity across multiple purchase records
+          partCodeMap.get(partCode).availableQuantity += machine.availableParts;
         } else {
-          // First time seeing this part code
           partCodeMap.set(partCode, {
             machineId:         machine.machineId,
             machineName:       machine.machineName,
@@ -823,15 +808,13 @@ const getPartsMachines = async (req, res) => {
             divisionId:        machine.divisionId,
             division:          machine.division,
             availableQuantity: machine.availableParts,
-            partCode:          partCode,
+            partCode,
           });
         }
       }
     }
 
-    const parts = [...partCodeMap.values()];
-
-    return res.status(200).json({ success: true, data: parts });
+    return res.status(200).json({ success: true, data: [...partCodeMap.values()] });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

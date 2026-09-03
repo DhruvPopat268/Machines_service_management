@@ -387,8 +387,12 @@ const PurchaseMachineDialog = ({ open, onClose, onSuccess, initialVendorId = "" 
                               <button key={m._id} type="button"
                                 className="w-full text-left px-3 py-2.5 hover:bg-muted flex items-center justify-between focus:bg-muted focus:outline-none"
                                 onClick={() => addMachine(m)} onMouseDown={(e) => e.preventDefault()}>
-                                <span className="text-sm font-medium">{m.name}</span>
-                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{m.category?.name}</span>
+                                <div>
+                                  <p className="text-sm font-medium">{m.name}</p>
+                                  {m.modelNumber && <p className="text-xs text-muted-foreground">Model: {m.modelNumber}</p>}
+                                  {m.partCode && <p className="text-xs text-muted-foreground">Part Code: {m.partCode}</p>}
+                                </div>
+                                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0 ml-2">{m.category?.name}</span>
                               </button>
                             ))}
                     </div>

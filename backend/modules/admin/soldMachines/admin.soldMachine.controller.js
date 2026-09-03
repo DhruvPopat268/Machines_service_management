@@ -96,8 +96,9 @@ const getAvailableMachines = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { name: { $regex: escaped, $options: "i" } },
+          { name:        { $regex: escaped, $options: "i" } },
           { modelNumber: { $regex: escaped, $options: "i" } },
+          { partCode:    { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -105,7 +106,7 @@ const getAvailableMachines = async (req, res) => {
     const machines = await Machine.find(query)
       .populate("category", "_id name")
       .populate("division", "_id name")
-      .select("_id name modelNumber category division stockStatus currentStock")
+      .select("_id name modelNumber partCode category division stockStatus currentStock")
       .lean();
 
     res.status(200).json({ success: true, data: machines });
