@@ -806,11 +806,10 @@ const getServiceCallInvoice = async (req, res) => {
       return res.status(200).json({ success: true, invoiceUrl: call.invoiceUrl, invoiceNumber: call.invoiceNumber });
 
     const Company = require("../companyManagement/admin.company.model");
-    const companyId = call.companyInfo?.companyId;
+    const companyId = call.companyInfo?.companyId?.toString() || "default";
     const company = companyId ? await Company.findById(companyId) : null;
 
     const Counter = require("../auth/counter.model");
-    const companyId = call.companyInfo?.companyId?.toString() || "default";
     const companyFirstChar = (call.companyInfo?.name || "X").charAt(0).toUpperCase();
     const counter = await Counter.findByIdAndUpdate(
       companyId,
@@ -968,11 +967,10 @@ const getCounterReadingInvoice = async (req, res) => {
       return res.status(200).json({ success: true, invoiceUrl: call.invoiceUrl, invoiceNumber: call.invoiceNumber });
 
     const Company = require("../companyManagement/admin.company.model");
-    const companyId = call.companyInfo?.companyId;
+    const companyId = call.companyInfo?.companyId?.toString() || "default";
     const company = companyId ? await Company.findById(companyId) : null;
 
     const Counter = require("../auth/counter.model");
-    const companyId = call.companyInfo?.companyId?.toString() || "default";
     const companyFirstChar = (call.companyInfo?.name || "X").charAt(0).toUpperCase();
     const counter = await Counter.findByIdAndUpdate(
       companyId,

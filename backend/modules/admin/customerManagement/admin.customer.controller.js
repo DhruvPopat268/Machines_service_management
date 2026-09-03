@@ -262,9 +262,14 @@ const update = async (req, res) => {
     if (error) return res.status(400).json({ success: false, message: error });
 
     const updateData = {};
+    const unsetData  = {};
     if (name      !== undefined) updateData.name      = String(name).trim();
     if (phone     !== undefined) updateData.phone     = String(phone).trim();
-    if (email     !== undefined && email !== null && String(email).trim() !== "") updateData.email = String(email).trim().toLowerCase();
+    if (email === null || email === "null") {
+      unsetData.email = "";
+    } else if (email !== undefined && String(email).trim() !== "") {
+      updateData.email = String(email).trim().toLowerCase();
+    }
     if (status    !== undefined) updateData.status    = status;
     if (gstNumber !== undefined) updateData.gstNumber = gstNumber;
     if (userLocation !== undefined) updateData.userLocation = userLocation;
@@ -308,7 +313,7 @@ const update = async (req, res) => {
       }
     }
 
-    if (Object.keys(updateData).length === 0)
+    if (Object.keys(updateData).length === 0 && Object.keys(unsetData).length === 0)
       return res.status(400).json({ success: false, message: "Nothing to update" });
 
     if (updateData.gstNumber) {
@@ -345,7 +350,9 @@ const update = async (req, res) => {
 
     let user;
     try {
-      user = await Customer.findByIdAndUpdate(id, updateData, { new: true, runValidators: true, context: "query" }).populate("zone", "name code");
+      const mongoUpdate = { ...updateData };
+      if (Object.keys(unsetData).length) mongoUpdate.$unset = unsetData;
+      user = await Customer.findByIdAndUpdate(id, mongoUpdate, { new: true, runValidators: false, context: "query" }).populate("zone", "name code");
     } catch (dbErr) {
       if (updateData.profilePhoto) await deleteProfilePhoto(updateData.profilePhoto);
       if (dbErr.code === 11000) {

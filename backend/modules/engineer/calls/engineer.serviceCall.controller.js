@@ -1461,12 +1461,11 @@ const completeCall = async (req, res) => {
 
           const Company = require("../../admin/companyManagement/admin.company.model");
           const Counter = require("../../admin/auth/counter.model");
-          const companyId = updatedCall.companyInfo?.companyId;
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const company   = companyId ? await Company.findById(companyId) : null;
 
           const isCR = updatedCall.callType === "Counter-Reading";
 
-          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
             companyId,
@@ -1691,10 +1690,9 @@ const completeCall = async (req, res) => {
 
           const Company = require("../../admin/companyManagement/admin.company.model");
           const Counter = require("../../admin/auth/counter.model");
-          const companyId = updatedCall.companyInfo?.companyId;
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const company   = companyId ? await Company.findById(companyId) : null;
 
-          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
             companyId,
@@ -1862,11 +1860,10 @@ const completeCall = async (req, res) => {
 
           const Company = require("../../admin/companyManagement/admin.company.model");
           const Counter = require("../../admin/auth/counter.model");
-          const companyId = updatedCall.companyInfo?.companyId;
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const company   = companyId ? await Company.findById(companyId) : null;
 
           const isDisInstallation = updatedCall.callType === "Dis-Installation";
-          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
           const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
             companyId,

@@ -381,6 +381,7 @@ const CustomersPage = () => {
         fd.append("name", editForm.name);
         fd.append("phone", editForm.phone);
         if (editForm.email) fd.append("email", editForm.email);
+        else fd.append("email", "null");
         if (editForm.userLocation) fd.append("userLocation", JSON.stringify(editForm.userLocation));
         if (editForm.zone) fd.append("zone", editForm.zone);
         if (editForm.gstNumber) fd.append("gstNumber", editForm.gstNumber.toUpperCase());
@@ -397,7 +398,7 @@ const CustomersPage = () => {
         const { address: _a, profilePhoto: _p, ...rest } = editForm;
         payload = { ...rest, gstNumber: rest.gstNumber ? rest.gstNumber.toUpperCase() : "", zone: rest.zone || null, type: rest.type !== "none" ? rest.type : undefined };
         if (!editForm.userLocation) delete payload.userLocation;
-        if (!payload.email) delete payload.email;
+        if (!payload.email) payload.email = null;
         if (!payload.gstNumber) delete payload.gstNumber;
       }
       await api.patch(`/admin/customers/${editDialog._id}`, payload);
