@@ -592,9 +592,16 @@ const raiseServiceCall = async (req, res) => {
       const m = parsedMachines[i];
       if (!m.serialNumber?.trim())
         return res.status(400).json({ success: false, message: `serialNumber is required at index ${i}` });
+      if (!m.modelNumber?.trim())
+        return res.status(400).json({ success: false, message: `modelNumber is required at index ${i}` });
       if (!m.issueDescription?.trim())
         return res.status(400).json({ success: false, message: `issueDescription is required at index ${i}` });
     }
+
+    // Duplicate check: same serialNumber + modelNumber combo not allowed twice
+    const snModelKeys = parsedMachines.map(m => `${m.serialNumber.trim()}::${m.modelNumber.trim()}`);
+    if (new Set(snModelKeys).size !== snModelKeys.length)
+      return res.status(400).json({ success: false, message: "Duplicate serialNumber + modelNumber combination found in machines" });
 
     const customer = await Customer.findOne({ _id: customerId, status: "Active" }).populate("zone");
     if (!customer)
@@ -644,13 +651,15 @@ const raiseServiceCall = async (req, res) => {
 
     const machineEntries = [];
     for (let i = 0; i < parsedMachines.length; i++) {
-      const { serialNumber, issueDescription, problemTypeIds = [], serviceCharge } = parsedMachines[i];
+      const { serialNumber, modelNumber, issueDescription, problemTypeIds = [], serviceCharge } = parsedMachines[i];
       const sn = serialNumber.trim();
+      const mn = modelNumber.trim();
 
       let foundMachine = null;
       let foundEntry = null;
       outer: for (const record of soldRecords) {
         for (const machine of record.machines) {
+          if (machine.modelNumber?.trim() !== mn) continue;
           const entry = (machine.serialNumbers || []).find(e => e.serialNumber === sn);
           if (entry) {
             foundMachine = machine;
@@ -661,7 +670,7 @@ const raiseServiceCall = async (req, res) => {
       }
 
       if (!foundMachine)
-        return res.status(404).json({ success: false, message: `Serial number "${sn}" not found for this customer` });
+        return res.status(404).json({ success: false, message: `Machine with serial number "${sn}" and model number "${mn}" not found for this customer` });
 
       if (foundEntry.disInstalled)
         return res.status(400).json({ success: false, message: `Serial number "${sn}" has already been dis-installed and cannot be used for a new call` });

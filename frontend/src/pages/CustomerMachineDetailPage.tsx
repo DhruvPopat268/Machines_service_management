@@ -346,13 +346,14 @@ const CustomerMachineDetailPage = () => {
     try {
       await api.patch("/admin/sales/renew-contract", {
         serialNumber:      renewDialog.detail.machine.serialNumber,
+        modelNumber:       renewDialog.detail.machine.modelNumber,
         newContractTypeId: renewContractTypeId,
         newValidFrom:      renewValidFrom,
         newValidTo:        renewValidTo,
       });
       toast.success("Contract renewed successfully");
       // Refresh the machine detail
-      const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: renewDialog.detail.machine.serialNumber } });
+      const res = await api.get("/admin/service-calls/customer-machines/detail", { params: { serialNumber: renewDialog.detail.machine.serialNumber, modelNumber: renewDialog.detail.machine.modelNumber } });
       setMachines(prev => prev.map(m =>
         m.detail.machine.serialNumber === renewDialog.detail.machine.serialNumber && m.detail.machine.modelNumber === renewDialog.detail.machine.modelNumber
           ? { ...m, detail: res.data.data }
@@ -470,6 +471,7 @@ const CustomerMachineDetailPage = () => {
 
     const machinesPayload = machines.map((m, i) => ({
       serialNumber:     m.detail.machine.serialNumber,
+      modelNumber:      m.detail.machine.modelNumber,
       issueDescription: m.issueDescription.trim(),
       problemTypeIds:   m.problemTypeIds,
       ...(m.serviceCharge !== undefined && { serviceCharge: m.serviceCharge }),
@@ -560,6 +562,7 @@ const CustomerMachineDetailPage = () => {
 
     const machinesPayload = machines.map((m, i) => ({
       serialNumber:     m.detail.machine.serialNumber,
+      modelNumber:      m.detail.machine.modelNumber,
       issueDescription: m.issueDescription.trim(),
       problemTypeIds:   m.problemTypeIds,
       serviceCharge:    Number(charges[i]),

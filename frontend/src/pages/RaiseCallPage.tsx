@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
-import { X, Search, Eye, PhoneCall, RefreshCw } from "lucide-react";
+import { X, Search, PhoneCall, RefreshCw } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/lib/axiosInterceptor";
 
@@ -194,6 +194,7 @@ const RaiseCallPage = () => {
     try {
       await api.patch("/admin/sales/renew-contract", {
         serialNumber:      renewDialog.serialNumber,
+        modelNumber:       renewDialog.modelNumber,
         newContractTypeId: renewContractTypeId,
         newValidFrom:      renewValidFrom,
         newValidTo:        renewValidTo,
@@ -225,6 +226,7 @@ const RaiseCallPage = () => {
     try {
       await api.patch("/admin/sales/add-contract", {
         serialNumber:   addContractDialog.serialNumber,
+        modelNumber:    addContractDialog.modelNumber,
         contractTypeId: addContractTypeId,
         validFrom:      addValidFrom,
         validTo:        addValidTo,
@@ -318,9 +320,6 @@ const RaiseCallPage = () => {
         const isExpired = validToIST ? nowIST > validToIST : false;
         return (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={() => navigate(`/calls/raise/machine?serialNumber=${encodeURIComponent(m.serialNumber)}&modelNumber=${encodeURIComponent(m.modelNumber)}`)}>
-              <Eye className="h-4 w-4" /> View
-            </Button>
             {!m.disInstalled && isExpired && (
               <Button size="sm" variant="destructive" className="h-8 gap-1.5" onClick={() => openRenewDialog(m)}>
                 <RefreshCw className="h-3.5 w-3.5" /> Renew Contract

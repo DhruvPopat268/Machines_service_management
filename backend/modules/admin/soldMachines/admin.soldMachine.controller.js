@@ -908,10 +908,12 @@ const createSale = async (req, res) => {
 
 const renewContract = async (req, res) => {
   try {
-    const { serialNumber, newContractTypeId, newValidFrom, newValidTo } = req.body;
+    const { serialNumber, modelNumber, newContractTypeId, newValidFrom, newValidTo } = req.body;
 
     if (!serialNumber?.trim())
       return res.status(400).json({ success: false, message: "serialNumber is required" });
+    if (!modelNumber?.trim())
+      return res.status(400).json({ success: false, message: "modelNumber is required" });
     if (!mongoose.isValidObjectId(newContractTypeId))
       return res.status(400).json({ success: false, message: "Invalid newContractTypeId" });
 
@@ -940,13 +942,18 @@ const renewContract = async (req, res) => {
     if (!ct) return res.status(404).json({ success: false, message: "Active contract type not found" });
 
     const sn = serialNumber.trim();
+    const mn = modelNumber.trim();
 
     // Check existing contract — block renewal if not expired in IST
-    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": sn });
-    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
+    const soldRecord = await SoldMachine.findOne({
+      "machines.serialNumbers.serialNumber": sn,
+      "machines.modelNumber": mn,
+    });
+    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number and model number not found in any sale" });
 
     let existingValidTo = null;
     outer: for (const machine of soldRecord.machines) {
+      if (machine.modelNumber !== mn) continue;
       for (const entry of (machine.serialNumbers || [])) {
         if (entry.serialNumber === sn) {
           existingValidTo = entry.contractType?.validTo ? new Date(entry.contractType.validTo) : null;
@@ -963,7 +970,7 @@ const renewContract = async (req, res) => {
     }
 
     const result = await SoldMachine.updateOne(
-      { "machines.serialNumbers.serialNumber": sn },
+      { "machines.serialNumbers.serialNumber": sn, "machines.modelNumber": mn },
       {
         $set: {
           "machines.$[outer].serialNumbers.$[inner].contractType": {
@@ -977,7 +984,7 @@ const renewContract = async (req, res) => {
           },
         },
       },
-      { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
+      { arrayFilters: [{ "outer.modelNumber": mn, "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
     );
 
     if (result.modifiedCount === 0)
@@ -991,10 +998,12 @@ const renewContract = async (req, res) => {
 
 const addContract = async (req, res) => {
   try {
-    const { serialNumber, contractTypeId, validFrom, validTo } = req.body;
+    const { serialNumber, modelNumber, contractTypeId, validFrom, validTo } = req.body;
 
     if (!serialNumber?.trim())
       return res.status(400).json({ success: false, message: "serialNumber is required" });
+    if (!modelNumber?.trim())
+      return res.status(400).json({ success: false, message: "modelNumber is required" });
     if (!mongoose.isValidObjectId(contractTypeId))
       return res.status(400).json({ success: false, message: "Invalid contractTypeId" });
 
@@ -1022,13 +1031,18 @@ const addContract = async (req, res) => {
     if (!ct) return res.status(404).json({ success: false, message: "Active contract type not found" });
 
     const sn = serialNumber.trim();
+    const mn = modelNumber.trim();
 
-    // Check if serial number exists and doesn't already have a contract
-    const soldRecord = await SoldMachine.findOne({ "machines.serialNumbers.serialNumber": sn });
-    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number not found in any sale" });
+    // Check if serial number + model number exists and doesn't already have a contract
+    const soldRecord = await SoldMachine.findOne({
+      "machines.serialNumbers.serialNumber": sn,
+      "machines.modelNumber": mn,
+    });
+    if (!soldRecord) return res.status(404).json({ success: false, message: "Serial number and model number not found in any sale" });
 
     let existingContract = null;
     outer: for (const machine of soldRecord.machines) {
+      if (machine.modelNumber !== mn) continue;
       for (const entry of (machine.serialNumbers || [])) {
         if (entry.serialNumber === sn) {
           existingContract = entry.contractType;
@@ -1042,7 +1056,7 @@ const addContract = async (req, res) => {
     }
 
     const result = await SoldMachine.updateOne(
-      { "machines.serialNumbers.serialNumber": sn },
+      { "machines.serialNumbers.serialNumber": sn, "machines.modelNumber": mn },
       {
         $set: {
           "machines.$[outer].serialNumbers.$[inner].contractType": {
@@ -1056,7 +1070,7 @@ const addContract = async (req, res) => {
           },
         },
       },
-      { arrayFilters: [{ "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
+      { arrayFilters: [{ "outer.modelNumber": mn, "outer.serialNumbers.serialNumber": sn }, { "inner.serialNumber": sn }] }
     );
 
     if (result.modifiedCount === 0)

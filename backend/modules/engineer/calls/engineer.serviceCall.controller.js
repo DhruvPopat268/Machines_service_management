@@ -595,17 +595,19 @@ const getChargesSummary = async (req, res) => {
           return res.status(400).json({ success: false, message: `usedParts[${i}]: partCode must be a non-empty string` });
         if (!p.serialNumber || typeof p.serialNumber !== "string" || !p.serialNumber.trim())
           return res.status(400).json({ success: false, message: `usedParts[${i}]: serialNumber is required` });
+        if (!p.modelNumber || typeof p.modelNumber !== "string" || !p.modelNumber.trim())
+          return res.status(400).json({ success: false, message: `usedParts[${i}]: modelNumber is required` });
         if (!Number.isInteger(p.quantity) || p.quantity < 1)
           return res.status(400).json({ success: false, message: `usedParts[${i}]: quantity must be a positive integer` });
         if (isNaN(p.sellingPriceWithGst) || p.sellingPriceWithGst < 0)
           return res.status(400).json({ success: false, message: `usedParts[${i}]: sellingPriceWithGst must be a non-negative number` });
       }
 
-      // Validate partCode uniqueness per serialNumber (same partCode on same serialNumber is not allowed)
-      const partCodeSerialKeys = usedParts.map(p => `${p.serialNumber.trim()}::${p.partCode.trim()}`);
+      // Validate partCode uniqueness per serialNumber+modelNumber combo
+      const partCodeSerialKeys = usedParts.map(p => `${p.serialNumber.trim()}::${p.modelNumber.trim()}::${p.partCode.trim()}`);
       const uniquePartCodeSerialKeys = new Set(partCodeSerialKeys);
       if (uniquePartCodeSerialKeys.size !== partCodeSerialKeys.length)
-        return res.status(400).json({ success: false, message: "usedParts contains duplicate partCode for the same serial number" });
+        return res.status(400).json({ success: false, message: "usedParts contains duplicate partCode for the same serial number and model number" });
     }
 
     const call = await ServiceCall.findById(callId).select("totalServiceCharges status engineerInfo._id machines cgst sgst igst");
@@ -632,14 +634,15 @@ const getChargesSummary = async (req, res) => {
       return res.status(200).json({ success: true, data: { serviceCharges, partsCharges: 0, totalCharges: serviceCharges, cgstPercent, cgstAmount, sgstPercent, sgstAmount, igstPercent, igstAmount, grandTotal } });
     }
 
-    // Build contractType map: serialNumber -> contractType
+    // Build contractType map: serialNumber::modelNumber -> contractType
     const contractMap = new Map();
-    for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
+    for (const m of call.machines) contractMap.set(`${m.serialNumber}::${m.modelNumber}`, m.contractType);
 
-    // Validate each serialNumber belongs to this call
+    // Validate each serialNumber+modelNumber belongs to this call
     for (const p of usedParts) {
-      if (!contractMap.has(p.serialNumber.trim()))
-        return res.status(400).json({ success: false, message: `serialNumber "${p.serialNumber}" does not belong to this call` });
+      const key = `${p.serialNumber.trim()}::${p.modelNumber.trim()}`;
+      if (!contractMap.has(key))
+        return res.status(400).json({ success: false, message: `serialNumber "${p.serialNumber}" with modelNumber "${p.modelNumber}" does not belong to this call` });
     }
 
     const partCodesList = usedParts.map(p => p.partCode.trim());
@@ -679,7 +682,7 @@ const getChargesSummary = async (req, res) => {
     const totalGstPercent = cgstPercent + sgstPercent + igstPercent;
     let partsCharges = 0;
     for (const p of usedParts) {
-      const contract   = contractMap.get(p.serialNumber.trim());
+      const contract   = contractMap.get(`${p.serialNumber.trim()}::${p.modelNumber.trim()}`);
       const validToIST = contract?.validTo ? new Date(new Date(contract.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
       const isExpired  = !validToIST || now > validToIST;
       const basePrice  = parseFloat((p.sellingPriceWithGst / (1 + totalGstPercent / 100)).toFixed(2));
@@ -1030,15 +1033,17 @@ const completeCall = async (req, res) => {
           return abort(400, `usedParts[${i}]: partCode must be a non-empty string`);
         if (!p.serialNumber || typeof p.serialNumber !== "string" || !p.serialNumber.trim())
           return abort(400, `usedParts[${i}]: serialNumber is required`);
+        if (!p.modelNumber || typeof p.modelNumber !== "string" || !p.modelNumber.trim())
+          return abort(400, `usedParts[${i}]: modelNumber is required`);
         if (!Number.isInteger(p.quantity) || p.quantity < 1)
           return abort(400, `usedParts[${i}]: quantity must be a positive integer`);
         if (isNaN(p.sellingPriceWithGst) || p.sellingPriceWithGst < 0)
           return abort(400, `usedParts[${i}]: sellingPriceWithGst must be a non-negative number`);
       }
-      // Validate partCode uniqueness per serialNumber (same partCode on same serialNumber is not allowed)
-      const partCodeSerialKeys = parsedUsedParts.map(p => `${p.serialNumber.trim()}::${p.partCode.trim()}`);
+      // Validate partCode uniqueness per serialNumber+modelNumber combo
+      const partCodeSerialKeys = parsedUsedParts.map(p => `${p.serialNumber.trim()}::${p.modelNumber.trim()}::${p.partCode.trim()}`);
       if (new Set(partCodeSerialKeys).size !== partCodeSerialKeys.length)
-        return abort(400, "usedParts contains duplicate partCode for the same serial number");
+        return abort(400, "usedParts contains duplicate partCode for the same serial number and model number");
     }
 
     // ── Upload images ──
@@ -1056,11 +1061,12 @@ const completeCall = async (req, res) => {
     const variantPartsMap = new Map(); // call variantId -> [usedPart docs]
 
     if (hasUsedParts) {
-      // Validate all serialNumbers exist in this call
-      const callSerialNumbers = new Set(call.machines.map(m => m.serialNumber));
+      // Validate all serialNumber+modelNumber combos exist in this call
+      const callSnModelKeys = new Set(call.machines.map(m => `${m.serialNumber}::${m.modelNumber}`));
       for (const p of parsedUsedParts) {
-        if (!callSerialNumbers.has(p.serialNumber.trim()))
-          return abort(400, `serialNumber "${p.serialNumber}" does not belong to this call`);
+        const key = `${p.serialNumber.trim()}::${p.modelNumber.trim()}`;
+        if (!callSnModelKeys.has(key))
+          return abort(400, `serialNumber "${p.serialNumber}" with modelNumber "${p.modelNumber}" does not belong to this call`);
       }
 
       const partCodesList = parsedUsedParts.map(p => p.partCode.trim());
@@ -1109,9 +1115,9 @@ const completeCall = async (req, res) => {
       for (const [code, info] of partInfoMap)
         partInfoMap.set(code, { ...info, hsnCode: hsnMap.get(info.machineId?.toString()) || "" });
 
-      // Build contractType map: serialNumber -> contractType
+      // Build contractType map: serialNumber::modelNumber -> contractType
       const contractMap = new Map();
-      for (const m of call.machines) contractMap.set(m.serialNumber, m.contractType);
+      for (const m of call.machines) contractMap.set(`${m.serialNumber}::${m.modelNumber}`, m.contractType);
 
       const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
       const cgstPct = call.cgst?.percent ?? 0;
@@ -1122,7 +1128,7 @@ const completeCall = async (req, res) => {
       for (const p of parsedUsedParts) {
         const pc       = p.partCode.trim();
         const info     = partInfoMap.get(pc);
-        const contract = contractMap.get(p.serialNumber.trim());
+        const contract = contractMap.get(`${p.serialNumber.trim()}::${p.modelNumber.trim()}`);
         const validToIST = contract?.validTo ? new Date(new Date(contract.validTo).toLocaleString("en-US", { timeZone: "Asia/Kolkata" })) : null;
         const isExpired  = !validToIST || now > validToIST;
         const basePrice  = parseFloat((p.sellingPriceWithGst / (1 + totalGstPercent / 100)).toFixed(2));
@@ -1227,36 +1233,45 @@ const completeCall = async (req, res) => {
       return abort(500, "TSS_CONTRACT_TYPE_ID is not configured");
 
     if (hasCounterReadings) {
-      const tssSerialSet = new Set(
+      const tssSnModelSet = new Set(
         call.machines
           .filter(m => m.contractType?.contractTypeId?.toString() === TSS_CONTRACT_TYPE_ID)
-          .map(m => m.serialNumber)
+          .map(m => `${m.serialNumber}::${m.modelNumber}`)
           .filter(Boolean)
       );
 
-      // Ensure every TSS serial in the call is present in the submitted counterReadings
-      const submittedSerialSet = new Set(parsedCounterReadings.map(cr => cr.serialNumber).filter(Boolean));
-      for (const sn of tssSerialSet) {
-        if (!submittedSerialSet.has(sn))
-          return abort(400, `counterReadings missing for serial number "${sn}"`);
+      // Ensure every TSS serial+model in the call is present in the submitted counterReadings
+      const submittedSnModelSet = new Set(
+        parsedCounterReadings
+          .filter(cr => cr.serialNumber && cr.modelNumber)
+          .map(cr => `${cr.serialNumber}::${cr.modelNumber}`)
+      );
+      for (const snModel of tssSnModelSet) {
+        if (!submittedSnModelSet.has(snModel))
+          return abort(400, `counterReadings missing for serialNumber::modelNumber "${snModel}"`);
       }
 
       for (const cr of parsedCounterReadings) {
         if (!cr.serialNumber || !Array.isArray(cr.categories) || cr.categories.length === 0)
           return abort(400, `counterReadings entry for serial "${cr.serialNumber}" must have at least one category`);
+        if (!cr.modelNumber || typeof cr.modelNumber !== "string" || !cr.modelNumber.trim())
+          return abort(400, `counterReadings entry for serial "${cr.serialNumber}" must have modelNumber`);
 
-        if (!tssSerialSet.has(cr.serialNumber))
-          return abort(400, `Serial number "${cr.serialNumber}" does not belong to this call or does not have TSS contract type`);
+        const snModelKey = `${cr.serialNumber}::${cr.modelNumber.trim()}`;
+        if (!tssSnModelSet.has(snModelKey))
+          return abort(400, `Serial number "${cr.serialNumber}" with model number "${cr.modelNumber}" does not belong to this call or does not have TSS contract type`);
 
-        // Get costPerPage from SoldMachine for this serial
+        // Get costPerPage from SoldMachine for this serial + model
         const soldRecord = await SoldMachine.findOne(
-          { "machines.serialNumbers.serialNumber": cr.serialNumber },
-          { "machines.serialNumbers.$": 1 }
+          { 
+            "machines.serialNumbers.serialNumber": cr.serialNumber,
+            "machines.modelNumber": cr.modelNumber.trim()
+          },
+          { "machines.$": 1 }
         ).session(session).lean();
 
-        const soldSnEntry = soldRecord?.machines
-          ?.flatMap(m => m.serialNumbers)
-          .find(s => s.serialNumber === cr.serialNumber);
+        const soldMachine = soldRecord?.machines?.[0];
+        const soldSnEntry = soldMachine?.serialNumbers?.find(s => s.serialNumber === cr.serialNumber);
 
         const costPerPageMap = new Map(
           (soldSnEntry?.pagesCategories ?? []).map(pc => [
@@ -1276,6 +1291,7 @@ const completeCall = async (req, res) => {
         const lastCall = await ServiceCall.findOne(
           {
             "machines.serialNumber":              cr.serialNumber,
+            "machines.modelNumber":               cr.modelNumber.trim(),
             "machines.counterReadings.serialNumber": cr.serialNumber,
             callType: "Counter-Reading",
             status:   "Completed",
@@ -1337,7 +1353,12 @@ const completeCall = async (req, res) => {
             };
           }
 
-          counterReadingsMap.set(cr.serialNumber, { serialNumber: cr.serialNumber, categories, minCopies: minCopiesEntry });
+          counterReadingsMap.set(`${cr.serialNumber}::${cr.modelNumber.trim()}`, { 
+            serialNumber: cr.serialNumber, 
+            modelNumber: cr.modelNumber.trim(), 
+            categories, 
+            minCopies: minCopiesEntry 
+          });
         }
       }
     }
@@ -1358,13 +1379,17 @@ const completeCall = async (req, res) => {
     const serviceCallReadingsMap = new Map(); // serialNumber -> [{ pagesCategoryId, pagesCategory, lastReading, lastReadingDate, currentReading, diff }]
 
     if (call.callType === "Service-Call" && Array.isArray(parsedServiceCallReadings) && parsedServiceCallReadings.length > 0) {
-      const callSerialNumbers = new Set(call.machines.map(m => m.serialNumber).filter(Boolean));
+      const callSnModelNumbers = new Set(call.machines.map(m => `${m.serialNumber}::${m.modelNumber}`).filter(Boolean));
 
       for (const entry of parsedServiceCallReadings) {
         if (!entry.serialNumber || typeof entry.serialNumber !== "string")
           return abort(400, "Each serviceCallReading must have a serialNumber");
-        if (!callSerialNumbers.has(entry.serialNumber))
-          return abort(400, `serialNumber "${entry.serialNumber}" does not belong to this call`);
+        if (!entry.modelNumber || typeof entry.modelNumber !== "string" || !entry.modelNumber.trim())
+          return abort(400, "Each serviceCallReading must have a modelNumber");
+        
+        const snModelKey = `${entry.serialNumber}::${entry.modelNumber.trim()}`;
+        if (!callSnModelNumbers.has(snModelKey))
+          return abort(400, `serialNumber "${entry.serialNumber}" with modelNumber "${entry.modelNumber}" does not belong to this call`);
         if (!Array.isArray(entry.categories) || entry.categories.length === 0)
           return abort(400, `serviceCallReading for serial "${entry.serialNumber}" must have at least one category`);
 
@@ -1372,10 +1397,16 @@ const completeCall = async (req, res) => {
         const pagesCategoryMap = new Map(activeCategories.map(pc => [pc._id.toString(), pc.name]));
 
         const lastCall = await ServiceCall.findOne(
-          { "machines.serialNumber": entry.serialNumber, callType: "Service-Call", status: "Completed", _id: { $ne: call._id } },
+          { 
+            "machines.serialNumber": entry.serialNumber, 
+            "machines.modelNumber": entry.modelNumber.trim(),
+            callType: "Service-Call", 
+            status: "Completed", 
+            _id: { $ne: call._id } 
+          },
           { "machines.$": 1, "dates.completed": 1 }
         ).sort({ "dates.completed": -1 }).session(session).lean();
-        const lastMachine = lastCall?.machines?.find(m => m.serialNumber === entry.serialNumber);
+        const lastMachine = lastCall?.machines?.find(m => m.serialNumber === entry.serialNumber && m.modelNumber === entry.modelNumber.trim());
         const lastReadingDate = lastCall?.dates?.completed
           ? (() => { const d = new Date(lastCall.dates.completed); return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(2)}`; })()
           : "";
@@ -1400,19 +1431,20 @@ const completeCall = async (req, res) => {
             diff: current - lastReading,
           });
         }
-        serviceCallReadingsMap.set(entry.serialNumber, categories);
+        serviceCallReadingsMap.set(`${entry.serialNumber}::${entry.modelNumber.trim()}`, categories);
       }
     }
 
     // Build per-machine field updates
     const machineSetFields = {};
     call.machines.forEach((m, idx) => {
+      const snModelKey   = `${m.serialNumber}::${m.modelNumber}`;
       const mParts       = variantPartsMap.get(m.serialNumber) || [];
       const mPartsCharge = Math.round(mParts.reduce((s, p) => s + (p.total ?? 0), 0) * 100) / 100;
       machineSetFields[`machines.${idx}.partsCharge`]         = mPartsCharge;
       machineSetFields[`machines.${idx}.usedParts`]           = mParts;
-      machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(m.serialNumber) ? [counterReadingsMap.get(m.serialNumber)] : [];
-      machineSetFields[`machines.${idx}.serviceCallReadings`] = serviceCallReadingsMap.get(m.serialNumber) ?? [];
+      machineSetFields[`machines.${idx}.counterReadings`]     = counterReadingsMap.has(snModelKey) ? [counterReadingsMap.get(snModelKey)] : [];
+      machineSetFields[`machines.${idx}.serviceCallReadings`] = serviceCallReadingsMap.get(snModelKey) ?? [];
     });
 
     const cgstPercent       = call.cgst?.percent ?? 0;

@@ -15,7 +15,6 @@ import EngineerPerformancePage from "./pages/EngineerPerformancePage";
 import CallsPage from "./pages/CallsPage";
 import RaiseCallPage from "./pages/RaiseCallPage";
 import CustomerMachineDetailPage from "./pages/CustomerMachineDetailPage";
-import CustomerOwnedMachinePage from "./pages/CustomerOwnedMachinePage";
 import CallDetailsPage from "./pages/CallDetailsPage";
 import MachinesPage from "./pages/MachinesPage";
 import AddMachineForm from "./pages/AddMachineForm";
@@ -68,7 +67,6 @@ const App = () => (
             <Route path="/calls/completed"    element={<G k="calls"><CallsPage statusFilter="Completed" title="Completed Calls" description="Resolved service calls" /></G>} />
             <Route path="/calls/cancelled"    element={<G k="calls"><CallsPage statusFilter="Cancelled" title="Cancelled Calls" description="Calls cancelled by customer or admin" /></G>} />
             <Route path="/calls/raise/detail" element={<G k="calls-raise"><CustomerMachineDetailPage /></G>} />
-            <Route path="/calls/raise/machine"element={<G k="calls-raise"><CustomerOwnedMachinePage /></G>} />
             <Route path="/calls/raise"        element={<G k="calls-raise"><RaiseCallPage /></G>} />
             <Route path="/calls/:id"          element={<G k="calls"><CallDetailsPage /></G>} />
 
