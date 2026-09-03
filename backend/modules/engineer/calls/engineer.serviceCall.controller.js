@@ -1466,14 +1466,16 @@ const completeCall = async (req, res) => {
 
           const isCR = updatedCall.callType === "Counter-Reading";
 
-          const counterKey    = isCR ? "counterReadingInvoice" : "serviceCallInvoice";
-          const invoicePrefix = isCR ? "CR-INV" : "SVC-INV";
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
+          const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
-            counterKey,
+            companyId,
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const invoiceNumber = `${invoicePrefix}-${counter.seq}`;
+          const invoiceNumber = isCR
+            ? `T${companyFirstChar}${String(counter.seq).padStart(3, "0")}`
+            : `${companyFirstChar}${String(counter.seq).padStart(3, "0")}`;
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1692,12 +1694,14 @@ const completeCall = async (req, res) => {
           const companyId = updatedCall.companyInfo?.companyId;
           const company   = companyId ? await Company.findById(companyId) : null;
 
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
+          const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
-            "othersInvoice",
+            companyId,
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const invoiceNumber = `OTH-INV-${counter.seq}`;
+          const invoiceNumber = `${companyFirstChar}${String(counter.seq).padStart(3, "0")}`;
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -1862,14 +1866,14 @@ const completeCall = async (req, res) => {
           const company   = companyId ? await Company.findById(companyId) : null;
 
           const isDisInstallation = updatedCall.callType === "Dis-Installation";
-          const counterKey    = isDisInstallation ? "disInstallationInvoice" : "installationInvoice";
-          const invoicePrefix = isDisInstallation ? "DIS-INV" : "INST-INV";
+          const companyId = updatedCall.companyInfo?.companyId?.toString() || "default";
+          const companyFirstChar = (updatedCall.companyInfo?.name || "X").charAt(0).toUpperCase();
           const counter = await Counter.findByIdAndUpdate(
-            counterKey,
+            companyId,
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
           );
-          const invoiceNumber = `${invoicePrefix}-${counter.seq}`;
+          const invoiceNumber = `${companyFirstChar}${String(counter.seq).padStart(3, "0")}`;
 
           const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

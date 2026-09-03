@@ -810,12 +810,14 @@ const getServiceCallInvoice = async (req, res) => {
     const company = companyId ? await Company.findById(companyId) : null;
 
     const Counter = require("../auth/counter.model");
+    const companyId = call.companyInfo?.companyId?.toString() || "default";
+    const companyFirstChar = (call.companyInfo?.name || "X").charAt(0).toUpperCase();
     const counter = await Counter.findByIdAndUpdate(
-      "serviceCallInvoice",
+      companyId,
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
-    const invoiceNumber = `SVC-INV-${counter.seq}`;
+    const invoiceNumber = `${companyFirstChar}${String(counter.seq).padStart(3, "0")}`;
 
     const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -970,12 +972,14 @@ const getCounterReadingInvoice = async (req, res) => {
     const company = companyId ? await Company.findById(companyId) : null;
 
     const Counter = require("../auth/counter.model");
+    const companyId = call.companyInfo?.companyId?.toString() || "default";
+    const companyFirstChar = (call.companyInfo?.name || "X").charAt(0).toUpperCase();
     const counter = await Counter.findByIdAndUpdate(
-      "counterReadingInvoice",
+      companyId,
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
-    const invoiceNumber = `CR-INV-${counter.seq}`;
+    const invoiceNumber = `T${companyFirstChar}${String(counter.seq).padStart(3, "0")}`;
 
     const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
