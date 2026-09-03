@@ -12,6 +12,7 @@ const MachineCategory = require("../machineCategoryManagement/admin.machineCateg
 const MachineDivision = require("../machineDivisionManagement/admin.machineDivision.model");
 const AdminUser = require("../auth/admin.user.model");
 const { validateCreateMachine, validateUpdateMachine, validateImageFile, MAX_IMAGES } = require("./admin.machine.validator");
+const PRODUCT_CATEGORY_ID = process.env.PRODUCT_CATEGORY_ID;
 
 const createdDirs = new Set();
 
@@ -56,15 +57,24 @@ const resolveStockStatus = (currentStock, lowStockThreshold) => {
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const caseInsensitiveRegex = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
 
+const isProductCategory = (category) =>
+  !!PRODUCT_CATEGORY_ID && String(category) === PRODUCT_CATEGORY_ID;
+
 const isMachineDuplicate = async (name, category, modelNumber, excludeId = null) => {
   const query = {
-    name:        caseInsensitiveRegex(name),
     category,
     modelNumber: caseInsensitiveRegex(modelNumber || ""),
   };
+  // Main products must have a unique model number; parts retain name + category + model uniqueness.
+  if (!isProductCategory(category)) query.name = caseInsensitiveRegex(name);
   if (excludeId) query._id = { $ne: excludeId };
   return !!(await Machine.findOne(query));
 };
+
+const duplicateMachineMessage = (category) =>
+  isProductCategory(category)
+    ? "A product with this model number already exists"
+    : "A machine with the same name, category and model number already exists";
 
 const applyImageOrder = (imageOrder, uploadedUrls, keptImages = []) => {
   if (!imageOrder || !imageOrder.length) return [...keptImages, ...uploadedUrls];
@@ -163,7 +173,7 @@ const create = async (req, res) => {
 
     const duplicate = await isMachineDuplicate(name, category, modelNumber);
     if (duplicate)
-      return res.status(409).json({ success: false, message: "A machine with the same name, category, division and model number already exists" });
+      return res.status(409).json({ success: false, message: duplicateMachineMessage(category) });
 
     const files = req.files || [];
     if (files.length > MAX_IMAGES)
@@ -221,7 +231,7 @@ const update = async (req, res) => {
     const dupModel    = modelNumber !== undefined ? modelNumber : machine.modelNumber;
     const duplicate   = await isMachineDuplicate(dupName, dupCategory, dupModel, id);
     if (duplicate)
-      return res.status(409).json({ success: false, message: "A machine with the same name, category, division and model number already exists" });
+      return res.status(409).json({ success: false, message: duplicateMachineMessage(dupCategory) });
 
     const keptImages = existingImages !== undefined
       ? (typeof existingImages === "string" ? JSON.parse(existingImages) : existingImages)
@@ -368,7 +378,10 @@ const importMachines = async (req, res) => {
         rowErrors.push(`Row ${rowNum}: status must be Active or Inactive`); continue;
       }
 
-      const key = `${name.toLowerCase()}||${category.toLowerCase()}||${modelNumber.toLowerCase()}`;
+      const categoryId = catMap[category.toLowerCase()];
+      const key = isProductCategory(categoryId)
+        ? `product||${modelNumber.toLowerCase()}`
+        : `${name.toLowerCase()}||${category.toLowerCase()}||${modelNumber.toLowerCase()}`;
       if (!machineMap.has(key)) machineMap.set(key, { firstRowNum: rowNum, row });
     }
 
@@ -391,15 +404,15 @@ const importMachines = async (req, res) => {
 
       try {
         const modelNumber = String(row.modelnumber || "").trim();
-        const existingMachine = await Machine.findOne({
-          name:        caseInsensitiveRegex(row.name),
-          category:    categoryId,
-          modelNumber: caseInsensitiveRegex(modelNumber),
-        });
+        const existingMachine = await isMachineDuplicate(row.name, categoryId, modelNumber);
 
         if (existingMachine) {
           skipped++;
-          skippedReasons.push(`Row ${rowNum}: machine "${row.name}" already exists`);
+          skippedReasons.push(
+            isProductCategory(categoryId)
+              ? `Row ${rowNum}: product model number "${modelNumber}" already exists`
+              : `Row ${rowNum}: machine "${row.name}" already exists`
+          );
           continue;
         }
 
