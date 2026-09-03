@@ -773,6 +773,7 @@ const getPartsMachines = async (req, res) => {
     // Filter for machines that are parts machines (have availableParts > 0) and not product category
     const query = {
       "machines.availableParts": { $gt: 0 },
+      "status": "Active",
     };
 
     // Add search filter if provided
