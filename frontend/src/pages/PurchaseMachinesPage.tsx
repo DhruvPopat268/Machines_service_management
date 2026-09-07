@@ -650,6 +650,12 @@ const PurchaseMachinesPage = () => {
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
   const [importDialog, setImportDialog]       = useState(false);
+  const [importStep, setImportStep]           = useState<"menu" | "confirm" | "upload">("menu");
+  const [importFile, setImportFile]           = useState<File | null>(null);
+  const [importing, setImporting]             = useState(false);
+  const [isDragging, setIsDragging]           = useState(false);
+  const [importErrors, setImportErrors]       = useState<string[]>([]);
+  const fileInputRef                          = useRef<HTMLInputElement>(null);
   const [cancelDialog, setCancelDialog]       = useState<Purchase | null>(null);
   const [cancelling, setCancelling]           = useState(false);
   const [codesPopup, setCodesPopup]           = useState<{ title: string; isParts: boolean; items: { code: string; status: string }[] } | null>(null);
@@ -749,6 +755,37 @@ const PurchaseMachinesPage = () => {
     } catch {
       toast.error("Failed to download sample file");
     }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!file.name.match(/\.xlsx$/i)) return toast.error("Only .xlsx files are allowed");
+    setImportFile(file);
+  };
+
+  const handleImportUpload = async () => {
+    if (!importFile) return toast.error("Please select a file");
+    setImporting(true);
+    setImportErrors([]);
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await api.post("/admin/purchases/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(res.data.message);
+      setImportDialog(false); setImportStep("menu"); setImportFile(null); setImportErrors([]);
+      fetchPurchases(1);
+    } catch (err: any) {
+      const errors: string[] = err.response?.data?.errors || [];
+      if (errors.length) {
+        setImportErrors(errors);
+        setImportStep("upload");
+      } else {
+        toast.error(err.response?.data?.message || "Import failed");
+      }
+    } finally { setImporting(false); }
   };
 
   const handleExport = async () => {
@@ -1028,22 +1065,92 @@ const PurchaseMachinesPage = () => {
       <PurchaseMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialVendorId(""); navigate("/purchase-machines", { replace: true }); }} onSuccess={() => fetchPurchases(1)} initialVendorId={initialVendorId} />
 
       {/* Import Dialog */}
-      <Dialog open={importDialog} onOpenChange={setImportDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Import Purchases</DialogTitle>
-          </DialogHeader>
-          <div className="py-2 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Download the sample file to see the required format. Fill in your data and use the <span className="font-medium text-foreground">Record Purchase</span> form to submit purchases.
-            </p>
-            <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}>
-              <Download className="h-4 w-4" /> Download Sample File
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setImportDialog(false)}>Close</Button>
-          </DialogFooter>
+      <Dialog open={importDialog} onOpenChange={(open) => { if (!open) { setImportDialog(false); setImportStep("menu"); setImportFile(null); setImportErrors([]); } }}>
+        <DialogContent className={importErrors.length > 0 ? "max-w-2xl" : "max-w-md"}>
+          {importStep === "menu" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Import Purchases</DialogTitle>
+              </DialogHeader>
+              <div className="flex flex-col gap-3 py-4">
+                <p className="text-sm text-muted-foreground">Download the sample file, fill in your data, then upload.</p>
+                <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}><Download className="h-4 w-4" /> Download Sample File</Button>
+                <Button className="gap-2 w-full" onClick={() => setImportStep("confirm")}><Upload className="h-4 w-4" /> Upload File</Button>
+              </div>
+              <DialogFooter><Button variant="outline" onClick={() => setImportDialog(false)}>Close</Button></DialogFooter>
+            </>
+          )}
+          {importStep === "confirm" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Confirm Format</DialogTitle>
+              </DialogHeader>
+              <div className="py-4 space-y-3">
+                <p className="text-sm text-muted-foreground">Please confirm you have checked the sample file and your data matches the required format before uploading.</p>
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 space-y-1">
+                  <p className="font-semibold">Required columns:</p>
+                  <p>invoiceNumber, vendorPhone, itemName, modelNumber, quantity, buyingPriceWithGst, serialNumbers</p>
+                  <p className="mt-1">• Rows with same invoiceNumber = one purchase record</p>
+                  <p>• serialNumbers: comma-separated for products, blank for parts</p>
+                  <p>• Any error will cancel the entire import</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setImportStep("menu")}>Back</Button>
+                <Button onClick={() => setImportStep("upload")}>Yes, I Checked — Continue</Button>
+              </DialogFooter>
+            </>
+          )}
+          {importStep === "upload" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Select File</DialogTitle>
+              </DialogHeader>
+              <div className="py-4 space-y-4">
+                {importErrors.length === 0 ? (
+                  <>
+                    <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) setImportFile(f); }} />
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Upload .xlsx file — click or drag and drop"
+                      onClick={() => fileInputRef.current?.click()}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={handleDrop}
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors ${
+                        isDragging ? "border-primary bg-primary/5" : importFile ? "border-primary/50 bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50"
+                      }`}
+                    >
+                      <Upload className={`h-8 w-8 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+                      {importFile ? (
+                        <><p className="text-sm font-medium text-primary">{importFile.name}</p><p className="text-xs text-muted-foreground">Click or drop to replace</p></>
+                      ) : (
+                        <><p className="text-sm font-medium">{isDragging ? "Drop your file here" : "Drag & drop your .xlsx file here"}</p><p className="text-xs text-muted-foreground">or click to browse</p></>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 space-y-2">
+                    <p className="text-sm font-semibold text-red-900">Import Failed — {importErrors.length} error{importErrors.length !== 1 ? "s" : ""} found</p>
+                    <div className="max-h-64 overflow-y-auto space-y-1">
+                      {importErrors.map((err, i) => (
+                        <p key={i} className="text-xs text-red-800 flex gap-2">
+                          <span className="flex-shrink-0">•</span>
+                          <span className="break-words">{err}</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setImportStep("confirm"); setImportErrors([]); }} disabled={importing}>Back</Button>
+                <Button onClick={handleImportUpload} disabled={!importFile || importing || importErrors.length > 0}>{importing ? "Importing..." : "Import"}</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

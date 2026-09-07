@@ -661,4 +661,371 @@ const downloadSample = (req, res) => {
   res.send(buf);
 };
 
-module.exports = { getAll, getById, createPurchase, cancelPurchase, verifySerialNumbers, exportToExcel, downloadSample };
+const importPurchases = async (req, res) => {
+  try {
+    // ── Step 1: File validation ───────────────────────────────────────────────
+    if (!req.file)
+      return res.status(400).json({ success: false, message: "No file uploaded" });
+    if (!req.file.originalname.match(/\.xlsx$/i))
+      return res.status(400).json({ success: false, message: "Only .xlsx files are allowed" });
+
+    const wb   = xlsx.read(req.file.buffer, { type: "buffer" });
+    const rows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+
+    if (!rows.length)
+      return res.status(400).json({ success: false, message: "File is empty" });
+
+    // Normalize headers
+    const headers = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
+    const required = ["invoicenumber", "vendorphone", "itemname", "modelnumber", "quantity", "buyingpricewithgst"];
+    const missing  = required.filter((h) => !headers.some((fh) => fh === h || fh.startsWith(h)));
+    if (missing.length)
+      return res.status(400).json({ success: false, message: `Missing required columns: ${missing.join(", ")}` });
+
+    // Find actual header keys (handles long header names like "serialNumbers (comma-separated...)")
+    const findHeader = (prefix) => headers.find((h) => h === prefix || h.startsWith(prefix)) ?? prefix;
+    const H = {
+      invoiceNumber:    findHeader("invoicenumber"),
+      vendorPhone:      findHeader("vendorphone"),
+      itemName:         findHeader("itemname"),
+      modelNumber:      findHeader("modelnumber"),
+      quantity:         findHeader("quantity"),
+      buyingPriceWithGst: findHeader("buyingpricewithgst"),
+      serialNumbers:    findHeader("serialnumbers"),
+    };
+
+    // Normalize all rows
+    const normalized = rows.map((row) =>
+      Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), typeof v === "string" ? v.trim() : v]))
+    );
+
+    // ── Step 2: Row-level validation (no DB) ─────────────────────────────────
+    const errors = [];
+
+    for (let i = 0; i < normalized.length; i++) {
+      const row    = normalized[i];
+      const rowNum = i + 2; // Excel row number (1-indexed + header row)
+
+      const invoiceNumber    = String(row[H.invoiceNumber]    || "").trim();
+      const vendorPhone      = String(row[H.vendorPhone]      || "").trim();
+      const itemName         = String(row[H.itemName]         || "").trim();
+      const modelNumber      = String(row[H.modelNumber]      || "").trim();
+      const quantityRaw      = row[H.quantity];
+      const buyingPriceRaw   = row[H.buyingPriceWithGst];
+      const serialNumbersRaw = String(row[H.serialNumbers]   || "").trim();
+
+      if (!invoiceNumber)                    errors.push(`Row ${rowNum}: invoiceNumber is required`);
+      else if (invoiceNumber.length > 100)   errors.push(`Row ${rowNum}: invoiceNumber must not exceed 100 characters`);
+      if (!vendorPhone)                      errors.push(`Row ${rowNum}: vendorPhone is required`);
+      if (!itemName)                         errors.push(`Row ${rowNum}: itemName is required`);
+      if (!modelNumber)                      errors.push(`Row ${rowNum}: modelNumber is required`);
+
+      const quantity = Number(quantityRaw);
+      if (!quantityRaw && quantityRaw !== 0) errors.push(`Row ${rowNum}: quantity is required`);
+      else if (!Number.isInteger(quantity) || quantity <= 0) errors.push(`Row ${rowNum}: quantity must be a positive integer`);
+
+      const buyingPrice = Number(buyingPriceRaw);
+      if (buyingPriceRaw === "" || buyingPriceRaw === undefined) errors.push(`Row ${rowNum}: buyingPriceWithGst is required`);
+      else if (isNaN(buyingPrice) || buyingPrice < 0) errors.push(`Row ${rowNum}: buyingPriceWithGst must be a non-negative number`);
+
+      // Serial numbers format check (detailed DB check comes in Step 4)
+      if (serialNumbersRaw && Number.isInteger(quantity) && quantity > 0) {
+        const sns = serialNumbersRaw.split(",").map((s) => s.trim()).filter(Boolean);
+        if (sns.length !== quantity)
+          errors.push(`Row ${rowNum}: serialNumbers count (${sns.length}) does not match quantity (${quantity})`);
+        const unique = new Set(sns.map((s) => s.toUpperCase()));
+        if (unique.size !== sns.length)
+          errors.push(`Row ${rowNum}: serialNumbers contains duplicates`);
+      }
+    }
+
+    if (errors.length)
+      return res.status(400).json({ success: false, message: "Import validation failed", errors });
+
+    // ── Step 3: Group by invoiceNumber ────────────────────────────────────────
+    const groups = new Map(); // invoiceNumber (lowercase) -> { invoiceNumber, rows[] }
+    for (const row of normalized) {
+      const key = String(row[H.invoiceNumber]).trim().toLowerCase();
+      if (!groups.has(key)) groups.set(key, { invoiceNumber: String(row[H.invoiceNumber]).trim(), rows: [] });
+      groups.get(key).rows.push(row);
+    }
+
+    // ── Step 3b: Cross-row checks per group ───────────────────────────────────
+    for (const [, group] of groups) {
+      const { invoiceNumber, rows: gRows } = group;
+
+      // All rows in group must have same vendorPhone
+      const phones = [...new Set(gRows.map((r) => String(r[H.vendorPhone] || "").trim()))];
+      if (phones.length > 1)
+        errors.push(`Invoice "${invoiceNumber}": all rows must have the same vendorPhone (found: ${phones.join(", ")})`);
+
+      // No duplicate itemName+modelNumber within same group
+      const itemKeys = gRows.map((r) => `${String(r[H.itemName] || "").trim().toLowerCase()}||${String(r[H.modelNumber] || "").trim().toLowerCase()}`);
+      const uniqueItemKeys = new Set(itemKeys);
+      if (uniqueItemKeys.size !== itemKeys.length)
+        errors.push(`Invoice "${invoiceNumber}": duplicate item+modelNumber found in the same invoice group`);
+
+      // No duplicate serial numbers across rows in same group
+      const allSns = [];
+      for (const r of gRows) {
+        const snRaw = String(r[H.serialNumbers] || "").trim();
+        if (!snRaw) continue;
+        const sns = snRaw.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+        for (const sn of sns) {
+          if (allSns.includes(sn))
+            errors.push(`Invoice "${invoiceNumber}": duplicate serial number "${sn}" across rows`);
+          else allSns.push(sn);
+        }
+      }
+    }
+
+    if (errors.length)
+      return res.status(400).json({ success: false, message: "Import validation failed", errors });
+
+    // ── Step 4: DB lookups & validations ──────────────────────────────────────
+    const escapeRegex  = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const ciRegex      = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
+
+    // Pre-fetch GST config once
+    const gstConfig   = await GstConfig.findOne().lean();
+    const totalGst    = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
+    const gstDivisor  = 1 + totalGst / 100;
+    const gstConfigData = {
+      cgst: gstConfig?.cgst || 0,
+      sgst: gstConfig?.sgst || 0,
+      igst: gstConfig?.igst || 0,
+      totalGst,
+    };
+
+    // Validated groups ready for creation
+    const validGroups = [];
+
+    for (const [, group] of groups) {
+      const { invoiceNumber, rows: gRows } = group;
+      const vendorPhone = String(gRows[0][H.vendorPhone] || "").trim();
+
+      // Invoice uniqueness check
+      const existingInvoice = await PurchasedMachine.findOne({
+        invoiceNumber: ciRegex(invoiceNumber),
+      }).lean();
+      if (existingInvoice) {
+        errors.push(`Invoice "${invoiceNumber}": invoice number already exists`);
+        continue;
+      }
+
+      // Vendor lookup
+      const vendor = await Vendor.findOne({ phone: vendorPhone }).lean();
+      if (!vendor) {
+        errors.push(`Invoice "${invoiceNumber}": vendor not found for phone "${vendorPhone}"`);
+        continue;
+      }
+      if (vendor.status === "Inactive") {
+        errors.push(`Invoice "${invoiceNumber}": vendor "${vendor.companyName}" is inactive`);
+        continue;
+      }
+
+      const vendorInfo = {
+        vendorId:    vendor._id,
+        name:        vendor.name,
+        phone:       vendor.phone,
+        email:       vendor.email || "",
+        companyName: vendor.companyName,
+        gstNumber:   vendor.gstNumber || "",
+      };
+
+      // Per-row machine lookups
+      const machineEntries = [];
+      let groupHasError    = false;
+
+      for (let ri = 0; ri < gRows.length; ri++) {
+        const row       = gRows[ri];
+        const rowNum    = normalized.indexOf(row) + 2;
+        const itemName  = String(row[H.itemName]    || "").trim();
+        const modelNum  = String(row[H.modelNumber] || "").trim();
+        const quantity  = Number(row[H.quantity]);
+        const buyPrice  = Number(row[H.buyingPriceWithGst]);
+        const snRaw     = String(row[H.serialNumbers] || "").trim();
+
+        const machine = await Machine.findOne({
+          name:        ciRegex(itemName),
+          modelNumber: ciRegex(modelNum),
+        }).populate("category", "name").populate("division", "name").lean();
+
+        if (!machine) {
+          errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: machine "${itemName}" with model "${modelNum}" not found`);
+          groupHasError = true; continue;
+        }
+        if (machine.status === "Inactive") {
+          errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: machine "${itemName}" is inactive`);
+          groupHasError = true; continue;
+        }
+
+        const isParts = machine.category?._id?.toString() !== PRODUCT_CATEGORY_ID;
+
+        if (!isParts) {
+          // Product machine — serial numbers required
+          if (!snRaw) {
+            errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: serialNumbers are required for product machine "${itemName}"`);
+            groupHasError = true; continue;
+          }
+          const sns = snRaw.split(",").map((s) => s.trim()).filter(Boolean);
+
+          // DB check: serial numbers must not already exist in any active purchase
+          const existing = await PurchasedMachine.findOne({
+            status: "active",
+            "machines.modelNumber": ciRegex(machine.modelNumber),
+            "machines.serialNumbers.serialNumber": { $in: sns },
+          }).lean();
+          if (existing) {
+            const existingSns = existing.machines
+              .flatMap((m) => m.serialNumbers || [])
+              .filter((e) => sns.map((s) => s.toUpperCase()).includes(e.serialNumber.toUpperCase()))
+              .map((e) => e.serialNumber);
+            errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: serial number(s) already exist in purchases: ${existingSns.join(", ")}`);
+            groupHasError = true; continue;
+          }
+
+          const buyBase        = Math.round((buyPrice / gstDivisor) * 100) / 100;
+          const gstPerUnit     = Math.round((buyPrice - buyBase) * 100) / 100;
+          const totalWithGst   = Math.round(buyPrice * quantity * 100) / 100;
+          const totalBase      = Math.round(buyBase * quantity);
+          const gstTotal       = Math.round((totalWithGst - totalBase) * 100) / 100;
+
+          machineEntries.push({
+            machineId:          machine._id,
+            machineName:        machine.name,
+            modelNumber:        machine.modelNumber || "",
+            partCode:           machine.partCode || "",
+            categoryId:         machine.category?._id || null,
+            category:           machine.category?.name || "",
+            divisionId:         machine.division?._id || null,
+            division:           machine.division?.name || "",
+            quantity,
+            buyingPriceWithGst: buyPrice,
+            buyingPriceBase:    buyBase,
+            gstAmountPerUnit:   gstPerUnit,
+            buyingTotalWithGst: totalWithGst,
+            buyingTotalBase:    totalBase,
+            gstAmountTotal:     gstTotal,
+            serialNumbers:      sns.map((s) => ({ serialNumber: s, status: "available" })),
+          });
+        } else {
+          // Parts machine — serial numbers must be blank
+          if (snRaw) {
+            errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: serialNumbers must be empty for parts machine "${itemName}"`);
+            groupHasError = true; continue;
+          }
+
+          const buyBase        = Math.round((buyPrice / gstDivisor) * 100) / 100;
+          const gstPerUnit     = Math.round((buyPrice - buyBase) * 100) / 100;
+          const totalWithGst   = Math.round(buyPrice * quantity * 100) / 100;
+          const totalBase      = Math.round(buyBase * quantity);
+          const gstTotal       = Math.round((totalWithGst - totalBase) * 100) / 100;
+
+          machineEntries.push({
+            machineId:          machine._id,
+            machineName:        machine.name,
+            modelNumber:        machine.modelNumber || "",
+            partCode:           machine.partCode || "",
+            categoryId:         machine.category?._id || null,
+            category:           machine.category?.name || "",
+            divisionId:         machine.division?._id || null,
+            division:           machine.division?.name || "",
+            quantity,
+            buyingPriceWithGst: buyPrice,
+            buyingPriceBase:    buyBase,
+            gstAmountPerUnit:   gstPerUnit,
+            buyingTotalWithGst: totalWithGst,
+            buyingTotalBase:    totalBase,
+            gstAmountTotal:     gstTotal,
+            availableParts:     quantity,
+            soldParts:          0,
+          });
+        }
+      }
+
+      if (groupHasError) continue;
+
+      // Compute grand totals
+      const grandTotalWithGst   = Math.round(machineEntries.reduce((s, e) => s + e.buyingTotalWithGst, 0) * 100) / 100;
+      const grandTotalBase      = Math.round(machineEntries.reduce((s, e) => s + e.buyingTotalBase, 0));
+      const grandTotalGstAmount = Math.round((grandTotalWithGst - grandTotalBase) * 100) / 100;
+
+      validGroups.push({ invoiceNumber, vendorInfo, machineEntries, grandTotalWithGst, grandTotalBase, grandTotalGstAmount });
+    }
+
+    // ── Gate: if any errors found → reject entire import ─────────────────────
+    if (errors.length)
+      return res.status(400).json({ success: false, message: "Import validation failed", errors });
+
+    // ── Step 5: Create all purchase records ───────────────────────────────────
+    let imported = 0;
+
+    for (const group of validGroups) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+      try {
+        const { invoiceNumber, vendorInfo, machineEntries, grandTotalWithGst, grandTotalBase, grandTotalGstAmount } = group;
+
+        const [purchase] = await PurchasedMachine.create(
+          [{ invoiceNumber, vendorInfo, gstConfig: gstConfigData, machines: machineEntries, grandTotalWithGst, grandTotalBase, grandTotalGstAmount }],
+          { session }
+        );
+
+        // Increment stock for each machine
+        for (const e of machineEntries) {
+          const machine  = await Machine.findById(e.machineId).session(session);
+          const newStock = (machine?.currentStock || 0) + e.quantity;
+          await Machine.findByIdAndUpdate(
+            e.machineId,
+            { currentStock: newStock, stockStatus: resolveStockStatus(newStock, machine?.lowStockThreshold ?? -1) },
+            { session }
+          );
+        }
+
+        // Create inventory log
+        await InventoryLog.create(
+          [{
+            action: "purchased",
+            vendorInfo,
+            purchaseId: purchase._id,
+            machines: machineEntries.map((e) => ({
+              machineId:     e.machineId,
+              machineName:   e.machineName,
+              modelNumber:   e.modelNumber,
+              partCode:      e.partCode,
+              categoryId:    e.categoryId,
+              category:      e.category,
+              divisionId:    e.divisionId,
+              division:      e.division,
+              quantity:      e.quantity,
+              serialNumbers: (e.serialNumbers || []).map((s) => s.serialNumber),
+            })),
+          }],
+          { session }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+        imported++;
+      } catch (err) {
+        await session.abortTransaction();
+        session.endSession();
+        errors.push(`Invoice "${group.invoiceNumber}": failed to create — ${err.message}`);
+      }
+    }
+
+    if (errors.length)
+      return res.status(400).json({ success: false, message: "Some purchases failed to create", errors });
+
+    return res.status(200).json({
+      success: true,
+      message: `${imported} purchase${imported !== 1 ? "s" : ""} imported successfully`,
+      imported,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+module.exports = { getAll, getById, createPurchase, cancelPurchase, verifySerialNumbers, exportToExcel, downloadSample, importPurchases };
