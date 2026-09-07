@@ -67,7 +67,7 @@ const buildServiceCallReadingInfo = async (calls) => {
       if (!m.serialNumber) return m;
 
       const lastCall = await ServiceCall.findOne(
-        { "machines.serialNumber": m.serialNumber, callType: "Service-Call", status: "Completed", _id: { $ne: call._id } },
+        { "machines.serialNumber": m.serialNumber, "machines.modelNumber": m.modelNumber, callType: "Service-Call", status: "Completed", _id: { $ne: call._id } },
         { "machines.$": 1, "dates.completed": 1 }
       ).sort({ "dates.completed": -1 }).lean();
       const lastMachine = lastCall?.machines?.find(lm => lm.serialNumber === m.serialNumber);
@@ -112,7 +112,7 @@ const buildCounterReadingInfo = async (calls) => {
       if (!sn || machine.contractType?.contractTypeId?.toString() !== TSS_CONTRACT_TYPE_ID) continue;
 
       const soldRecord = await SoldMachine.findOne(
-        { "machines.serialNumbers.serialNumber": sn },
+        { "machines.serialNumbers.serialNumber": sn, status: "active" },
         { "machines.serialNumbers.$": 1 }
       ).lean();
 
@@ -133,6 +133,7 @@ const buildCounterReadingInfo = async (calls) => {
         {
           "machines.serialNumber":                sn,
           "machines.counterReadings.serialNumber": sn,
+          "machines.modelNumber":                 machine.modelNumber,
           callType: "Counter-Reading",
           status:   "Completed",
           _id:      { $ne: call._id },
@@ -1250,7 +1251,8 @@ const completeCall = async (req, res) => {
         const soldRecord = await SoldMachine.findOne(
           { 
             "machines.serialNumbers.serialNumber": cr.serialNumber,
-            "machines.modelNumber": cr.modelNumber.trim()
+            "machines.modelNumber": cr.modelNumber.trim(),
+            status: "active",
           },
           { "machines.$": 1 }
         ).session(session).lean();
