@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, XCircle, ImagePlus } from "lucide-react";
+import { ShoppingBag, Eye, Plus, Trash2, Search, X, Info, Package, Download, Hash, XCircle, ImagePlus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -649,6 +649,7 @@ const PurchaseMachinesPage = () => {
   const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen]           = useState(false);
   const [exportDialog, setExportDialog]       = useState(false);
+  const [importDialog, setImportDialog]       = useState(false);
   const [cancelDialog, setCancelDialog]       = useState<Purchase | null>(null);
   const [cancelling, setCancelling]           = useState(false);
   const [codesPopup, setCodesPopup]           = useState<{ title: string; isParts: boolean; items: { code: string; status: string }[] } | null>(null);
@@ -735,6 +736,18 @@ const PurchaseMachinesPage = () => {
       toast.error(err.response?.data?.message || "Failed to cancel purchase");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleDownloadSample = async () => {
+    try {
+      const res = await api.get("/admin/purchases/sample", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = "purchases_sample.xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download sample file");
     }
   };
 
@@ -841,6 +854,7 @@ const PurchaseMachinesPage = () => {
       {loading ? <Spinner /> : (
         <>
           <PageHeader title="Purchase Items" description="Record and manage item purchases from vendors" actionLabel="Purchase Item" actionIcon={ShoppingBag} onAction={() => { setInitialVendorId(""); setDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" onClick={() => setImportDialog(true)}><Upload className="h-4 w-4" /> Import</Button>
             <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
 
@@ -1012,6 +1026,26 @@ const PurchaseMachinesPage = () => {
       )}
 
       <PurchaseMachineDialog open={dialogOpen} onClose={() => { setDialogOpen(false); setInitialVendorId(""); navigate("/purchase-machines", { replace: true }); }} onSuccess={() => fetchPurchases(1)} initialVendorId={initialVendorId} />
+
+      {/* Import Dialog */}
+      <Dialog open={importDialog} onOpenChange={setImportDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Import Purchases</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Download the sample file to see the required format. Fill in your data and use the <span className="font-medium text-foreground">Record Purchase</span> form to submit purchases.
+            </p>
+            <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}>
+              <Download className="h-4 w-4" /> Download Sample File
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={exportDialog} onOpenChange={setExportDialog}>
         <DialogContent>

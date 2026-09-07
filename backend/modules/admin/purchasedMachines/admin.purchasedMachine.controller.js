@@ -623,4 +623,39 @@ const cancelPurchase = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createPurchase, cancelPurchase, verifySerialNumbers, exportToExcel };
+const downloadSample = (req, res) => {
+  const ws = xlsx.utils.aoa_to_sheet([
+    [
+      "invoiceNumber",
+      "vendorPhone",
+      "itemName",
+      "quantity",
+      "buyingPriceWithGst",
+      "serialNumbers (comma-separated, leave blank for parts machines)",
+    ],
+    [
+      "INV-2024-001",
+      "9800000000",
+      "Photocopier X200",
+      2,
+      15000,
+      "SN-001,SN-002",
+    ],
+    [
+      "INV-2024-001",
+      "9800000000",
+      "Toner Cartridge",
+      10,
+      500,
+      "",
+    ],
+  ]);
+  const wb = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(wb, ws, "Purchases");
+  const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+  res.setHeader("Content-Disposition", "attachment; filename=purchases_sample.xlsx");
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.send(buf);
+};
+
+module.exports = { getAll, getById, createPurchase, cancelPurchase, verifySerialNumbers, exportToExcel, downloadSample };
