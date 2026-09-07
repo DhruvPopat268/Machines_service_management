@@ -694,10 +694,12 @@ const importPurchases = async (req, res) => {
       serialNumbers:    findHeader("serialnumbers"),
     };
 
-    // Normalize all rows
-    const normalized = rows.map((row) =>
-      Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), typeof v === "string" ? v.trim() : v]))
-    );
+    // Normalize all rows and skip fully blank ones
+    const normalized = rows
+      .map((row) =>
+        Object.fromEntries(Object.entries(row).map(([k, v]) => [k.trim().toLowerCase(), typeof v === "string" ? v.trim() : v]))
+      )
+      .filter((row) => Object.values(row).some((v) => String(v).trim() !== ""));
 
     // ── Step 2: Row-level validation (no DB) ─────────────────────────────────
     const errors = [];
