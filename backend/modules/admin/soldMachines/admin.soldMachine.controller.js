@@ -1949,4 +1949,83 @@ const cancelSale = async (req, res) => {
   }
 };
 
-module.exports = { getAll, getById, createSale, cancelSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers };
+const downloadSample = (req, res) => {
+  const ws = xlsx.utils.aoa_to_sheet([
+    [
+      "invoiceNumber",
+      "customerPhone",
+      "companyName",
+      "itemName",
+      "quantity (max 1 for machines with serial numbers)",
+      "sellingPriceWithGst",
+      "discountPercentage",
+      "serialNumber (single, blank for parts)",
+      "contractTypeCode (blank if none)",
+      "validFrom (DD/MM/YY, blank if none)",
+      "validTo (DD/MM/YY, blank if none)",
+      "paymentStatus (Paid/Unpaid/Partial-Paid)",
+      "paidAmount (only for Partial-Paid)",
+      "paymentMethod (Cash/Online)",
+      "paymentDate (DD/MM/YY)",
+    ],
+    [
+      "INV-2024-001",
+      "9800000000",
+      "Acme Corp",
+      "Photocopier X200",
+      1,
+      15000,
+      0,
+      "SN-001",
+      "TSS",
+      "01/04/24",
+      "31/03/25",
+      "Paid",
+      "",
+      "Cash",
+      "01/04/24",
+    ],
+    [
+      "INV-2024-001",
+      "9800000000",
+      "Acme Corp",
+      "Photocopier X200",
+      1,
+      15000,
+      0,
+      "SN-002",
+      "AMC",
+      "01/04/24",
+      "31/03/26",
+      "Paid",
+      "",
+      "Cash",
+      "01/04/24",
+    ],
+    [
+      "INV-2024-001",
+      "9800000000",
+      "Acme Corp",
+      "Toner Cartridge",
+      5,
+      500,
+      0,
+      "",
+      "",
+      "",
+      "",
+      "Paid",
+      "",
+      "Cash",
+      "01/04/24",
+    ],
+  ]);
+  const wb = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(wb, ws, "Sales");
+  const buf = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
+  res.setHeader("Content-Disposition", "attachment; filename=sales_sample.xlsx");
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.send(buf);
+};
+
+module.exports = { getAll, getById, createSale, cancelSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers, downloadSample };

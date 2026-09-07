@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus, Upload } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -1161,6 +1161,7 @@ const SellMachinesPage = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportDialog, setExportDialog] = useState(false);
+  const [importDialog, setImportDialog] = useState(false);
   const [initialCustomerId, setInitialCustomerId] = useState("");
   const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
   const [paymentDialog, setPaymentDialog] = useState<Sale | null>(null);
@@ -1352,6 +1353,18 @@ const SellMachinesPage = () => {
   }, [search, filters, fromDate, toDate, pageSize, selectedFilterEngineers]);
 
   useEffect(() => { fetchSales(1); }, [fetchSales]);
+
+  const handleDownloadSample = async () => {
+    try {
+      const res = await api.get("/admin/sales/sample", { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = "sales_sample.xlsx"; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download sample file");
+    }
+  };
 
   const handleExport = async () => {
     setExportDialog(false); toast.success("Download starting...");
@@ -1661,6 +1674,7 @@ const SellMachinesPage = () => {
       {loading ? <Spinner /> : (
         <>
           <PageHeader title="Sell Items" description="Record and manage item sales to customers" actionLabel="Sell Item" actionIcon={ShoppingCart} onAction={() => { setInitialCustomerId(""); setDialogOpen(true); }}>
+            <Button variant="outline" className="gap-2" onClick={() => setImportDialog(true)}><Upload className="h-4 w-4" /> Import</Button>
             <Button variant="outline" className="gap-2" onClick={() => setExportDialog(true)}><Download className="h-4 w-4" /> Export</Button>
           </PageHeader>
 
@@ -1956,6 +1970,26 @@ const SellMachinesPage = () => {
           <DialogHeader><DialogTitle>Export Sales Data</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground py-4">Do you want to download all sales data as an Excel file?</p>
           <DialogFooter><Button variant="outline" onClick={() => setExportDialog(false)}>Cancel</Button><Button onClick={handleExport}>Yes, Download</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={importDialog} onOpenChange={setImportDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Import Sales</DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Download the sample file to see the required format. Fill in your data and use the <span className="font-medium text-foreground">Record Sale</span> form to submit sales.
+            </p>
+            <Button variant="outline" className="gap-2 w-full" onClick={handleDownloadSample}>
+              <Download className="h-4 w-4" /> Download Sample File
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportDialog(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
