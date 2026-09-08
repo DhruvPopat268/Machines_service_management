@@ -2,7 +2,7 @@ const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "avif"];
 const MAX_IMAGE_SIZE_MB  = 5;
 const MAX_IMAGES         = 5;
 
-const validateCreateMachine = ({ name, category, division, modelNumber, status }) => {
+const validateCreateMachine = ({ name, category, division, modelNumber, partCode, status }) => {
   if (!name || typeof name !== "string" || !name.trim())
     return "Name is required";
   if (!category)
@@ -11,16 +11,20 @@ const validateCreateMachine = ({ name, category, division, modelNumber, status }
     return "Division is required";
   if (!modelNumber || typeof modelNumber !== "string" || !modelNumber.trim())
     return "Model number is required";
+  if (!partCode || typeof partCode !== "string" || !partCode.trim())
+    return "Part code is required";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
     return "Status must be Active or Inactive";
   return null;
 };
 
-const validateUpdateMachine = ({ name, modelNumber, division, status }) => {
+const validateUpdateMachine = ({ name, modelNumber, partCode, division, status }) => {
   if (name !== undefined && (typeof name !== "string" || !name.trim()))
     return "Name must be a non-empty string";
   if (modelNumber !== undefined && (typeof modelNumber !== "string" || !modelNumber.trim()))
     return "Model number must be a non-empty string";
+  if (partCode !== undefined && (typeof partCode !== "string" || !partCode.trim()))
+    return "Part code must be a non-empty string";
   if (division !== undefined && !division)
     return "Division is required";
   if (status !== undefined && !["Active", "Inactive"].includes(status))
