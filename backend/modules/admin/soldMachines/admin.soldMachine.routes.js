@@ -1,6 +1,9 @@
 const router = require("express").Router();
-const { getAll, getById, createSale, cancelSale, exportToExcel, renewContract, addContract, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers, downloadSample } = require("./admin.soldMachine.controller");
+const multer = require("multer");
+const { getAll, getById, createSale, cancelSale, exportToExcel, renewContract, addContract, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers, downloadSample, importSales } = require("./admin.soldMachine.controller");
 const adminAuthMiddleware = require("../../../middleware/admin.auth.middleware");
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Cron — no auth middleware
 router.get("/cron/contract-expiry-alerts", sendContractExpiryAlerts);
@@ -12,6 +15,7 @@ router.get("/contract-expiry-status",     getContractExpiryStatus);
 router.get("/system-users",           getSystemUsers);
 router.get("/export",                 exportToExcel);
 router.get("/sample",                 downloadSample);
+router.post("/import",                upload.single("file"), importSales);
 router.get("/available-machines",     getAvailableMachines);
 router.get("/available-codes",        getAvailableCodes);
 router.post("/verify-serial-numbers", verifySerialNumbers);

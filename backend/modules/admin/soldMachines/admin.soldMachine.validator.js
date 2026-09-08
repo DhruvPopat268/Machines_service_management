@@ -71,12 +71,17 @@ const validateCreateSale = (body) => {
           if (TSS_CONTRACT_TYPE_ID && entry.contractTypeId.toString() === TSS_CONTRACT_TYPE_ID) {
             if (!Array.isArray(entry.pagesCategories) || entry.pagesCategories.length === 0)
               return `${slabel}: pagesCategories is required (at least 1) for TSS contract type`;
+            const seenCatIds = new Set();
             for (let pi = 0; pi < entry.pagesCategories.length; pi++) {
               const pc = entry.pagesCategories[pi];
               if (!pc.pagesCategoryId || !mongoose.isValidObjectId(pc.pagesCategoryId))
                 return `${slabel} pagesCategories[${pi}]: invalid or missing pagesCategoryId`;
               if (pc.costPerPage == null || isNaN(Number(pc.costPerPage)) || Number(pc.costPerPage) < 0)
                 return `${slabel} pagesCategories[${pi}]: costPerPage must be a non-negative number`;
+              const catIdStr = pc.pagesCategoryId.toString();
+              if (seenCatIds.has(catIdStr))
+                return `${slabel} pagesCategories[${pi}]: duplicate pages category is not allowed`;
+              seenCatIds.add(catIdStr);
             }
           }
         }
