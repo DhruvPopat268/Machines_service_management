@@ -168,7 +168,7 @@ const create = async (req, res) => {
   try {
     const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
 
-    const error = validateCreateMachine({ name, modelNumber, partCode, category, division, status });
+    const error = validateCreateMachine({ name, modelNumber, category, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const duplicate = await isMachineDuplicate(name, category, modelNumber);
@@ -223,7 +223,7 @@ const update = async (req, res) => {
 
     const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
 
-    const error = validateUpdateMachine({ name, modelNumber, partCode, division, status });
+    const error = validateUpdateMachine({ name, modelNumber, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const dupName     = name        !== undefined ? name        : machine.name;
@@ -373,7 +373,6 @@ const importMachines = async (req, res) => {
       if (!modelNumber) { rowErrors.push(`Row ${rowNum}: modelNumber is required`); continue; }
       if (!category)    { rowErrors.push(`Row ${rowNum}: category is required`);    continue; }
       if (!division)    { rowErrors.push(`Row ${rowNum}: division is required`);    continue; }
-      if (!partCode)    { rowErrors.push(`Row ${rowNum}: partCode is required`);    continue; }
 
       const status = String(row[statusKey] || "Active").trim();
       if (status && !["Active", "Inactive"].includes(status)) {
