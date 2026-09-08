@@ -1364,14 +1364,14 @@ const generateInvoice = async (req, res) => {
       .replace(/{{customerZone}}/g, sale.customerInfo.zone || "")
       .replace(/{{customerGst}}/g, sale.customerInfo.gstNumber || "")
       .replace(/{{customerPORef}}/g, sale.customerInfo.customerPORef || "")
-      .replace(/{{basicTotal}}/g, formatNum(basicTotal))
+      .replace(/{{grandTotalBase}}/g, formatNum(basicTotal))
       .replace(/{{cgstPercent}}/g, cgstNum)
       .replace(/{{cgstAmount}}/g, formatNum(cgstAmount))
       .replace(/{{sgstPercent}}/g, sgstNum)
       .replace(/{{sgstAmount}}/g, formatNum(sgstAmount))
       .replace(/{{igstPercent}}/g, igstNum)
       .replace(/{{igstAmount}}/g, formatNum(igstAmount))
-      .replace(/{{grandTotal}}/g, formatNum(invoiceGrandTotal));
+      .replace(/{{grandTotalWithGst}}/g, formatNum(invoiceGrandTotal));
 
     // Handle conditional blocks
     html = cgstNum > 0 ? html.replace(/{{#if cgst}}([\.\s\S]*?){{\/if}}/g, "$1") : html.replace(/{{#if cgst}}[\.\s\S]*?{{\/if}}/g, "");
@@ -1395,20 +1395,27 @@ const generateInvoice = async (req, res) => {
     if (machineRowsMatch) {
       const rowTemplate = machineRowsMatch[1];
       const rows = sale.machines.map((m, idx) => {
-        const rate = m.discountedSellingPrice != null ? m.discountedSellingPrice : m.sellingPrice;
         const isParts = m.categoryId?.toString() !== PRODUCT_CATEGORY_ID;
         const serials = isParts
           ? (m.partCodes ? [m.partCodes.partCode] : [])
           : (m.serialNumbers || []).map(s => s.serialNumber);
         const serialLabel = isParts ? "P/C" : "S/N";
+        const sellingPriceBase   = m.sellingPriceBase   ?? m.sellingPrice ?? 0;
+        const discountPercentage = m.discount?.percentage ?? 0;
+        const discountAmount     = m.discount?.amount     ?? 0;
+        const netSellingPriceBase = m.netSellingPriceBase ?? m.discountedSellingPrice ?? sellingPriceBase;
+        const sellingTotalBase   = m.sellingTotalBase    ?? m.sellingTotal ?? 0;
         let row = rowTemplate
           .replace(/{{srNo}}/g, idx + 1)
           .replace(/{{machineName}}/g, m.machineName)
           .replace(/{{hsnCode}}/g, m.hsnCode || "")
           .replace(/{{serialLabel}}/g, serialLabel)
           .replace(/{{quantity}}/g, m.quantity)
-          .replace(/{{rate}}/g, formatNum(rate))
-          .replace(/{{amount}}/g, formatNum(m.sellingTotal));
+          .replace(/{{sellingPriceBase}}/g, formatNum(sellingPriceBase))
+          .replace(/{{discountPercentage}}/g, discountPercentage)
+          .replace(/{{discountAmount}}/g, formatNum(discountAmount))
+          .replace(/{{netSellingPriceBase}}/g, formatNum(netSellingPriceBase))
+          .replace(/{{sellingTotalBase}}/g, formatNum(sellingTotalBase));
         row = m.modelNumber
           ? row.replace(/{{#if modelNumber}}([\.\s\S]*?){{\/if}}/g, "$1").replace(/{{modelNumber}}/g, m.modelNumber)
           : row.replace(/{{#if modelNumber}}[\.\s\S]*?{{\/if}}/g, "");
