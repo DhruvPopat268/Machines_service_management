@@ -1337,7 +1337,9 @@ const generateInvoice = async (req, res) => {
     const cgstAmount = parseFloat(((basicTotal * cgstNum) / 100).toFixed(2));
     const sgstAmount = parseFloat(((basicTotal * sgstNum) / 100).toFixed(2));
     const igstAmount = parseFloat(((basicTotal * igstNum) / 100).toFixed(2));
-    const invoiceGrandTotal = parseFloat((basicTotal + cgstAmount + sgstAmount + igstAmount).toFixed(2));
+    // Use the stored grandTotalWithGst from DB (accumulated per machine line via Math.round)
+    // instead of recomputing from grandTotalBase to avoid rounding discrepancy
+    const invoiceGrandTotal = sale.grandTotalWithGst;
 
     const d = new Date(sale.createdAt);
     const invoiceDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
