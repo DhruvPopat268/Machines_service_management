@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,11 +24,13 @@ interface AddMachineFormProps {
 }
 
 const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
-  const navigate   = useNavigate();
-  const { id }     = useParams<{ id: string }>();
-  const isEdit     = mode === "edit" && !!id;
-  const isView     = mode === "view" && !!id;
-  const isReadOnly = isView;
+  const navigate      = useNavigate();
+  const { id }        = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const fromPage      = searchParams.get("fromPage"); // page number passed from MachinesPage
+  const isEdit        = mode === "edit" && !!id;
+  const isView        = mode === "view" && !!id;
+  const isReadOnly    = isView;
 
   const [categories,  setCategories]  = useState<CategoryOption[]>([]);
   const [divisions,   setDivisions]   = useState<DivisionOption[]>([]);
@@ -191,11 +193,13 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
         fd.append("existingImages", JSON.stringify(existingImages));
         await api.patch(`/admin/machines/${id}`, fd, { headers: { "Content-Type": "multipart/form-data" } });
         toast.success("Item updated successfully");
+        // navigate back to the exact page the user came from
+        navigate(fromPage ? `/machines?page=${fromPage}` : "/machines");
       } else {
         await api.post("/admin/machines", fd, { headers: { "Content-Type": "multipart/form-data" } });
         toast.success("Item added successfully");
+        navigate("/machines");
       }
-      navigate("/machines");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Something went wrong");
     } finally {
@@ -216,7 +220,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
           />
         </div>
         {isView && (
-          <Button variant="outline" className="gap-2" onClick={() => navigate(`/machines/${id}/edit`)}>
+          <Button variant="outline" className="gap-2" onClick={() => navigate(`/machines/${id}/edit${fromPage ? `?fromPage=${fromPage}` : ""}`)}>
             <Pencil className="h-4 w-4" /> Edit
           </Button>
         )}

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Eye, Edit, Trash2, Upload, Download, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
@@ -53,6 +53,7 @@ const LIMIT = 10;
 
 const MachinesPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [data, setData]           = useState<Machine[]>([]);
   const [search, setSearch]       = useState("");
@@ -62,7 +63,10 @@ const MachinesPage = () => {
   const [toDate, setToDate]       = useState("");
   const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [paginationMeta, setPaginationMeta] = useState({ totalPages: 1, total: 0 });
+
+  // derive current page from URL, default to 1
+  const currentPage = Math.max(1, Number(searchParams.get("page") || "1"));
 
   const [categories, setCategories] = useState<DropdownOption[]>([]);
   const [divisions, setDivisions]   = useState<DropdownOption[]>([]);
@@ -142,8 +146,7 @@ const MachinesPage = () => {
 
       const res = await api.get("/admin/machines", { params, signal: controller.signal });
       setData(res.data.data);
-      setPagination({
-        page: res.data.pagination.page,
+      setPaginationMeta({
         totalPages: res.data.pagination.totalPages,
         total: res.data.pagination.total,
       });
@@ -155,7 +158,23 @@ const MachinesPage = () => {
     }
   }, [debouncedSearch, filters, fromDate, toDate]);
 
-  useEffect(() => { fetchMachines(1); }, [fetchMachines]);
+  // when filters/search change AFTER mount, reset to page 1
+  // use a ref to skip the very first render so the URL page param is preserved on load
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("page", "1");
+      return next;
+    }, { replace: true });
+  }, [debouncedSearch, filters, fromDate, toDate]);
+
+  // fetch whenever currentPage or fetchMachines (deps) change
+  useEffect(() => { fetchMachines(currentPage); }, [fetchMachines, currentPage]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -220,7 +239,7 @@ const MachinesPage = () => {
     try {
       await api.patch(`/admin/machines/${machine._id}`, { status: newStatus });
       toast.success(`Status updated to ${newStatus}`);
-      fetchMachines(pagination.page);
+      fetchMachines(currentPage);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update status");
     }
@@ -233,8 +252,17 @@ const MachinesPage = () => {
       await api.delete(`/admin/machines/${deleteDialog._id}`);
       toast.success("Item deleted successfully");
       setDeleteDialog(null);
-      const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
-      fetchMachines(newPage);
+      // if last item on page and not page 1, go back one page
+      const newPage = data.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+      if (newPage !== currentPage) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("page", String(newPage));
+          return next;
+        });
+      } else {
+        fetchMachines(currentPage);
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete item");
     } finally {
@@ -243,7 +271,7 @@ const MachinesPage = () => {
   };
 
   const columns: Column<Machine>[] = [
-    { key: "_id",    label: "No.",   className: "w-12",                render: (_m, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "_id",    label: "No.",   className: "w-12",                render: (_m, i) => <span className="font-medium text-foreground">{(currentPage - 1) * LIMIT + i + 1}</span> },
     { key: "images", label: "Image", className: "w-20",               render: (m) => m.images?.[0]
         ? <img src={m.images[0]} alt={m.name} className="h-14 w-14 object-cover rounded-md border" />
         : <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-xs text-muted-foreground">No img</div>,
@@ -299,10 +327,10 @@ const MachinesPage = () => {
     {
       key: "actions", label: "Actions", sticky: true, className: "min-w-[100px]", render: (m) => (
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}`)} title="View">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}?fromPage=${currentPage}`)} title="View">
             <Eye className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}/edit`)} title="Edit">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate(`/machines/${m._id}/edit?fromPage=${currentPage}`)} title="Edit">
             <Edit className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={() => setDeleteDialog(m)} title="Delete">
@@ -353,7 +381,7 @@ const MachinesPage = () => {
                 <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 text-sm w-40" />
               </div>
               {(search || fromDate || toDate || Object.values(filters).some(v => v && v !== "all")) && (
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }} className="h-9">
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); setSearchParams({ page: "1" }); }} className="h-9">
                   <X className="h-4 w-4 mr-1" /> Clear
                 </Button>
               )}
@@ -384,11 +412,17 @@ const MachinesPage = () => {
           </div>
           <DataTable columns={columns} data={data} />
           <Pagination
-            page={pagination.page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
+            page={currentPage}
+            totalPages={paginationMeta.totalPages}
+            total={paginationMeta.total}
             pageSize={LIMIT}
-            onPageChange={fetchMachines}
+            onPageChange={(page) =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set("page", String(page));
+                return next;
+              })
+            }
           />
         </>
       )}
