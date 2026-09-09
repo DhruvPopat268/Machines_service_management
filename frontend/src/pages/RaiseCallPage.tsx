@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { DataTable, Column } from "@/components/DataTable";
@@ -37,10 +37,14 @@ const LIMIT = 10;
 
 const RaiseCallPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [machines, setMachines] = useState<CustomerMachine[]>([]);
   const [loading, setLoading]   = useState(true);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [paginationMeta, setPaginationMeta] = useState({ totalPages: 1, total: 0 });
+
+  // derive current page from URL, default to 1
+  const currentPage = Math.max(1, Number(searchParams.get("page") || "1"));
 
   const [customers, setCustomers]       = useState<DropdownOption[]>([]);
   const [categories, setCategories]     = useState<DropdownOption[]>([]);
@@ -154,7 +158,7 @@ const RaiseCallPage = () => {
       const res = await api.get("/admin/service-calls/customer-machines", { params, signal: ctrl.signal });
       if (!ctrl.signal.aborted) {
         setMachines(res.data.data);
-        setPagination({ page: res.data.pagination.page, totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
+        setPaginationMeta({ totalPages: res.data.pagination.totalPages, total: res.data.pagination.total });
       }
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
@@ -164,7 +168,18 @@ const RaiseCallPage = () => {
     }
   }, [selectedCustomer, debouncedSearch, selectedCategory, selectedDivision, selectedContractType, selectedDisInstalled]);
 
-  useEffect(() => { fetchMachines(1); }, [fetchMachines]);
+  useEffect(() => { fetchMachines(currentPage); }, [fetchMachines, currentPage]);
+
+  // when filters/search change AFTER mount, reset to page 1
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("page", "1");
+      return next;
+    }, { replace: true });
+  }, [debouncedSearch, selectedCustomer, selectedCategory, selectedDivision, selectedContractType, selectedDisInstalled]);
 
   const hasFilters = selectedCustomer || selectedCategory || selectedDivision || selectedContractType || selectedDisInstalled || search;
 
@@ -175,6 +190,7 @@ const RaiseCallPage = () => {
     setSelectedContractType("");
     setSelectedDisInstalled("");
     setSearch("");
+    setSearchParams({ page: "1" });
   };
 
   const openRenewDialog = (m: CustomerMachine) => {
@@ -201,7 +217,7 @@ const RaiseCallPage = () => {
       });
       toast.success("Contract renewed successfully");
       setRenewDialog(null);
-      fetchMachines(pagination.page);
+      fetchMachines(currentPage);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to renew contract");
     } finally {
@@ -233,7 +249,7 @@ const RaiseCallPage = () => {
       });
       toast.success("Contract added successfully");
       setAddContractDialog(null);
-      fetchMachines(pagination.page);
+      fetchMachines(currentPage);
     } catch (err: any) {
       toast.error(err?.response?.data?.message || "Failed to add contract");
     } finally {
@@ -244,7 +260,7 @@ const RaiseCallPage = () => {
   const columns: Column<CustomerMachine>[] = [
     {
       key: "no", label: "#",
-      render: (_m, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span>,
+      render: (_m, i) => <span className="font-medium text-foreground">{(currentPage - 1) * LIMIT + i + 1}</span>,
     },
     {
       key: "customerInfo", label: "Customer Info",
@@ -410,11 +426,17 @@ const RaiseCallPage = () => {
       {loading ? <Spinner /> : <DataTable columns={columns} data={machines} />}
 
       <Pagination
-        page={pagination.page}
-        totalPages={pagination.totalPages}
-        total={pagination.total}
+        page={currentPage}
+        totalPages={paginationMeta.totalPages}
+        total={paginationMeta.total}
         pageSize={LIMIT}
-        onPageChange={fetchMachines}
+        onPageChange={(page) =>
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("page", String(page));
+            return next;
+          })
+        }
       />
 
       <Dialog open={!!renewDialog} onOpenChange={() => setRenewDialog(null)}>

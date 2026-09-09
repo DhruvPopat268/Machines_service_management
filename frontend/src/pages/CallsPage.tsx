@@ -47,8 +47,9 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
   const [data, setData]                     = useState<ServiceCall[]>([]);
   const [stats, setStats]                   = useState<CallStats | undefined>();
-  const [pagination, setPagination]         = useState({ page: 1, totalPages: 1, total: 0 });
+  const [paginationMeta, setPaginationMeta] = useState({ totalPages: 1, total: 0 });
   const [loading, setLoading]               = useState(true);
+  const currentPage = Math.max(1, Number(searchParams.get("page") || "1"));
   const limit       = Number(getParam("limit")) || 25;
   const showStats   = getParam("showStats")   !== "false";
   const showFilters  = getParam("showFilters")  !== "false";
@@ -337,7 +338,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
 
       const res = await serviceCallsApi.getCalls(params);
       setData(res.data);
-      setPagination({ page: res.pagination.page, totalPages: res.pagination.totalPages, total: res.pagination.total });
+      setPaginationMeta({ totalPages: res.pagination.totalPages, total: res.pagination.total });
       if (res.stats) setStats(res.stats);
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
@@ -367,7 +368,21 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
   );
 };
 
-  useEffect(() => { fetchCalls(1); }, [fetchCalls]);
+  useEffect(() => { fetchCalls(currentPage); }, [fetchCalls, currentPage]);
+
+  // when filters/search change AFTER mount, reset to page 1
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("page", "1");
+      return next;
+    }, { replace: true });
+  }, [debouncedSearch, debouncedSerialNumber, fromDate, toDate,
+      filters.callType, filters.status, filters.customerName, filters.engineerName,
+      filters.machineName, filters.partId, filters.category, filters.division,
+      filters.problemTypeId, filters.contractTypeId, filters.contractTypeStatus, filters.freeParts]);
 
   const columns: Column<ServiceCall>[] = [
     {
@@ -697,7 +712,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-4">
               <p className="text-sm text-muted-foreground">
-                Total Records: <span className="font-semibold text-foreground">{pagination.total}</span>
+                Total Records: <span className="font-semibold text-foreground">{paginationMeta.total}</span>
               </p>
               <div className="flex items-center gap-2">
                 <Label className="text-xs text-muted-foreground whitespace-nowrap">Records per page</Label>
@@ -746,11 +761,17 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
           <DataTable columns={columns} data={data} pageSize={999} />
 
           <Pagination
-            page={pagination.page}
-            totalPages={pagination.totalPages}
-            total={pagination.total}
+            page={currentPage}
+            totalPages={paginationMeta.totalPages}
+            total={paginationMeta.total}
             pageSize={limit}
-            onPageChange={fetchCalls}
+            onPageChange={(page) =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set("page", String(page));
+                return next;
+              })
+            }
           />
 
           <Dialog open={!!assignDialog} onOpenChange={() => setAssignDialog(null)}>
@@ -924,7 +945,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                       );
                       toast.success(`Engineer assigned to ${assignDialog.callId}`);
                       setAssignDialog(null);
-                      fetchCalls(pagination.page);
+                      fetchCalls(currentPage);
                     } catch {
                       toast.error("Failed to assign engineer");
                     } finally {
@@ -956,7 +977,7 @@ const CallsPage = ({ statusFilter, title = "All Service Calls", description = "M
                       await serviceCallsApi.updateCall(cancelTarget._id, { status: "Cancelled" });
                       toast.success(`Call ${cancelTarget.callId} marked as cancelled`);
                       setCancelTarget(null);
-                      fetchCalls(pagination.page);
+                      fetchCalls(currentPage);
                     } catch (err: any) {
                       toast.error(err?.response?.data?.message || "Failed to cancel call");
                     } finally {
