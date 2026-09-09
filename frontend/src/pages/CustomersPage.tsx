@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { UserPlus, ShoppingCart, Edit, Trash2, Upload, Download, UserCircle, X } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
@@ -245,6 +245,7 @@ const CustomerForm = ({ form, setForm, zoneOptions, existingPhoto }: CustomerFor
 
 const CustomersPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<Customer[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
   const [search, setSearch] = useState("");
@@ -254,7 +255,10 @@ const CustomersPage = () => {
   const [toDate, setToDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [paginationMeta, setPaginationMeta] = useState({ totalPages: 1, total: 0 });
+
+  // derive current page from URL, default to 1
+  const currentPage = Math.max(1, Number(searchParams.get("page") || "1"));
 
   const [addDialog, setAddDialog] = useState(false);
   const [addForm, setAddForm] = useState(emptyForm);
@@ -312,8 +316,7 @@ const CustomersPage = () => {
 
       const res = await api.get("/admin/customers", { params, signal: controller.signal });
       setData(res.data.data);
-      setPagination({
-        page: res.data.pagination.page,
+      setPaginationMeta({
         totalPages: res.data.pagination.totalPages,
         total: res.data.pagination.total,
       });
@@ -326,7 +329,18 @@ const CustomersPage = () => {
     }
   }, [debouncedSearch, filters, fromDate, toDate]);
 
-  useEffect(() => { fetchCustomers(1); }, [fetchCustomers]);
+  useEffect(() => { fetchCustomers(currentPage); }, [fetchCustomers, currentPage]);
+
+  // when filters/search change AFTER mount, reset to page 1
+  const isMounted = useRef(false);
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return; }
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("page", "1");
+      return next;
+    }, { replace: true });
+  }, [debouncedSearch, filters, fromDate, toDate]);
 
   const handleAdd = async () => {
     if (!addForm.name)  return toast.error("Name is required");
@@ -404,7 +418,7 @@ const CustomersPage = () => {
       await api.patch(`/admin/customers/${editDialog._id}`, payload);
       toast.success("Customer updated successfully");
       setEditDialog(null);
-      fetchCustomers(pagination.page);
+      fetchCustomers(currentPage);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update customer");
     } finally {
@@ -419,8 +433,16 @@ const CustomersPage = () => {
       await api.delete(`/admin/customers/${deleteDialog._id}`);
       toast.success("Customer deleted successfully");
       setDeleteDialog(null);
-      const newPage = data.length === 1 && pagination.page > 1 ? pagination.page - 1 : pagination.page;
-      fetchCustomers(newPage);
+      const newPage = data.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
+      if (newPage !== currentPage) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("page", String(newPage));
+          return next;
+        });
+      } else {
+        fetchCustomers(currentPage);
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to delete customer");
     } finally {
@@ -433,7 +455,7 @@ const CustomersPage = () => {
     try {
       await api.patch(`/admin/customers/${c._id}`, { status: newStatus });
       toast.success(`Status updated to ${newStatus}`);
-      fetchCustomers(pagination.page);
+      fetchCustomers(currentPage);
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to update status");
     }
@@ -492,7 +514,7 @@ const CustomersPage = () => {
   };
 
   const columns: Column<Customer>[] = [
-    { key: "_id",        label: "No.",         render: (_c, i) => <span className="font-medium text-foreground">{(pagination.page - 1) * LIMIT + i + 1}</span> },
+    { key: "_id",        label: "No.",         render: (_c, i) => <span className="font-medium text-foreground">{(currentPage - 1) * LIMIT + i + 1}</span> },
     {
       key: "profilePhoto", label: "Photo", render: (c) => c.profilePhoto
         ? <img src={c.profilePhoto} alt={c.name} className="h-8 w-8 rounded-full object-cover" />
@@ -585,10 +607,22 @@ const CustomersPage = () => {
             onFilterChange={(k, v) => setFilters((prev) => ({ ...prev, [k]: v }))}
             showDateRange fromDate={fromDate} toDate={toDate}
             onFromDateChange={setFromDate} onToDateChange={setToDate}
-            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); }}
+            onClear={() => { setSearch(""); setFilters({}); setFromDate(""); setToDate(""); setSearchParams({ page: "1" }); }}
           />
           <DataTable columns={columns} data={data} />
-          <Pagination page={pagination.page} totalPages={pagination.totalPages} total={pagination.total} pageSize={LIMIT} onPageChange={fetchCustomers} />
+          <Pagination
+            page={currentPage}
+            totalPages={paginationMeta.totalPages}
+            total={paginationMeta.total}
+            pageSize={LIMIT}
+            onPageChange={(page) =>
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.set("page", String(page));
+                return next;
+              })
+            }
+          />
         </>
       )}
 
