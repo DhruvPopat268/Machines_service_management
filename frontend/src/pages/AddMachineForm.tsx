@@ -167,6 +167,8 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
     if (!form.name.trim()) return toast.error("Name is required");
     if (!form.category)    return toast.error("Category is required");
     if (!form.division)    return toast.error("Division is required");
+    if (!form.modelNumber.trim()) return toast.error("Model number is required");
+    if (!form.partCode.trim())    return toast.error("Part code is required");
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -234,7 +236,7 @@ const AddMachineForm = ({ type, mode = "add" }: AddMachineFormProps) => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Name <span className="text-destructive">*</span></Label><Input placeholder="Item name" value={form.name} onChange={(e) => setField("name", e.target.value)} required disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>Model Number <span className="text-destructive">*</span></Label><Input placeholder="e.g. X200" value={form.modelNumber} onChange={(e) => setField("modelNumber", e.target.value)} disabled={isReadOnly} /></div>
-              <div className="space-y-2"><Label>Part Code</Label><Input placeholder="e.g. PC001" value={form.partCode} onChange={(e) => setField("partCode", e.target.value)} disabled={isReadOnly} /></div>
+              <div className="space-y-2"><Label>Part Code <span className="text-destructive">*</span></Label><Input placeholder="e.g. PC001" value={form.partCode} onChange={(e) => setField("partCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2"><Label>HSN Code</Label><Input placeholder="e.g. 84715000" value={form.hsnCode} onChange={(e) => setField("hsnCode", e.target.value)} disabled={isReadOnly} /></div>
               <div className="space-y-2">
                 <Label>Low Stock Threshold</Label>

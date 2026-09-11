@@ -168,7 +168,7 @@ const create = async (req, res) => {
   try {
     const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, imageOrder } = req.body;
 
-    const error = validateCreateMachine({ name, modelNumber, category, division, status });
+    const error = validateCreateMachine({ name, modelNumber, partCode, category, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const duplicate = await isMachineDuplicate(name, category, modelNumber);
@@ -223,7 +223,7 @@ const update = async (req, res) => {
 
     const { name, modelNumber, partCode, hsnCode, category, division, lowStockThreshold, notes, status, existingImages, imageOrder } = req.body;
 
-    const error = validateUpdateMachine({ name, modelNumber, division, status });
+    const error = validateUpdateMachine({ name, modelNumber, partCode, division, status });
     if (error) return res.status(400).json({ success: false, message: error });
 
     const dupName     = name        !== undefined ? name        : machine.name;
@@ -336,7 +336,7 @@ const importMachines = async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ success: false, message: "File is empty" });
 
-    const required = ["name", "modelnumber", "category", "division"];
+    const required = ["name", "modelnumber", "partcode", "category", "division"];
     const headers  = Object.keys(rows[0]).map((k) => k.trim().toLowerCase());
     const missing  = required.filter((h) => !headers.includes(h));
     if (missing.length)
@@ -371,6 +371,7 @@ const importMachines = async (req, res) => {
 
       if (!name)        { rowErrors.push(`Row ${rowNum}: name is required`);        continue; }
       if (!modelNumber) { rowErrors.push(`Row ${rowNum}: modelNumber is required`); continue; }
+      if (!partCode)    { rowErrors.push(`Row ${rowNum}: partCode is required`);    continue; }
       if (!category)    { rowErrors.push(`Row ${rowNum}: category is required`);    continue; }
       if (!division)    { rowErrors.push(`Row ${rowNum}: division is required`);    continue; }
 
