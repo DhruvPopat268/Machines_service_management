@@ -48,6 +48,7 @@ interface UnitRow {
   contractTypeId: string;
   validFrom: string;
   validTo: string;
+  department: string;
   minCopies: string;
   pagesCategories: PagesCategoryEntry[];
 }
@@ -224,6 +225,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
   const addMachine = (machine: Machine) => {
     if (entries.find((e) => e.machine._id === machine._id)) { toast.info("Item already added"); return; }
     setEntries((prev) => [...prev, { machine, quantity: "", sellingPriceWithGst: "", discountPercentage: "", availableCodes: [], loadingCodes: false, units: [] }]);
+
     setMachineSearch(""); setDropdownOpen(false); machineInputRef.current?.blur();
   };
 
@@ -313,7 +315,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           quantity: String(available.length),
           loadingCodes: false,
           availableCodes: available,
-          units: isParts ? [] : Array.from({ length: available.length }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "", pagesCategories: [] })),
+          units: isParts ? [] : Array.from({ length: available.length }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", department: "", minCopies: "", pagesCategories: [] })),
         }));
         return;
       }
@@ -323,7 +325,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
         loadingCodes: false,
         availableCodes: available,
         // For parts: no unit rows needed, just store available codes for reference
-        units: isParts ? [] : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", minCopies: "", pagesCategories: [] })),
+        units: isParts ? [] : Array.from({ length: qty }, () => ({ value: "", contractTypeId: "", validFrom: "", validTo: "", department: "", minCopies: "", pagesCategories: [] })),
       }));
     } catch {
       toast.error("Failed to load available codes");
@@ -399,6 +401,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 contractTypeId: u.contractTypeId,
                 validFrom: u.validFrom,
                 validTo: u.validTo,
+                department: u.department.trim(),
                 minCopies: Number(u.minCopies) || 0,
                 pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
               })) }),
@@ -437,6 +440,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 contractTypeId: u.contractTypeId,
                 validFrom: u.validFrom,
                 validTo: u.validTo,
+                department: u.department.trim(),
                 minCopies: Number(u.minCopies) || 0,
                 pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
               })) }),
@@ -834,6 +838,12 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                             value={unit.validTo}
                                             disabled={!unit.contractTypeId}
                                             onChange={(e) => updateUnit(mi, ui, "validTo", e.target.value)} />
+                                        </div>
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">Department</Label>
+                                          <Input type="text" className="h-8 text-xs" placeholder="e.g. Sales, HR..."
+                                            value={unit.department}
+                                            onChange={(e) => updateUnit(mi, ui, "department", e.target.value)} />
                                         </div>
                                         {unit.contractTypeId === TSS_CONTRACT_TYPE_ID && (
                                           <div className="space-y-1">
@@ -1465,6 +1475,25 @@ const SellMachinesPage = () => {
             return (
               <div key={i}>
                 {codes.map((c, j) => <div key={j} className="font-mono text-xs">{c}</div>)}
+                {sep(i, s.machines.length)}
+              </div>
+            );
+          })}
+        </div>
+      ),
+    },
+    {
+      key: "department", label: "Department",
+      render: (s) => (
+        <div>
+          {s.machines.map((m, i) => {
+            const isParts = !!(m.partCodes?.partCode);
+            if (isParts) return <div key={i}><span className="text-muted-foreground text-xs">—</span>{sep(i, s.machines.length)}</div>;
+            return (
+              <div key={i}>
+                {(m.serialNumbers || []).map((sn, j) => (
+                  <div key={j} className="text-xs">{(sn as any).department || "—"}</div>
+                ))}
                 {sep(i, s.machines.length)}
               </div>
             );

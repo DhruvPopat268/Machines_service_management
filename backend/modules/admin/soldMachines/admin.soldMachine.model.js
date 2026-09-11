@@ -27,6 +27,7 @@ const serialNumberEntrySchema = new mongoose.Schema(
     serialNumber:    { type: String, trim: true, required: true },
     buyingPriceBase: { type: Number, default: 0 },
     minCopies:       { type: Number, default: 0 },
+    department:      { type: String, trim: true },
     contractType:    { type: contractTypeSnapshotSchema, default: null },
     pagesCategories: { type: [pagesCategoryEntrySchema], default: [] },
     disInstalled:    { type: Boolean, default: false },

@@ -531,6 +531,7 @@ const createSale = async (req, res) => {
             serialNumber: sEntry.serialNumber.trim(),
             buyingPriceBase: bp,
             minCopies: Number(sEntry.minCopies) || 0,
+            department: sEntry.department ? sEntry.department.trim() : undefined,
             contractType,
             pagesCategories,
           };
