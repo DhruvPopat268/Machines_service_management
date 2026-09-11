@@ -339,6 +339,7 @@ const getCustomerMachines = async (req, res) => {
           division: machine.division,
           images: machine.machineId ? machineImagesMap.get(machine.machineId.toString()) || [] : [],
           serialNumber: entry.serialNumber,
+          department: entry.department,
           contractType: entry.contractType,
           disInstalled: entry.disInstalled ?? false,
           createdAt: record.createdAt,
@@ -352,7 +353,8 @@ const getCustomerMachines = async (req, res) => {
       allData = allData.filter(m =>
         m.serialNumber?.toLowerCase().includes(s) ||
         m.customerInfo?.name?.toLowerCase().includes(s) ||
-        m.customerInfo?.phone?.toLowerCase().includes(s)
+        m.customerInfo?.phone?.toLowerCase().includes(s) ||
+        m.department?.toLowerCase().includes(s)
       );
     }
     if (category && mongoose.isValidObjectId(category))

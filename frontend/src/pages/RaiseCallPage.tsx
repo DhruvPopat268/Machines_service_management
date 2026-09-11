@@ -29,6 +29,7 @@ interface CustomerMachine {
   division: string;
   images: string[];
   serialNumber: string;
+  department?: string;
   contractType: { name: string; validFrom: string; validTo: string };
   disInstalled: boolean;
 }
@@ -283,6 +284,10 @@ const RaiseCallPage = () => {
     {
       key: "serialNumber", label: "Serial Number",
       render: (m) => <span>{m.serialNumber || "—"}</span>,
+    },
+    {
+      key: "department", label: "Department",
+      render: (m) => <span>{m.department || "—"}</span>,
     },
     {
       key: "category", label: "Category",
