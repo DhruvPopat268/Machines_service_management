@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DataTable, Column } from "@/components/DataTable";
 import { PageHeader } from "@/components/PageHeader";
@@ -10,10 +10,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus, Upload } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus, Upload, ChevronsUpDown, Check } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
+import { cn } from "@/lib/utils";
 import api from "@/lib/axiosInterceptor";
 
 const PRODUCT_CATEGORY_ID = import.meta.env.VITE_PRODUCT_CATEGORY_ID;
@@ -75,6 +78,88 @@ const formatDateTime = (iso: string) => {
   };
 };
 const toISTDateParam = (h: string) => { const [y, m, d] = h.split("-"); return `${d}/${m}/${String(y).slice(2)}`; };
+
+// ─── Local Search Select Component (for Serial Numbers) ────────────────────────
+
+interface LocalSearchSelectProps {
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  className?: string;
+  disabled?: boolean;
+}
+
+const LocalSearchSelect = ({
+  options,
+  value,
+  onChange,
+  placeholder = "Select...",
+  searchPlaceholder = "Search...",
+  className,
+  disabled = false,
+}: LocalSearchSelectProps) => {
+  const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter options locally based on search query
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    return options.filter((opt) => opt.toUpperCase().includes(searchQuery.toUpperCase()));
+  }, [options, searchQuery]);
+
+  const selected = value;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          className={cn("w-full justify-between font-normal", className)}
+          disabled={disabled}
+        >
+          <span className="truncate font-mono">{selected || placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="p-0 max-h-96"
+        style={{ width: "var(--radix-popover-trigger-width)" }}
+        align="start"
+        onWheel={(e) => e.stopPropagation()}
+      >
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+          />
+          <CommandList className="max-h-80 overflow-y-auto">
+            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandGroup>
+              {filteredOptions.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  onSelect={() => {
+                    onChange(option);
+                    setOpen(false);
+                    setSearchQuery("");
+                  }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4", value === option ? "opacity-100" : "opacity-0")} />
+                  <span className="font-mono">{option}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
 
 // ─── Sell Dialog ──────────────────────────────────────────────────────────────
 
@@ -805,12 +890,15 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                                   <div className={`grid gap-2 ${isParts ? "grid-cols-1" : "grid-cols-2 md:grid-cols-4"}`}>
                                     <div className="space-y-1">
                                       <Label className="text-[10px] text-muted-foreground">{isParts ? "Part Code" : "Serial No"} <span className="text-destructive">*</span></Label>
-                                      <Select value={unit.value} onValueChange={(v) => updateUnit(mi, ui, "value", v)}>
-                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select" /></SelectTrigger>
-                                        <SelectContent>
-                                          {codeOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                                        </SelectContent>
-                                      </Select>
+                                      {/* Local Search for Serial Numbers */}
+                                      <LocalSearchSelect
+                                        options={codeOptions}
+                                        value={unit.value}
+                                        onChange={(v) => updateUnit(mi, ui, "value", v)}
+                                        placeholder="Select serial"
+                                        searchPlaceholder="Search serial..."
+                                        className="h-8 text-xs"
+                                      />
                                     </div>
                                     {!isParts && (
                                       <>
