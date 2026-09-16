@@ -63,6 +63,7 @@ const computeCanCancelSale = async (sale) => {
   // Check each machine in the sale
   for (const machine of sale.machines) {
     const serialNumbers = machine.serialNumbers || [];
+    const modelNumber = machine.modelNumber;
     
     // If no serial numbers (parts machine), can always cancel
     if (serialNumbers.length === 0) continue;
@@ -71,9 +72,11 @@ const computeCanCancelSale = async (sale) => {
     for (const snObj of serialNumbers) {
       const serialNumber = snObj.serialNumber;
       
-      // ServiceCall stores serial at machines.serialNumber (not machines.serialNumbers.serialNumber)
+      // ServiceCall stores serial at machines.serialNumber and modelNumber at machines.modelNumber
+      // Query by both serial number AND model number for precise matching
       const serviceCallExists = await ServiceCall.exists({
         "machines.serialNumber": serialNumber,
+        "machines.modelNumber": modelNumber,
         status: { $ne: "Cancelled" }
       });
 
@@ -335,17 +338,18 @@ const createSale = async (req, res) => {
       }
 
       // Check duplicates across machines with same modelNumber within this request
-      const modelSnMap = new Map(); // modelNumber -> Set of serial numbers
+      // Use composite key (modelNumber_serialNumber) to allow same serial on different models
+      const modelSnMap = new Map(); // "MODEL_SERIAL" -> true
       for (const m of machines) {
         const machineDoc = await Machine.findById(m.machineId, { modelNumber: 1 }).lean();
         if (!machineDoc) continue;
         const modelNo = machineDoc.modelNumber?.toUpperCase();
-        if (!modelSnMap.has(modelNo)) modelSnMap.set(modelNo, new Set());
         for (const sEntry of (m.serialNumbers || [])) {
           const sn = sEntry.serialNumber.trim().toUpperCase();
-          if (modelSnMap.get(modelNo).has(sn))
+          const compositeKey = `${modelNo}_${sn}`;
+          if (modelSnMap.has(compositeKey))
             return abort(400, `Duplicate serial number "${sEntry.serialNumber.trim()}" for model "${machineDoc.modelNumber}" in submitted list`);
-          modelSnMap.get(modelNo).add(sn);
+          modelSnMap.set(compositeKey, true);
         }
       }
 
@@ -2163,18 +2167,23 @@ const importSales = async (req, res) => {
     checkConsistency("paymentdate",    "paymentDate");
 
     // No duplicate serialNumbers within group or across groups
+    // Key: "MODEL_SERIAL" to allow same serial on different models
     for (const r of gRows) {
       const sn = String(r[H.serialnumber] || "").trim();
+      const modelNum = String(r[H.modelnumber] || "").trim();
       if (!sn) continue;
-      const snUpper = sn.toUpperCase();
-      if (globalSerials.has(snUpper)) {
-        const otherInvoice = globalSerials.get(snUpper);
+      
+      // Composite key: modelNumber + serialNumber (case-insensitive)
+      const compositeKey = `${modelNum.toUpperCase()}_${sn.toUpperCase()}`;
+      
+      if (globalSerials.has(compositeKey)) {
+        const otherInvoice = globalSerials.get(compositeKey);
         if (otherInvoice === invoiceNumber)
-          errors.push(`Invoice "${invoiceNumber}": duplicate serialNumber "${sn}" within the same group`);
+          errors.push(`Invoice "${invoiceNumber}": duplicate serialNumber "${sn}" for model "${modelNum}" within the same group`);
         else
-          errors.push(`Invoice "${invoiceNumber}": serialNumber "${sn}" already used in invoice "${otherInvoice}"`);
+          errors.push(`Invoice "${invoiceNumber}": serialNumber "${sn}" for model "${modelNum}" already used in invoice "${otherInvoice}"`);
       } else {
-        globalSerials.set(snUpper, invoiceNumber);
+        globalSerials.set(compositeKey, invoiceNumber);
       }
     }
   }
