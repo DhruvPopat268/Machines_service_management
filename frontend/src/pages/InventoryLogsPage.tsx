@@ -23,9 +23,11 @@ interface VendorInfo {
 
 interface CustomerInfo {
   customerId: string | null;
+  customerUniqueId?: string;
   name: string;
   phone: string;
   zone: string;
+  department?: string;
 }
 
 interface LogMachine {
@@ -308,8 +310,14 @@ const InventoryLogsPage = () => {
         if ((l.action === "sold" || l.action === "dis-installed") && l.customerInfo) {
           return (
             <div>
+              {l.customerInfo.customerUniqueId && (
+                <p className="text-[10px] font-mono text-primary font-semibold">{l.customerInfo.customerUniqueId}</p>
+              )}
               <p className="font-medium text-sm">{l.customerInfo.name}</p>
               <p className="text-xs text-muted-foreground">{l.customerInfo.phone}</p>
+              {l.customerInfo.department && (
+                <p className="text-xs text-muted-foreground italic">{l.customerInfo.department}</p>
+              )}
             </div>
           );
         }

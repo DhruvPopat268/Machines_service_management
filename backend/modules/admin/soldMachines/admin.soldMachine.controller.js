@@ -319,6 +319,7 @@ const createSale = async (req, res) => {
       email: customer.email,
       address: customer.userLocation?.address || "",
       zone: customer.zone?.name || "",
+      department: customer.department || "",
       gstNumber: customer.gstNumber || "",
       customerPORef: req.body.customerPORef?.trim() || "",
     };

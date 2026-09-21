@@ -31,13 +31,15 @@ const inventoryLogSchema = new mongoose.Schema(
     },
 
     customerInfo: {
-      customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
-      name:       { type: String, trim: true },
-      phone:      { type: String, trim: true },
-      email:      { type: String, trim: true, lowercase: true },
-      address:    { type: String, trim: true },
-      zone:       { type: String, trim: true },
-      gstNumber:  { type: String, trim: true, uppercase: true },
+      customerId:       { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+      customerUniqueId: { type: String, trim: true, default: "" },
+      name:             { type: String, trim: true },
+      phone:            { type: String, trim: true },
+      email:            { type: String, trim: true, lowercase: true },
+      address:          { type: String, trim: true },
+      zone:             { type: String, trim: true },
+      department:       { type: String, trim: true, default: "" },
+      gstNumber:        { type: String, trim: true, uppercase: true },
     },
 
     machines: { type: [machineEntrySchema], required: true },

@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, PhoneCall, Wrench, HardDrive, UserCog, ShieldCheck, ShieldHalf,
-  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle, Percent, Gift,
+  ChevronDown, FileText, HardHat, MapPin, Layers, Tag, FileSignature, Truck, ShoppingBag, ShoppingCart, Receipt, PhoneOutgoing, LayoutList, Building2, BarChart2, Wallet, PlusCircle, Percent, Gift, Zap,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -181,6 +181,9 @@ export function AppSidebar() {
                 )}
                 {hasPermission("calls-raise") && (
                   <SidebarLink to="/calls/raise" icon={PhoneOutgoing} label="Raise a Call" collapsed={collapsed} />
+                )}
+                {hasPermission("calls-raise") && (
+                  <SidebarLink to="/calls/quick-raise" icon={Zap} label="Quick Raise Call" collapsed={collapsed} />
                 )}
               </SidebarMenu>
             </SidebarGroupContent>

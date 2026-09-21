@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import Spinner from "@/components/Spinner";
 import { toast } from "sonner";
-import { X, Search, PhoneCall, RefreshCw } from "lucide-react";
+import { X, Search, PhoneCall, RefreshCw, Zap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import api from "@/lib/axiosInterceptor";
 
@@ -364,7 +364,13 @@ const RaiseCallPage = () => {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Raise a Call" description="Select a machine by serial number to raise a service call" />
+      <PageHeader
+        title="Raise a Call"
+        description="Select a machine by serial number to raise a service call"
+        actionLabel="Quick Raise Call"
+        actionIcon={Zap}
+        onAction={() => navigate("/calls/quick-raise")}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative flex-1 max-w-sm">
