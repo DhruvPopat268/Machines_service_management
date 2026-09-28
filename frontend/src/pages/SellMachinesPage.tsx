@@ -12,12 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus, Upload, ChevronsUpDown, Check } from "lucide-react";
+import { ShoppingCart, Plus, Trash2, Search, X, Info, Package, Download, FileText, UserCircle, CreditCard, AlertCircle, Eye, Users, XCircle, ImagePlus, Upload, ChevronsUpDown, Check, Pencil, History } from "lucide-react";
 import { toast } from "sonner";
 import Spinner from "@/components/Spinner";
 import { Pagination } from "@/components/Pagination";
 import { cn } from "@/lib/utils";
 import api from "@/lib/axiosInterceptor";
+import { EditInvoiceDialog } from "@/components/EditInvoiceDialog";
+import { InvoiceAuditDialog } from "@/components/InvoiceAuditDialog";
 
 const PRODUCT_CATEGORY_ID = import.meta.env.VITE_PRODUCT_CATEGORY_ID;
 const TSS_CONTRACT_TYPE_ID = import.meta.env.VITE_TSS_CONTRACT_TYPE_ID;
@@ -279,7 +281,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
     if (!customerId) { setOutstanding([]); setOutstandingTotal(0); return; }
     api.get(`/admin/sales/customer/${customerId}/outstanding-due`)
       .then(r => { setOutstanding(r.data.data); setOutstandingTotal(r.data.totalRemaining); })
-      .catch(() => {});
+      .catch(() => { });
   }, [customerId]);
 
   const fetchEngineers = async (q = "") => {
@@ -433,7 +435,7 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
       for (let i = 0; i < qty; i++) {
         const u = e.units[i];
         if (!u.value.trim()) { toast.error(`Select serial number for ${e.machine.name} unit ${i + 1}`); return; }
-        
+
         // Contract type is now optional — only validate if provided
         if (u.contractTypeId) {
           if (!u.validFrom) { toast.error(`Enter valid from for ${e.machine.name} unit ${i + 1}`); return; }
@@ -481,7 +483,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           discountPercentage: e.discountPercentage !== "" ? Number(e.discountPercentage) : undefined,
           ...(isParts
             ? { partCodes: [] }
-            : { serialNumbers: e.units.map(u => ({
+            : {
+              serialNumbers: e.units.map(u => ({
                 serialNumber: u.value.trim(),
                 contractTypeId: u.contractTypeId,
                 validFrom: u.validFrom,
@@ -489,7 +492,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 department: u.department.trim(),
                 minCopies: Number(u.minCopies) || 0,
                 pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
-              })) }),
+              }))
+            }),
         };
       }),
     };
@@ -520,7 +524,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
           discountPercentage: e.discountPercentage !== "" ? Number(e.discountPercentage) : undefined,
           ...(isParts
             ? { partCodes: [] }
-            : { serialNumbers: e.units.map(u => ({
+            : {
+              serialNumbers: e.units.map(u => ({
                 serialNumber: u.value.trim(),
                 contractTypeId: u.contractTypeId,
                 validFrom: u.validFrom,
@@ -528,7 +533,8 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 department: u.department.trim(),
                 minCopies: Number(u.minCopies) || 0,
                 pagesCategories: u.pagesCategories.map(p => ({ ...p, costPerPage: Number(p.costPerPage) })),
-              })) }),
+              }))
+            }),
         };
       }),
     };
@@ -614,63 +620,63 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 </p>
               </div>
             )}
-          {customerId && outstandingTotal > 0 && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setOutstandingPopover((p) => !p)}
-                className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
-              >
-                <AlertCircle className="h-3.5 w-3.5" />
-                Outstanding: ₹{outstandingTotal.toLocaleString()}
-              </button>
-              {outstandingPopover && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setOutstandingPopover(false)} />
-                  <div className="absolute right-0 top-9 z-50 w-[480px] rounded-lg border bg-background shadow-xl">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b">
-                      <p className="text-sm font-semibold">Outstanding Dues</p>
-                      <button type="button" onClick={() => setOutstandingPopover(false)}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      <table className="w-full text-xs">
-                        <thead className="bg-muted/50 sticky top-0">
-                          <tr>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice No</th>
-                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
-                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Paid</th>
-                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Remaining</th>
-                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {outstanding.map((o, idx) => (
-                            <tr key={o._id} className="hover:bg-muted/20">
-                              <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
-                              <td className="px-3 py-2 font-mono">{o.invoiceNumber || "—"}</td>
-                              <td className="px-3 py-2 text-right">₹{o.grandTotalWithGst.toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right text-green-600">₹{o.paidAmount.toLocaleString()}</td>
-                              <td className="px-3 py-2 text-right font-medium text-red-500">₹{o.remainingAmount.toLocaleString()}</td>
-                              <td className="px-3 py-2">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ o.currentPaymentStatus === "Partial-Paid" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700" }`}>
-                                  {o.currentPaymentStatus}
-                                </span>
-                              </td>
+            {customerId && outstandingTotal > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOutstandingPopover((p) => !p)}
+                  className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-100 transition-colors"
+                >
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Outstanding: ₹{outstandingTotal.toLocaleString()}
+                </button>
+                {outstandingPopover && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setOutstandingPopover(false)} />
+                    <div className="absolute right-0 top-9 z-50 w-[480px] rounded-lg border bg-background shadow-xl">
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                        <p className="text-sm font-semibold">Outstanding Dues</p>
+                        <button type="button" onClick={() => setOutstandingPopover(false)}><X className="h-3.5 w-3.5 text-muted-foreground" /></button>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/50 sticky top-0">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">#</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Invoice No</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Paid</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Remaining</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y">
+                            {outstanding.map((o, idx) => (
+                              <tr key={o._id} className="hover:bg-muted/20">
+                                <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                                <td className="px-3 py-2 font-mono">{o.invoiceNumber || "—"}</td>
+                                <td className="px-3 py-2 text-right">₹{o.grandTotalWithGst.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right text-green-600">₹{o.paidAmount.toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-medium text-red-500">₹{o.remainingAmount.toLocaleString()}</td>
+                                <td className="px-3 py-2">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${o.currentPaymentStatus === "Partial-Paid" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>
+                                    {o.currentPaymentStatus}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex items-center justify-between px-4 py-2.5 border-t bg-muted/30">
+                        <span className="text-xs text-muted-foreground">{outstanding.length} invoice{outstanding.length !== 1 ? "s" : ""}</span>
+                        <span className="text-xs font-semibold text-red-600">Total Due: ₹{outstandingTotal.toLocaleString()}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between px-4 py-2.5 border-t bg-muted/30">
-                      <span className="text-xs text-muted-foreground">{outstanding.length} invoice{outstanding.length !== 1 ? "s" : ""}</span>
-                      <span className="text-xs font-semibold text-red-600">Total Due: ₹{outstandingTotal.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1009,51 +1015,51 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
 
               {/* Payment section */}
               {sellingTotal > 0 && (
-              <div className="px-4 pt-3 pb-2 space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Payment Status */}
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Status <span className="text-destructive">*</span></Label>
-                    <Select value={paymentStatus} onValueChange={(v: any) => { setPaymentStatus(v); if (v === "Unpaid") { setPaymentMethod("Cash"); setPaidAmount(""); } }}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Unpaid">Unpaid</SelectItem>
-                        <SelectItem value="Paid">Paid</SelectItem>
-                        <SelectItem value="Partial-Paid">Partial-Paid</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Payment Method */}
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Method {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
-                    <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} disabled={paymentStatus === "Unpaid"}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Cash">Cash</SelectItem>
-                        <SelectItem value="Online">Online</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Payment Date */}
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Date {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
-                    <Input type="date" className="h-8 text-xs" value={paymentDate} disabled={paymentStatus === "Unpaid"}
-                      onChange={(e) => setPaymentDate(e.target.value)} />
-                  </div>
-
-                  {/* Paid Amount — only for Partial-Paid */}
-                  {paymentStatus === "Partial-Paid" && (
+                <div className="px-4 pt-3 pb-2 space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Payment Status */}
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Paid Amount <span className="text-destructive">*</span></Label>
-                      <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
-                        value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} />
+                      <Label className="text-xs text-muted-foreground">Status <span className="text-destructive">*</span></Label>
+                      <Select value={paymentStatus} onValueChange={(v: any) => { setPaymentStatus(v); if (v === "Unpaid") { setPaymentMethod("Cash"); setPaidAmount(""); } }}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Unpaid">Unpaid</SelectItem>
+                          <SelectItem value="Paid">Paid</SelectItem>
+                          <SelectItem value="Partial-Paid">Partial-Paid</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
+
+                    {/* Payment Method */}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Method {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
+                      <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)} disabled={paymentStatus === "Unpaid"}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Cash">Cash</SelectItem>
+                          <SelectItem value="Online">Online</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Payment Date */}
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Date {paymentStatus !== "Unpaid" && <span className="text-destructive">*</span>}</Label>
+                      <Input type="date" className="h-8 text-xs" value={paymentDate} disabled={paymentStatus === "Unpaid"}
+                        onChange={(e) => setPaymentDate(e.target.value)} />
+                    </div>
+
+                    {/* Paid Amount — only for Partial-Paid */}
+                    {paymentStatus === "Partial-Paid" && (
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Paid Amount <span className="text-destructive">*</span></Label>
+                        <Input type="number" min={0} className="h-8 text-xs" placeholder="0"
+                          value={paidAmount} onChange={(e) => setPaidAmount(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
               )}
 
               {/* Grand total + actions */}
@@ -1112,33 +1118,33 @@ const SellMachineDialog = ({ open, onClose, onSuccess, initialCustomerId = "" }:
                 />
               </div>
               <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
-              {loadingEngineers ? (
-                <p className="text-xs text-muted-foreground px-3 py-4 text-center">Loading...</p>
-              ) : engineers.length === 0 ? (
-                <p className="text-xs text-muted-foreground px-3 py-4 text-center">No users found</p>
-              ) : engineers.map((eng) => {
-                const checked = selectedEngineers.includes(eng._id);
-                return (
-                  <button
-                    key={eng._id}
-                    type="button"
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
-                    onClick={() => setSelectedEngineers((prev) => checked ? prev.filter((id) => id !== eng._id) : [...prev, eng._id])}
-                  >
-                    <div className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
-                      {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{eng.name}</p>
-                      {eng.role && <p className="text-xs text-muted-foreground">{eng.role}{eng.engineerId ? ` - ${eng.engineerId}` : ""}</p>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {selectedEngineers.length > 0 && (
-              <p className="text-xs text-primary font-medium">{selectedEngineers.length} user{selectedEngineers.length > 1 ? "s" : ""} selected</p>
-            )}
+                {loadingEngineers ? (
+                  <p className="text-xs text-muted-foreground px-3 py-4 text-center">Loading...</p>
+                ) : engineers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-3 py-4 text-center">No users found</p>
+                ) : engineers.map((eng) => {
+                  const checked = selectedEngineers.includes(eng._id);
+                  return (
+                    <button
+                      key={eng._id}
+                      type="button"
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
+                      onClick={() => setSelectedEngineers((prev) => checked ? prev.filter((id) => id !== eng._id) : [...prev, eng._id])}
+                    >
+                      <div className={`h-4 w-4 rounded border-2 flex items-center justify-center shrink-0 ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                        {checked && <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{eng.name}</p>
+                        {eng.role && <p className="text-xs text-muted-foreground">{eng.role}{eng.engineerId ? ` - ${eng.engineerId}` : ""}</p>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedEngineers.length > 0 && (
+                <p className="text-xs text-primary font-medium">{selectedEngineers.length} user{selectedEngineers.length > 1 ? "s" : ""} selected</p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -1239,6 +1245,8 @@ const SellMachinesPage = () => {
   const [searchParams] = useSearchParams();
   const [data, setData] = useState<Sale[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [editInvoiceSaleId, setEditInvoiceSaleId] = useState<string | null>(null);
+  const [auditDialogSale, setAuditDialogSale] = useState<Sale | null>(null);
 
   // ── Applied (API-triggering) filter state ────────────────────────────────
   const [search, setSearch] = useState("");
@@ -1260,12 +1268,12 @@ const SellMachinesPage = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [exportDialog, setExportDialog] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
-  const [importStep, setImportStep]     = useState<"menu" | "confirm" | "upload">("menu");
-  const [importFile, setImportFile]     = useState<File | null>(null);
-  const [importing, setImporting]       = useState(false);
-  const [isDragging, setIsDragging]     = useState(false);
+  const [importStep, setImportStep] = useState<"menu" | "confirm" | "upload">("menu");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const fileInputRef                    = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [initialCustomerId, setInitialCustomerId] = useState("");
   const [invoiceDialog, setInvoiceDialog] = useState<Sale | null>(null);
   const [paymentDialog, setPaymentDialog] = useState<Sale | null>(null);
@@ -1765,18 +1773,22 @@ const SellMachinesPage = () => {
     { key: "grandTotalBase", label: "Grand Total (Base)", render: (s) => <span className="font-medium">₹{s.grandTotalBase.toLocaleString()}</span> },
     { key: "grandTotalGstAmount", label: "Grand Total GST Amt", render: (s) => { const gstPct = (s.cgst?.percent || 0) + (s.sgst?.percent || 0) + (s.igst?.percent || 0); return <span>₹{(s.grandTotalGstAmount || 0).toLocaleString()} ({gstPct}%)</span>; } },
     { key: "grandTotalWithGst", label: "Grand Total (GST Incl.)", render: (s) => <span className="font-semibold">₹{s.grandTotalWithGst.toLocaleString()}</span> },
-    { key: "currentPaymentStatus", label: "Current Payment Status", render: (s) => {
-      if (!s.currentPaymentStatus) return <span className="text-muted-foreground text-xs">—</span>;
-      const color = s.currentPaymentStatus === "Paid" ? "text-green-600 bg-green-50 border-green-200" : s.currentPaymentStatus === "Partial-Paid" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
-      return <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${color}`}>{s.currentPaymentStatus}</span>;
-    }},
+    {
+      key: "currentPaymentStatus", label: "Current Payment Status", render: (s) => {
+        if (!s.currentPaymentStatus) return <span className="text-muted-foreground text-xs">—</span>;
+        const color = s.currentPaymentStatus === "Paid" ? "text-green-600 bg-green-50 border-green-200" : s.currentPaymentStatus === "Partial-Paid" ? "text-yellow-600 bg-yellow-50 border-yellow-200" : "text-red-600 bg-red-50 border-red-200";
+        return <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${color}`}>{s.currentPaymentStatus}</span>;
+      }
+    },
     { key: "paidAmount", label: "Paid", render: (s) => !s.currentPaymentStatus || s.paidAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className="text-green-600 font-medium">₹{s.paidAmount.toLocaleString()}</span> },
     { key: "remainingAmount", label: "Remaining", render: (s) => !s.currentPaymentStatus || s.remainingAmount === 0 ? <span className="text-muted-foreground text-xs">—</span> : <span className={s.remainingAmount > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>₹{s.remainingAmount.toLocaleString()}</span> },
-    { key: "processedBy", label: "Processed By", render: (s) => {
-      const list = (s as any).processedBy as { _id: string; name: string }[] | undefined;
-      if (!list?.length) return <span className="text-muted-foreground text-xs">—</span>;
-      return <div className="flex flex-col gap-0.5">{list.map((e) => <span key={e._id} className="text-xs">{e.name}</span>)}</div>;
-    }},
+    {
+      key: "processedBy", label: "Processed By", render: (s) => {
+        const list = (s as any).processedBy as { _id: string; name: string }[] | undefined;
+        if (!list?.length) return <span className="text-muted-foreground text-xs">—</span>;
+        return <div className="flex flex-col gap-0.5">{list.map((e) => <span key={e._id} className="text-xs">{e.name}</span>)}</div>;
+      }
+    },
     {
       key: "actions", label: "Actions", sticky: true, render: (s) => (
         <div className="flex items-center gap-1">
@@ -1805,6 +1817,24 @@ const SellMachinesPage = () => {
               <Eye className="h-3 w-3" />
             </Button>
           )}
+          {s.status !== "cancelled" && (
+            <Button
+              size="sm" variant="outline"
+              className="text-xs h-7 text-amber-600 border-amber-300"
+              title="Edit Invoice"
+              onClick={() => setEditInvoiceSaleId(s._id)}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+          <Button
+            size="sm" variant="outline"
+            className="text-xs h-7 text-slate-600 border-slate-300"
+            title="Invoice Edit History"
+            onClick={() => setAuditDialogSale(s)}
+          >
+            <History className="h-3 w-3" />
+          </Button>
           {s.canCancel && (
             <Button
               size="sm" variant="outline"
@@ -2177,9 +2207,8 @@ const SellMachinesPage = () => {
                       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                       onDragLeave={() => setIsDragging(false)}
                       onDrop={handleDrop}
-                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors ${
-                        isDragging ? "border-primary bg-primary/5" : importFile ? "border-primary/50 bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50"
-                      }`}
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors ${isDragging ? "border-primary bg-primary/5" : importFile ? "border-primary/50 bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50"
+                        }`}
                     >
                       <Upload className={`h-8 w-8 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
                       {importFile ? (
@@ -2232,6 +2261,26 @@ const SellMachinesPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <EditInvoiceDialog
+        saleId={editInvoiceSaleId}
+        open={!!editInvoiceSaleId}
+        onClose={() => setEditInvoiceSaleId(null)}
+        onSuccess={() => fetchSales(pagination.page)}
+        onOpenAuditHistory={(id) => {
+          const sale = data.find((x) => x._id === id);
+          if (sale) setAuditDialogSale(sale);
+        }}
+      />
+
+      {/* Invoice Audit History Dialog */}
+      <InvoiceAuditDialog
+        saleId={auditDialogSale?._id || null}
+        invoiceNumber={auditDialogSale?.invoiceNumber}
+        open={!!auditDialogSale}
+        onClose={() => setAuditDialogSale(null)}
+      />
     </div>
   );
 };

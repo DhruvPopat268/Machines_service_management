@@ -43,12 +43,14 @@ interface LogMachine {
 
 interface InventoryLog {
   _id: string;
-  action: "purchased" | "sold" | "dis-installed";
+  action: "purchased" | "sold" | "dis-installed" | "restocked" | "adjustment";
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
   machines: LogMachine[];
   machinesCount: number;
   isCancelled: boolean;
+  reason?: string;
+  reference?: string;
   createdAt: string;
 }
 
@@ -68,23 +70,23 @@ const toISTDateParam = (htmlDate: string) => {
 
 const InventoryLogsPage = () => {
   const navigate = useNavigate();
-  const [data, setData]                       = useState<InventoryLog[]>([]);
-  const [search, setSearch]                   = useState("");
+  const [data, setData] = useState<InventoryLog[]>([]);
+  const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filters, setFilters]                 = useState<Record<string, string>>({});
-  const [fromDate, setFromDate]               = useState("");
-  const [toDate, setToDate]                   = useState("");
-  const [loading, setLoading]                 = useState(true);
-  const [pageSize]                            = useState(10);
-  const [pagination, setPagination]           = useState({ page: 1, totalPages: 1, total: 0 });
-  const [exportDialog, setExportDialog]       = useState(false);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [pageSize] = useState(10);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [exportDialog, setExportDialog] = useState(false);
 
   // Filter options state
-  const [vendors, setVendors]       = useState<{ label: string; value: string }[]>([]);
-  const [customers, setCustomers]   = useState<{ label: string; value: string }[]>([]);
+  const [vendors, setVendors] = useState<{ label: string; value: string }[]>([]);
+  const [customers, setCustomers] = useState<{ label: string; value: string }[]>([]);
   const [categories, setCategories] = useState<{ label: string; value: string }[]>([]);
-  const [divisions, setDivisions]   = useState<{ label: string; value: string }[]>([]);
-  const [machines, setMachines]     = useState<{ label: string; value: string }[]>([]);
+  const [divisions, setDivisions] = useState<{ label: string; value: string }[]>([]);
+  const [machines, setMachines] = useState<{ label: string; value: string }[]>([]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 500);
@@ -233,14 +235,14 @@ const InventoryLogsPage = () => {
       if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
-      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      if (toDate) params.toDate = toISTDateParam(toDate);
 
       const res = await api.get("/admin/inventory-logs", { params, signal: controller.signal });
       setData(res.data.data);
       setPagination({
-        page:       res.data.pagination.page,
+        page: res.data.pagination.page,
         totalPages: res.data.pagination.totalPages,
-        total:      res.data.pagination.total,
+        total: res.data.pagination.total,
       });
     } catch (err: any) {
       if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED")
@@ -265,7 +267,7 @@ const InventoryLogsPage = () => {
       if (filters.division && filters.division !== "all" && filters.division !== "") params.division = filters.division;
       if (filters.machine && filters.machine !== "all" && filters.machine !== "") params.machineId = filters.machine;
       if (fromDate) params.fromDate = toISTDateParam(fromDate);
-      if (toDate)   params.toDate   = toISTDateParam(toDate);
+      if (toDate) params.toDate = toISTDateParam(toDate);
       const res = await api.get("/admin/inventory-logs/export", { params, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
@@ -286,12 +288,14 @@ const InventoryLogsPage = () => {
     {
       key: "action", label: "Action",
       render: (l) => (
-        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
           l.action === "purchased" ? "bg-green-100 text-green-700"
-          : l.action === "sold"    ? "bg-blue-100 text-blue-700"
-                                   : "bg-orange-100 text-orange-700"
+            : l.action === "sold" ? "bg-blue-100 text-blue-700"
+            : l.action === "restocked" ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+            : l.action === "adjustment" ? "bg-purple-100 text-purple-700"
+            : "bg-orange-100 text-orange-700"
         }`}>
-          {l.action === "purchased" ? "Purchased" : l.action === "sold" ? "Sold" : "Dis-Installed"}
+          {l.action === "purchased" ? "Purchased" : l.action === "sold" ? "Sold" : l.action === "restocked" ? "Restocked" : l.action === "adjustment" ? "Adjustment" : "Dis-Installed"}
         </span>
       ),
     },
@@ -307,16 +311,23 @@ const InventoryLogsPage = () => {
             </div>
           );
         }
-        if ((l.action === "sold" || l.action === "dis-installed") && l.customerInfo) {
+        if ((l.action === "sold" || l.action === "dis-installed" || l.action === "restocked" || l.action === "adjustment") && l.customerInfo) {
           return (
             <div>
               {l.customerInfo.customerUniqueId && (
                 <p className="text-[10px] font-mono text-primary font-semibold">{l.customerInfo.customerUniqueId}</p>
               )}
+              {l.reference && (
+                <span className="text-[10px] font-mono font-medium text-amber-700 bg-amber-50 px-1 py-0.5 rounded inline-block mb-0.5">
+                  Inv: {l.reference}
+                </span>
+              )}
               <p className="font-medium text-sm">{l.customerInfo.name}</p>
               <p className="text-xs text-muted-foreground">{l.customerInfo.phone}</p>
-              {l.customerInfo.department && (
-                <p className="text-xs text-muted-foreground italic">{l.customerInfo.department}</p>
+              {l.reason && (
+                <p className="text-[11px] text-muted-foreground/80 italic line-clamp-1" title={l.reason}>
+                  {l.reason}
+                </p>
               )}
             </div>
           );
@@ -349,9 +360,7 @@ const InventoryLogsPage = () => {
       render: (l) => (
         <div>{l.machines.map((m, i) => (
           <div key={i}>
-            <span className={`font-medium ${
-              l.action === "sold" ? "text-red-600" : "text-green-600"
-            }`}>
+            <span className={`font-semibold ${l.action === "sold" ? "text-red-600" : "text-emerald-600"}`}>
               {l.action === "sold" ? "-" : "+"}{m.quantity}
             </span>
             {sep(i, l.machines.length)}
@@ -441,7 +450,7 @@ const InventoryLogsPage = () => {
               onValueChange={(v) => {
                 const newFilters = { ...filters, action: v };
                 if (!v || v === "all") {
-                  newFilters.vendor   = "";
+                  newFilters.vendor = "";
                   newFilters.customer = "";
                 }
                 setFilters(newFilters);
@@ -449,8 +458,10 @@ const InventoryLogsPage = () => {
             >
               <SelectTrigger className="w-[130px] h-9 text-sm"><SelectValue placeholder="Action" /></SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Actions</SelectItem>
                 <SelectItem value="purchased">Purchased</SelectItem>
                 <SelectItem value="sold">Sold</SelectItem>
+                <SelectItem value="restocked">Restocked</SelectItem>
                 <SelectItem value="dis-installed">Dis-Installed</SelectItem>
               </SelectContent>
             </Select>
@@ -481,8 +492,8 @@ const InventoryLogsPage = () => {
               disabled={!!(filters.vendor && filters.vendor !== "all" && filters.vendor !== "")}
             />
             <SearchableSelect options={categories} value={filters.category ?? ""} onChange={(v) => setFilters(p => ({ ...p, category: v }))} onSearchChange={fetchCategories} placeholder="Category" searchPlaceholder="Search categories..." className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={divisions}  value={filters.division  ?? ""} onChange={(v) => setFilters(p => ({ ...p, division:  v }))} onSearchChange={fetchDivisions}  placeholder="Division"  searchPlaceholder="Search divisions..."  className="w-[160px] h-9 text-sm" />
-            <SearchableSelect options={machines}   value={filters.machine   ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine:   v }))} onSearchChange={fetchMachines}   placeholder="Item"   searchPlaceholder="Search items..."   className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={divisions} value={filters.division ?? ""} onChange={(v) => setFilters(p => ({ ...p, division: v }))} onSearchChange={fetchDivisions} placeholder="Division" searchPlaceholder="Search divisions..." className="w-[160px] h-9 text-sm" />
+            <SearchableSelect options={machines} value={filters.machine ?? ""} onChange={(v) => setFilters(p => ({ ...p, machine: v }))} onSearchChange={fetchMachines} placeholder="Item" searchPlaceholder="Search items..." className="w-[160px] h-9 text-sm" />
           </div>
           <DataTable columns={columns} data={data} pageSize={999} />
           <Pagination

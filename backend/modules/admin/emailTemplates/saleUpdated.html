@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Invoice Updated</title>
+</head>
+
+<body style="margin:0; padding:0; background:#f4f7fb; font-family:Arial, Helvetica, sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f7fb; padding:40px 15px;">
+    <tr>
+      <td align="center">
+
+        <table width="100%" cellpadding="0" cellspacing="0" border="0"
+          style="max-width:600px; background:#ffffff; border-radius:18px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg, #0f172a, #1e3a5f); padding:40px 30px; text-align:center;">
+              <h1 style="margin:0; color:#ffffff; font-size:28px; font-weight:700;">Invoice Updated</h1>
+              <p style="margin:12px 0 0; color:#93c5fd; font-size:15px;">Your invoice details have been updated</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px 35px;">
+
+              <p style="margin:0; font-size:16px; color:#374151; line-height:28px;">
+                Hello <strong>{{customerName}}</strong>,
+              </p>
+              <p style="margin:16px 0 0; font-size:15px; color:#6b7280; line-height:26px;">
+                Your invoice <strong>{{invoiceNumber}}</strong> has been updated. Please find the revised details below.
+              </p>
+
+              <!-- Sale Details Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                style="margin:28px 0; background:#f9fafb; border-radius:12px; border:1px solid #e5e7eb;">
+                <tr>
+                  <td style="padding:20px 24px;">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280; width:50%;">Invoice Number</td>
+                        <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:600; text-align:right;">{{invoiceNumber}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280;">Update Date</td>
+                        <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:600; text-align:right;">{{updateDate}}</td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding:10px 0 4px;"><hr style="border:none; border-top:1px solid #e5e7eb; margin:0;"></td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280;">Revised Grand Total</td>
+                        <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:600; text-align:right;">₹{{grandTotal}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280;">Amount Paid</td>
+                        <td style="padding:6px 0; font-size:14px; color:#16a34a; font-weight:600; text-align:right;">₹{{paidAmount}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280;">Remaining Balance</td>
+                        <td style="padding:6px 0; font-size:14px; color:#dc2626; font-weight:600; text-align:right;">₹{{remainingAmount}}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 0; font-size:14px; color:#6b7280;">Reason for Update</td>
+                        <td style="padding:6px 0; font-size:14px; color:#111827; font-weight:500; text-align:right;">{{reason}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:24px 0 0; font-size:14px; color:#6b7280; line-height:22px;">
+                If you have questions regarding this update, please contact our support team.
+              </p>
+
+              <!-- Footer Contact -->
+              <div style="margin-top:30px; padding-top:20px; border-top:1px solid #e5e7eb; font-size:13px; color:#9ca3af;">
+                <p style="margin:0 0 4px;"><strong>{{companyName}}</strong></p>
+                <p style="margin:0 0 4px;">Email: {{companyEmail}} | Phone: {{companyPhone}}</p>
+              </div>
+
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

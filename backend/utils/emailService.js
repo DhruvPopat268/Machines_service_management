@@ -627,4 +627,37 @@ const sendSaleCancellationEmail = async (data) => {
   }
 };
 
-module.exports = { sendMail, sendSaleConfirmationEmail, sendSaleCancellationEmail, sendPaymentReceivedEmail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
+const sendSaleUpdatedEmail = async (data) => {
+  try {
+    const templatePath = path.join(__dirname, "../modules/admin/emailTemplates/saleUpdated.html");
+    let html = fs.readFileSync(templatePath, "utf8");
+
+    const fmt = (n) => Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    html = html
+      .replace(/{{customerName}}/g,    data.customerName || "Valued Customer")
+      .replace(/{{invoiceNumber}}/g,    data.invoiceNumber || "N/A")
+      .replace(/{{updateDate}}/g,       data.updateDate || new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }))
+      .replace(/{{grandTotal}}/g,       fmt(data.grandTotal || 0))
+      .replace(/{{paidAmount}}/g,       fmt(data.paidAmount || 0))
+      .replace(/{{remainingAmount}}/g,  fmt(data.remainingAmount || 0))
+      .replace(/{{reason}}/g,           data.reason || "Invoice details modified")
+      .replace(/{{companyName}}/g,      data.companyName || "")
+      .replace(/{{companyEmail}}/g,     data.companyEmail || "")
+      .replace(/{{companyPhone}}/g,     data.companyPhone || "");
+
+    await transporter.sendMail({
+      from: `"${process.env.EMAIL_FROM_NAME || "Machine Service Management"}" <${process.env.EMAIL_USER}>`,
+      to: data.customerEmail,
+      subject: `Invoice Updated — ${data.invoiceNumber || "Invoice"}`,
+      html,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Sale updated email error:", { message: error.message });
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = { sendMail, sendSaleConfirmationEmail, sendSaleCancellationEmail, sendSaleUpdatedEmail, sendPaymentReceivedEmail, sendContractExpiryAlert, sendForgotPasswordEmail, sendPasswordResetSuccessEmail, sendChangeEmailOtp, sendEmailChangeSuccessNotification, sendAdminChangePasswordOtp, sendAdminPasswordChangeSuccess, sendAdminResetPasswordOtp, sendSystemUserWelcome, sendWelcomeCredentials, sendSystemUserPasswordResetSuccess, sendEngineerForgotPasswordOtp, sendEngineerPasswordResetSuccess, sendServiceCallInvoiceEmail };
+

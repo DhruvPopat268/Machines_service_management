@@ -2,50 +2,52 @@ const mongoose = require("mongoose");
 
 const machineEntrySchema = new mongoose.Schema(
   {
-    machineId:     { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
-    machineName:   { type: String, trim: true, required: true },
-    modelNumber:   { type: String, trim: true, default: "" },
-    partCode:      { type: String, trim: true, default: "" },
-    categoryId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
-    category:      { type: String, trim: true, default: "" },
-    divisionId:    { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },
-    division:      { type: String, trim: true, default: "" },
-    quantity:      { type: Number, required: true },
+    machineId: { type: mongoose.Schema.Types.ObjectId, ref: "Machine" },
+    machineName: { type: String, trim: true, required: true },
+    modelNumber: { type: String, trim: true, default: "" },
+    partCode: { type: String, trim: true, default: "" },
+    categoryId: { type: mongoose.Schema.Types.ObjectId, ref: "MachineCategory" },
+    category: { type: String, trim: true, default: "" },
+    divisionId: { type: mongoose.Schema.Types.ObjectId, ref: "MachineDivision" },
+    division: { type: String, trim: true, default: "" },
+    quantity: { type: Number, required: true },
     serialNumbers: { type: [String] },
-    partCodes:     { type: [String] },
+    partCodes: { type: [String] },
   },
   { _id: false }
 );
 
 const inventoryLogSchema = new mongoose.Schema(
   {
-    action: { type: String, enum: ["purchased", "sold", "dis-installed"], required: true },
+    action: { type: String, enum: ["purchased", "sold", "dis-installed", "restocked", "adjustment"], required: true },
 
     vendorInfo: {
-      vendorId:    { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
-      name:        { type: String, trim: true },
-      phone:       { type: String, trim: true },
-      email:       { type: String, trim: true, lowercase: true },
+      vendorId: { type: mongoose.Schema.Types.ObjectId, ref: "Vendor" },
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      email: { type: String, trim: true, lowercase: true },
       companyName: { type: String, trim: true },
-      gstNumber:   { type: String, trim: true, uppercase: true },
+      gstNumber: { type: String, trim: true, uppercase: true },
     },
 
     customerInfo: {
-      customerId:       { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+      customerId: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
       customerUniqueId: { type: String, trim: true, default: "" },
-      name:             { type: String, trim: true },
-      phone:            { type: String, trim: true },
-      email:            { type: String, trim: true, lowercase: true },
-      address:          { type: String, trim: true },
-      zone:             { type: String, trim: true },
-      department:       { type: String, trim: true, default: "" },
-      gstNumber:        { type: String, trim: true, uppercase: true },
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      email: { type: String, trim: true, lowercase: true },
+      address: { type: String, trim: true },
+      zone: { type: String, trim: true },
+      department: { type: String, trim: true, default: "" },
+      gstNumber: { type: String, trim: true, uppercase: true },
     },
 
     machines: { type: [machineEntrySchema], required: true },
     isCancelled: { type: Boolean, default: false },
     purchaseId: { type: mongoose.Schema.Types.ObjectId, ref: "PurchasedMachine", default: null },
     soldId: { type: mongoose.Schema.Types.ObjectId, ref: "SoldMachine", default: null },
+    reason: { type: String, trim: true, default: "" },
+    reference: { type: String, trim: true, default: "" },
   },
   { timestamps: true }
 );

@@ -39,11 +39,13 @@ interface CustomerInfo {
 
 interface InventoryLogDetail {
   _id: string;
-  action: "purchased" | "sold" | "dis-installed";
+  action: "purchased" | "sold" | "dis-installed" | "restocked" | "adjustment";
   vendorInfo?: VendorInfo;
   customerInfo?: CustomerInfo;
   machines: LogMachine[];
   machinesCount: number;
+  reason?: string;
+  reference?: string;
   createdAt: string;
 }
 
@@ -63,8 +65,8 @@ const formatDateTime = (iso: string) => {
 const InventoryLogDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [log, setLog]         = useState<InventoryLogDetail | null>(null);
-  const [loading, setLoading]  = useState(true);
+  const [log, setLog] = useState<InventoryLogDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [codesDialog, setCodesDialog] = useState<{ title: string; codes: string[] } | null>(null);
 
   useEffect(() => {
@@ -84,8 +86,10 @@ const InventoryLogDetailPage = () => {
   if (loading) return <Spinner />;
   if (!log) return <div className="text-center py-12 text-muted-foreground">Log not found</div>;
 
-  const isPurchased   = log.action === "purchased";
+  const isPurchased = log.action === "purchased";
   const isDisInstalled = log.action === "dis-installed";
+  const isRestocked = log.action === "restocked";
+  const isAdjustment = log.action === "adjustment";
 
   return (
     <div className="space-y-6">
@@ -100,15 +104,25 @@ const InventoryLogDetailPage = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Action",   value: <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-            isPurchased    ? "bg-green-100 text-green-700"
-            : isDisInstalled ? "bg-orange-100 text-orange-700"
-                             : "bg-blue-100 text-blue-700"
-          }`}>{isPurchased ? "Purchased" : isDisInstalled ? "Dis-Installed" : "Sold"}</span> },
+          {
+            label: "Action",
+            value: (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${
+                isPurchased ? "bg-green-100 text-green-700"
+                : isRestocked ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                : isAdjustment ? "bg-purple-100 text-purple-700"
+                : isDisInstalled ? "bg-orange-100 text-orange-700"
+                : "bg-blue-100 text-blue-700"
+              }`}>
+                {isPurchased ? "Purchased" : isRestocked ? "Restocked" : isAdjustment ? "Adjustment" : isDisInstalled ? "Dis-Installed" : "Sold"}
+              </span>
+            ),
+          },
           { label: "Items", value: log.machinesCount },
-          { label: "Date",     value: formatDateTime(log.createdAt) },
+          { label: "Date", value: formatDateTime(log.createdAt) },
+          ...(log.reference ? [{ label: "Invoice Ref", value: <span className="font-mono text-sm">{log.reference}</span> }] : []),
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">
             <CardContent className="pt-4">
@@ -118,6 +132,13 @@ const InventoryLogDetailPage = () => {
           </Card>
         ))}
       </div>
+
+      {log.reason && (
+        <div className="p-3 bg-muted/40 rounded-lg border text-xs">
+          <span className="text-muted-foreground font-medium">Log Note / Reason: </span>
+          <span className="font-semibold text-foreground">{log.reason}</span>
+        </div>
+      )}
 
       {/* Vendor / Customer Info */}
       {isPurchased && log.vendorInfo && (
@@ -170,7 +191,7 @@ const InventoryLogDetailPage = () => {
       {/* Machines */}
       <div className="space-y-4">
         {log.machines.map((machine, mi) => {
-          const codes      = (machine.serialNumbers || []).length > 0 ? machine.serialNumbers! : (machine.partCodes || []);
+          const codes = (machine.serialNumbers || []).length > 0 ? machine.serialNumbers! : (machine.partCodes || []);
           const isPartCodes = (machine.serialNumbers || []).length === 0 && (machine.partCodes || []).length > 0;
           return (
             <Card key={mi} className="border-0 shadow-sm">

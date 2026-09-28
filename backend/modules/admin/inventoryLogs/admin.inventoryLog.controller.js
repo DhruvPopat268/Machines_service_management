@@ -10,11 +10,11 @@ const Customer = require("../customerManagement/admin.customer.model");
 // Helper function to build machine-level filters using $elemMatch
 const buildMachineFilter = (category, division, machineId) => {
   const machineFilter = {};
-  
+
   if (category) machineFilter.categoryId = category;
   if (division) machineFilter.divisionId = division;
   if (machineId) machineFilter.machineId = machineId;
-  
+
   // Only return $elemMatch if there are machine-level filters
   return Object.keys(machineFilter).length > 0 ? { $elemMatch: machineFilter } : null;
 };
@@ -26,7 +26,7 @@ const getAll = async (req, res) => {
 
     const query = {};
 
-    if (action && ["purchased", "sold", "dis-installed"].includes(action)) query.action = action;
+    if (action && ["purchased", "sold", "dis-installed", "restocked", "adjustment"].includes(action)) query.action = action;
 
     // Filter by vendor
     if (vendorId) {
@@ -98,15 +98,15 @@ const getAll = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { "machines.machineName":  { $regex: escaped, $options: "i" } },
-          { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
-          { "machines.partCode":     { $regex: escaped, $options: "i" } },
+          { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "machines.partCode": { $regex: escaped, $options: "i" } },
           { "machines.serialNumber": { $regex: escaped, $options: "i" } },
-          { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
-          { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
-          { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
-          { "customerInfo.name":     { $regex: escaped, $options: "i" } },
-          { "customerInfo.phone":    { $regex: escaped, $options: "i" } },
+          { "vendorInfo.name": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.companyName": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone": { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -124,7 +124,7 @@ const getAll = async (req, res) => {
         query.createdAt = query.createdAt || {};
         query.createdAt.$gte = istDate;
       }
-      
+
       if (toDate) {
         const parsed = validateAndParseDate(toDate, "toDate");
         if (parsed.error) {
@@ -188,13 +188,13 @@ const getById = async (req, res) => {
 
 const formatIST = (date) => {
   const d = new Date(new Date(date).getTime() + 5.5 * 60 * 60 * 1000);
-  const dd  = String(d.getUTCDate()).padStart(2, "0");
-  const mm  = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const yy  = String(d.getUTCFullYear()).slice(2);
-  const h   = d.getUTCHours();
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yy = String(d.getUTCFullYear()).slice(2);
+  const h = d.getUTCHours();
   const min = String(d.getUTCMinutes()).padStart(2, "0");
   const ampm = h >= 12 ? "PM" : "AM";
-  const h12  = String(h % 12 || 12).padStart(2, "0");
+  const h12 = String(h % 12 || 12).padStart(2, "0");
   return { date: `${dd}/${mm}/${yy}`, time: `${h12}:${min} ${ampm}` };
 };
 
@@ -275,13 +275,13 @@ const exportInventoryLogs = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { "machines.machineName":  { $regex: escaped, $options: "i" } },
-          { "machines.modelNumber":  { $regex: escaped, $options: "i" } },
-          { "vendorInfo.name":       { $regex: escaped, $options: "i" } },
-          { "vendorInfo.companyName":{ $regex: escaped, $options: "i" } },
-          { "vendorInfo.phone":      { $regex: escaped, $options: "i" } },
-          { "customerInfo.name":     { $regex: escaped, $options: "i" } },
-          { "customerInfo.phone":    { $regex: escaped, $options: "i" } },
+          { "machines.machineName": { $regex: escaped, $options: "i" } },
+          { "machines.modelNumber": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.name": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.companyName": { $regex: escaped, $options: "i" } },
+          { "vendorInfo.phone": { $regex: escaped, $options: "i" } },
+          { "customerInfo.name": { $regex: escaped, $options: "i" } },
+          { "customerInfo.phone": { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -299,7 +299,7 @@ const exportInventoryLogs = async (req, res) => {
         query.createdAt = query.createdAt || {};
         query.createdAt.$gte = istDate;
       }
-      
+
       if (toDate) {
         const parsed = validateAndParseDate(toDate, "toDate");
         if (parsed.error) {
@@ -320,25 +320,25 @@ const exportInventoryLogs = async (req, res) => {
     logs.forEach((log) => {
       const created = formatIST(log.createdAt);
       const isPurchased = log.action === "purchased";
-      
+
       log.machines.forEach((machine) => {
-          rows.push({
-            "Company Name":    log.vendorInfo?.companyName || "",
-            "Vendor Name":     log.vendorInfo?.name || "",
-            "Vendor Contact":  log.vendorInfo?.phone || "",
-            "Customer Name":   log.customerInfo?.name || "",
-            "Customer Contact":log.customerInfo?.phone || "",
-            "Machine Name":    machine.machineName,
-            "Model Number":    machine.modelNumber || "",
-            "Category":        machine.category || "",
-            "Division":        machine.division || "",
-            "Action":          log.action === "purchased" ? "Purchased" : log.action === "sold" ? "Sold" : "Dis-Installed",
-            "Quantity":        machine.quantity,
-            "Serial Numbers":  (machine.serialNumbers || []).join(", "),
-            "Part Codes":      (machine.partCodes || []).join(", "),
-            [isPurchased ? "Purchase Date" : log.action === "dis-installed" ? "Dis-Installation Date" : "Sale Date"]: created.date,
-            [isPurchased ? "Purchase Time" : log.action === "dis-installed" ? "Dis-Installation Time" : "Sale Time"]: created.time,
-          });
+        rows.push({
+          "Company Name": log.vendorInfo?.companyName || "",
+          "Vendor Name": log.vendorInfo?.name || "",
+          "Vendor Contact": log.vendorInfo?.phone || "",
+          "Customer Name": log.customerInfo?.name || "",
+          "Customer Contact": log.customerInfo?.phone || "",
+          "Machine Name": machine.machineName,
+          "Model Number": machine.modelNumber || "",
+          "Category": machine.category || "",
+          "Division": machine.division || "",
+          "Action": log.action === "purchased" ? "Purchased" : log.action === "sold" ? "Sold" : log.action === "restocked" ? "Restocked" : log.action === "adjustment" ? "Adjustment" : "Dis-Installed",
+          "Quantity": machine.quantity,
+          "Serial Numbers": (machine.serialNumbers || []).join(", "),
+          "Part Codes": (machine.partCodes || []).join(", "),
+          [isPurchased ? "Purchase Date" : log.action === "restocked" ? "Restock Date" : log.action === "dis-installed" ? "Dis-Installation Date" : "Sale Date"]: created.date,
+          [isPurchased ? "Purchase Time" : log.action === "restocked" ? "Restock Time" : log.action === "dis-installed" ? "Dis-Installation Time" : "Sale Time"]: created.time,
+        });
       });
     });
 

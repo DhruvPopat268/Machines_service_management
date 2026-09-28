@@ -64,14 +64,14 @@ const computeCanCancelSale = async (sale) => {
   for (const machine of sale.machines) {
     const serialNumbers = machine.serialNumbers || [];
     const modelNumber = machine.modelNumber;
-    
+
     // If no serial numbers (parts machine), can always cancel
     if (serialNumbers.length === 0) continue;
 
     // For machines with serial numbers, check if any are used in non-cancelled service calls
     for (const snObj of serialNumbers) {
       const serialNumber = snObj.serialNumber;
-      
+
       // ServiceCall stores serial at machines.serialNumber and modelNumber at machines.modelNumber
       // Query by both serial number AND model number for precise matching
       const serviceCallExists = await ServiceCall.exists({
@@ -99,9 +99,9 @@ const getAvailableMachines = async (req, res) => {
       if (s) {
         const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         query.$or = [
-          { name:        { $regex: escaped, $options: "i" } },
+          { name: { $regex: escaped, $options: "i" } },
           { modelNumber: { $regex: escaped, $options: "i" } },
-          { partCode:    { $regex: escaped, $options: "i" } },
+          { partCode: { $regex: escaped, $options: "i" } },
         ];
       }
     }
@@ -881,24 +881,24 @@ const createSale = async (req, res) => {
         const saleDate = `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
         const company = companyId ? await Company.findById(companyId).lean() : null;
         await sendSaleConfirmationEmail({
-          customerName:    customerInfo.name,
-          customerEmail:   customerInfo.email,
-          invoiceNumber:   saleInvoiceNumber,
+          customerName: customerInfo.name,
+          customerEmail: customerInfo.email,
+          invoiceNumber: saleInvoiceNumber,
           saleDate,
-          grandTotal:      grandTotalWithGst,
+          grandTotal: grandTotalWithGst,
           paidAmount,
           remainingAmount,
-          paymentStatus:   currentPaymentStatus,
-          paymentMethod:   req.body.paymentMethod || "",
-          hasReceipt:      !!receiptUrl,
-          receiptNumber:   receiptNumber || "",
+          paymentStatus: currentPaymentStatus,
+          paymentMethod: req.body.paymentMethod || "",
+          hasReceipt: !!receiptUrl,
+          receiptNumber: receiptNumber || "",
           invoiceFileName,
           invoiceFilePath,
           receiptFileName,
           receiptFilePath,
-          companyName:     company?.name || "",
-          companyEmail:    company?.email || "",
-          companyPhone:    company?.phone || "",
+          companyName: company?.name || "",
+          companyEmail: company?.email || "",
+          companyPhone: company?.phone || "",
         });
       } catch (emailErr) {
         console.error("Sale confirmation email failed (non-fatal):", emailErr.message);
@@ -932,10 +932,10 @@ const renewContract = async (req, res) => {
     };
 
     const validFrom = toISTMidnight(newValidFrom);
-    const validTo   = toISTMidnight(newValidTo);
+    const validTo = toISTMidnight(newValidTo);
     if (isNaN(validFrom.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidFrom" });
-    if (isNaN(validTo.getTime()))   return res.status(400).json({ success: false, message: "Invalid newValidTo" });
-    if (validTo <= validFrom)       return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
+    if (isNaN(validTo.getTime())) return res.status(400).json({ success: false, message: "Invalid newValidTo" });
+    if (validTo <= validFrom) return res.status(400).json({ success: false, message: "newValidTo must be after newValidFrom" });
 
     // Today midnight in IST
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -1021,10 +1021,10 @@ const addContract = async (req, res) => {
     };
 
     const validFromDate = toISTMidnight(validFrom);
-    const validToDate   = toISTMidnight(validTo);
+    const validToDate = toISTMidnight(validTo);
     if (isNaN(validFromDate.getTime())) return res.status(400).json({ success: false, message: "Invalid validFrom" });
-    if (isNaN(validToDate.getTime()))   return res.status(400).json({ success: false, message: "Invalid validTo" });
-    if (validToDate <= validFromDate)   return res.status(400).json({ success: false, message: "validTo must be after validFrom" });
+    if (isNaN(validToDate.getTime())) return res.status(400).json({ success: false, message: "Invalid validTo" });
+    if (validToDate <= validFromDate) return res.status(400).json({ success: false, message: "validTo must be after validFrom" });
 
     // Today midnight in IST
     const nowIST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -1408,11 +1408,11 @@ const generateInvoice = async (req, res) => {
           ? (m.partCodes ? [m.partCodes.partCode] : [])
           : (m.serialNumbers || []).map(s => s.serialNumber);
         const serialLabel = isParts ? "P/C" : "S/N";
-        const sellingPriceBase   = m.sellingPriceBase   ?? m.sellingPrice ?? 0;
+        const sellingPriceBase = m.sellingPriceBase ?? m.sellingPrice ?? 0;
         const discountPercentage = m.discount?.percentage ?? 0;
-        const discountAmount     = m.discount?.amount     ?? 0;
+        const discountAmount = m.discount?.amount ?? 0;
         const netSellingPriceBase = m.netSellingPriceBase ?? m.discountedSellingPrice ?? sellingPriceBase;
-        const sellingTotalBase   = m.sellingTotalBase    ?? m.sellingTotal ?? 0;
+        const sellingTotalBase = m.sellingTotalBase ?? m.sellingTotal ?? 0;
         let row = rowTemplate
           .replace(/{{srNo}}/g, idx + 1)
           .replace(/{{machineName}}/g, m.machineName)
@@ -1767,20 +1767,20 @@ const addPayment = async (req, res) => {
         const company = companyId ? await Company.findById(companyId).lean() : null;
         const receiptFilename = receiptUrl ? receiptUrl.split("/").at(-1) : null;
         await sendPaymentReceivedEmail({
-          customerName:    sale.customerInfo.name,
-          customerEmail:   sale.customerInfo.email,
-          receiptNumber:   receiptFilename ? receiptFilename.split("_").slice(2, -1).join("_") : "",
-          invoiceNumber:   sale.invoiceNumber || "",
-          paymentDate:     formattedPaymentDate,
+          customerName: sale.customerInfo.name,
+          customerEmail: sale.customerInfo.email,
+          receiptNumber: receiptFilename ? receiptFilename.split("_").slice(2, -1).join("_") : "",
+          invoiceNumber: sale.invoiceNumber || "",
+          paymentDate: formattedPaymentDate,
           paymentMethod,
-          paidAmount:      incomingAmount,
+          paidAmount: incomingAmount,
           remainingAmount: newRemainingAmount,
-          paymentStatus:   newStatus,
+          paymentStatus: newStatus,
           receiptFileName: receiptFilename,
           receiptFilePath: receiptFilename ? path.join(DOCS_DIR, receiptFilename) : null,
-          companyName:     company?.name || "",
-          companyEmail:    company?.email || "",
-          companyPhone:    company?.phone || "",
+          companyName: company?.name || "",
+          companyEmail: company?.email || "",
+          companyPhone: company?.phone || "",
         });
       } catch (emailErr) {
         console.error("Payment received email failed (non-fatal):", emailErr.message);
@@ -1802,7 +1802,7 @@ const getSystemUsers = async (req, res) => {
     const { search, status, role, limit = 100 } = req.query;
 
     const query = {};
-    
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -1810,11 +1810,11 @@ const getSystemUsers = async (req, res) => {
         { engineerId: { $regex: search, $options: "i" } },
       ];
     }
-    
+
     if (status) {
       query.status = status;
     }
-    
+
     if (role) {
       query.role = role;
     }
@@ -1941,16 +1941,16 @@ const cancelSale = async (req, res) => {
           day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata"
         });
         await sendSaleCancellationEmail({
-          customerName:     sale.customerInfo.name,
+          customerName: sale.customerInfo.name,
           customerEmail,
-          invoiceNumber:    sale.invoiceNumber || "N/A",
+          invoiceNumber: sale.invoiceNumber || "N/A",
           saleDate,
           cancellationDate,
-          grandTotal:       sale.grandTotalWithGst || 0,
-          paidAmount:       sale.paidAmount || 0,
-          companyName:      company?.name || "",
-          companyEmail:     company?.email || "",
-          companyPhone:     company?.phone || "",
+          grandTotal: sale.grandTotalWithGst || 0,
+          paidAmount: sale.paidAmount || 0,
+          companyName: company?.name || "",
+          companyEmail: company?.email || "",
+          companyPhone: company?.phone || "",
         });
       }
     } catch (emailErr) {
@@ -1967,8 +1967,8 @@ const cancelSale = async (req, res) => {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const escapeRegex      = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const ciRegex          = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const ciRegex = (val) => ({ $regex: `^${escapeRegex(String(val).trim())}$`, $options: "i" });
 const resolveStockStatus = (stock, threshold) => {
   if (stock === 0) return "Out of Stock";
   if (threshold === -1) return "In Stock";
@@ -1976,7 +1976,7 @@ const resolveStockStatus = (stock, threshold) => {
 };
 
 // Parse "DD/MM/YY" → UTC midnight Date
-const parseImportDate  = (str) => {
+const parseImportDate = (str) => {
   const [dd, mm, yy] = String(str).trim().split("/");
   if (!dd || !mm || !yy) return null;
   const d = new Date(Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd)));
@@ -1990,7 +1990,7 @@ const importSales = async (req, res) => {
   if (!req.file.originalname.match(/\.xlsx$/i))
     return res.status(400).json({ success: false, message: "Only .xlsx files are allowed" });
 
-  const wb   = xlsx.read(req.file.buffer, { type: "buffer" });
+  const wb = xlsx.read(req.file.buffer, { type: "buffer" });
   const rawRows = xlsx.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
 
   // Strip fully blank rows
@@ -2027,32 +2027,32 @@ const importSales = async (req, res) => {
   const errors = [];
 
   for (let i = 0; i < rows.length; i++) {
-    const row    = rows[i];
+    const row = rows[i];
     const rowNum = i + 2; // Excel row (1-indexed + header row)
 
-    const invoiceNumber       = String(row[H.invoicenumber]       || "").trim();
-    const customerPhone       = String(row[H.customerphone]       || "").trim();
-    const itemName            = String(row[H.itemname]            || "").trim();
-    const modelNumber         = String(row[H.modelnumber]         || "").trim();
-    const quantityRaw         = row[H.quantity];
-    const sellingPriceRaw     = row[H.sellingpricewithgst];
-    const discountRaw         = row[H.discountpercentage];
-    const serialNumber        = String(row[H.serialnumber]        || "").trim();
-    const contractTypeCode    = String(row[H.contracttypecode]    || "").trim();
-    const validFromRaw        = String(row[H.validfrom]           || "").trim();
-    const validToRaw          = String(row[H.validto]             || "").trim();
-    const minCopiesRaw        = row[H.mincopies];
-    const pagesCategoriesRaw  = String(row[H.pagescategories]     || "").trim();
-    const paymentStatus       = String(row[H.paymentstatus]       || "").trim();
-    const paidAmountRaw       = row[H.paidamount];
-    const paymentMethod       = String(row[H.paymentmethod]       || "").trim();
-    const paymentDateRaw      = String(row[H.paymentdate]         || "").trim();
+    const invoiceNumber = String(row[H.invoicenumber] || "").trim();
+    const customerPhone = String(row[H.customerphone] || "").trim();
+    const itemName = String(row[H.itemname] || "").trim();
+    const modelNumber = String(row[H.modelnumber] || "").trim();
+    const quantityRaw = row[H.quantity];
+    const sellingPriceRaw = row[H.sellingpricewithgst];
+    const discountRaw = row[H.discountpercentage];
+    const serialNumber = String(row[H.serialnumber] || "").trim();
+    const contractTypeCode = String(row[H.contracttypecode] || "").trim();
+    const validFromRaw = String(row[H.validfrom] || "").trim();
+    const validToRaw = String(row[H.validto] || "").trim();
+    const minCopiesRaw = row[H.mincopies];
+    const pagesCategoriesRaw = String(row[H.pagescategories] || "").trim();
+    const paymentStatus = String(row[H.paymentstatus] || "").trim();
+    const paidAmountRaw = row[H.paidamount];
+    const paymentMethod = String(row[H.paymentmethod] || "").trim();
+    const paymentDateRaw = String(row[H.paymentdate] || "").trim();
 
-    if (!invoiceNumber)                    errors.push(`Row ${rowNum}: invoiceNumber is required`);
-    else if (invoiceNumber.length > 100)   errors.push(`Row ${rowNum}: invoiceNumber must not exceed 100 characters`);
-    if (!customerPhone)                    errors.push(`Row ${rowNum}: customerPhone is required`);
-    if (!itemName)                         errors.push(`Row ${rowNum}: itemName is required`);
-    if (!modelNumber)                      errors.push(`Row ${rowNum}: modelNumber is required`);
+    if (!invoiceNumber) errors.push(`Row ${rowNum}: invoiceNumber is required`);
+    else if (invoiceNumber.length > 100) errors.push(`Row ${rowNum}: invoiceNumber must not exceed 100 characters`);
+    if (!customerPhone) errors.push(`Row ${rowNum}: customerPhone is required`);
+    if (!itemName) errors.push(`Row ${rowNum}: itemName is required`);
+    if (!modelNumber) errors.push(`Row ${rowNum}: modelNumber is required`);
 
     const quantity = Number(quantityRaw);
     if (quantityRaw === "" || quantityRaw === undefined || quantityRaw === null)
@@ -2073,7 +2073,7 @@ const importSales = async (req, res) => {
     // contractTypeCode + date consistency
     if (contractTypeCode) {
       if (!validFromRaw) errors.push(`Row ${rowNum}: validFrom is required when contractTypeCode is provided`);
-      if (!validToRaw)   errors.push(`Row ${rowNum}: validTo is required when contractTypeCode is provided`);
+      if (!validToRaw) errors.push(`Row ${rowNum}: validTo is required when contractTypeCode is provided`);
     }
     if (validFromRaw) {
       const d = parseImportDate(validFromRaw);
@@ -2103,7 +2103,7 @@ const importSales = async (req, res) => {
           continue;
         }
         const catName = entries[ei].substring(0, colonIdx).trim();
-        const price   = entries[ei].substring(colonIdx + 1).trim();
+        const price = entries[ei].substring(colonIdx + 1).trim();
         if (!catName)
           errors.push(`Row ${rowNum}: pagesCategories entry ${ei + 1} has an empty category name`);
         const priceNum = Number(price);
@@ -2161,11 +2161,11 @@ const importSales = async (req, res) => {
       if (vals.length > 1)
         errors.push(`Invoice "${invoiceNumber}": all rows must have the same ${label} (found: ${vals.join(", ")})`);
     };
-    checkConsistency("customerphone",  "customerPhone");
-    checkConsistency("paymentstatus",  "paymentStatus");
-    checkConsistency("paidamount",     "paidAmount");
-    checkConsistency("paymentmethod",  "paymentMethod");
-    checkConsistency("paymentdate",    "paymentDate");
+    checkConsistency("customerphone", "customerPhone");
+    checkConsistency("paymentstatus", "paymentStatus");
+    checkConsistency("paidamount", "paidAmount");
+    checkConsistency("paymentmethod", "paymentMethod");
+    checkConsistency("paymentdate", "paymentDate");
 
     // No duplicate serialNumbers within group or across groups
     // Key: "MODEL_SERIAL" to allow same serial on different models
@@ -2173,10 +2173,10 @@ const importSales = async (req, res) => {
       const sn = String(r[H.serialnumber] || "").trim();
       const modelNum = String(r[H.modelnumber] || "").trim();
       if (!sn) continue;
-      
+
       // Composite key: modelNumber + serialNumber (case-insensitive)
       const compositeKey = `${modelNum.toUpperCase()}_${sn.toUpperCase()}`;
-      
+
       if (globalSerials.has(compositeKey)) {
         const otherInvoice = globalSerials.get(compositeKey);
         if (otherInvoice === invoiceNumber)
@@ -2193,8 +2193,8 @@ const importSales = async (req, res) => {
     return res.status(400).json({ success: false, message: "Import validation failed", errors });
 
   // ── Step 4: DB lookups & business rule checks ─────────────────────────────
-  const gstConfig  = await GstConfig.findOne().lean();
-  const totalGst   = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
+  const gstConfig = await GstConfig.findOne().lean();
+  const totalGst = gstConfig ? (gstConfig.cgst || 0) + (gstConfig.sgst || 0) + (gstConfig.igst || 0) : 0;
   const gstDivisor = 1 + totalGst / 100;
 
   const validGroups = []; // groups that passed all DB checks
@@ -2226,25 +2226,25 @@ const importSales = async (req, res) => {
     }
 
     const machineEntries = [];
-    let groupHasError    = false;
-    let grandTotalBase    = 0;
+    let groupHasError = false;
+    let grandTotalBase = 0;
     let grandTotalWithGst = 0;
     let grandTotalGstAmount = 0;
-    let cogsTotalBase     = 0;
+    let cogsTotalBase = 0;
 
     for (let ri = 0; ri < gRows.length; ri++) {
-      const row        = gRows[ri];
-      const rowNum     = rows.indexOf(row) + 2;
-      const itemName   = String(row[H.itemname]    || "").trim();
-      const modelNum   = String(row[H.modelnumber] || "").trim();
-      const quantity   = Number(row[H.quantity]);
+      const row = gRows[ri];
+      const rowNum = rows.indexOf(row) + 2;
+      const itemName = String(row[H.itemname] || "").trim();
+      const modelNum = String(row[H.modelnumber] || "").trim();
+      const quantity = Number(row[H.quantity]);
       const sellingPriceWithGst = Number(row[H.sellingpricewithgst]);
       const discountPct = row[H.discountpercentage] === "" || row[H.discountpercentage] === undefined ? 0 : Number(row[H.discountpercentage]);
-      const serialNumber       = String(row[H.serialnumber]     || "").trim();
-      const contractCode       = String(row[H.contracttypecode] || "").trim();
-      const validFromRaw       = String(row[H.validfrom]        || "").trim();
-      const validToRaw         = String(row[H.validto]          || "").trim();
-      const minCopiesRaw4      = row[H.mincopies];
+      const serialNumber = String(row[H.serialnumber] || "").trim();
+      const contractCode = String(row[H.contracttypecode] || "").trim();
+      const validFromRaw = String(row[H.validfrom] || "").trim();
+      const validToRaw = String(row[H.validto] || "").trim();
+      const minCopiesRaw4 = row[H.mincopies];
       const pagesCategoriesRaw4 = String(row[H.pagescategories] || "").trim();
 
       // Machine lookup
@@ -2354,7 +2354,7 @@ const importSales = async (req, res) => {
       let resolvedMinCopies = 0;
 
       const isTSS = contractTypeDoc && TSS_CONTRACT_TYPE_ID &&
-                    contractTypeDoc._id.toString() === TSS_CONTRACT_TYPE_ID;
+        contractTypeDoc._id.toString() === TSS_CONTRACT_TYPE_ID;
 
       if (isTSS) {
         resolvedMinCopies = (minCopiesRaw4 !== "" && minCopiesRaw4 !== undefined && minCopiesRaw4 !== null)
@@ -2373,7 +2373,7 @@ const importSales = async (req, res) => {
         const seenCatNames = new Set();
         for (const entry of pcEntries) {
           const colonIdx = entry.indexOf(":");
-          const catName  = entry.substring(0, colonIdx).trim().toLowerCase();
+          const catName = entry.substring(0, colonIdx).trim().toLowerCase();
           if (catName) {
             if (seenCatNames.has(catName)) {
               errors.push(`Invoice "${invoiceNumber}" Row ${rowNum}: pagesCategories contains duplicate category name "${entry.substring(0, entry.indexOf(":")).trim()}"`);
@@ -2386,8 +2386,8 @@ const importSales = async (req, res) => {
 
         for (let ei = 0; ei < pcEntries.length; ei++) {
           const colonIdx = pcEntries[ei].indexOf(":");
-          const catName  = pcEntries[ei].substring(0, colonIdx).trim();
-          const price    = Number(pcEntries[ei].substring(colonIdx + 1).trim());
+          const catName = pcEntries[ei].substring(0, colonIdx).trim();
+          const price = Number(pcEntries[ei].substring(colonIdx + 1).trim());
 
           const cat = await PagesCategory.findOne({ name: ciRegex(catName) }).lean();
           if (!cat) {
@@ -2405,35 +2405,35 @@ const importSales = async (req, res) => {
       // non-TSS: resolvedPagesCategories stays [], resolvedMinCopies stays 0
 
       // Price computations
-      const sellingPriceBase      = Math.round((sellingPriceWithGst / gstDivisor) * 100) / 100;
-      const gstAmountPerUnit      = Math.round((sellingPriceWithGst - sellingPriceBase) * 100) / 100;
+      const sellingPriceBase = Math.round((sellingPriceWithGst / gstDivisor) * 100) / 100;
+      const gstAmountPerUnit = Math.round((sellingPriceWithGst - sellingPriceBase) * 100) / 100;
       const netSellingPriceWithGst = Math.round(sellingPriceWithGst * (1 - discountPct / 100) * 100) / 100;
-      const netSellingPriceBase   = Math.round((netSellingPriceWithGst / gstDivisor) * 100) / 100;
-      const netGstAmountPerUnit   = Math.round((netSellingPriceWithGst - netSellingPriceBase) * 100) / 100;
-      const sellingTotalBase      = Math.round(netSellingPriceBase * quantity * 100) / 100;
-      const sellingTotalWithGst   = Math.round(netSellingPriceWithGst * quantity * 100) / 100;
-      const gstAmountTotal        = Math.round(netGstAmountPerUnit * quantity * 100) / 100;
+      const netSellingPriceBase = Math.round((netSellingPriceWithGst / gstDivisor) * 100) / 100;
+      const netGstAmountPerUnit = Math.round((netSellingPriceWithGst - netSellingPriceBase) * 100) / 100;
+      const sellingTotalBase = Math.round(netSellingPriceBase * quantity * 100) / 100;
+      const sellingTotalWithGst = Math.round(netSellingPriceWithGst * quantity * 100) / 100;
+      const gstAmountTotal = Math.round(netGstAmountPerUnit * quantity * 100) / 100;
       const discountAmountWithGst = Math.round((sellingPriceWithGst - netSellingPriceWithGst) * 100) / 100;
 
-      grandTotalBase        = Math.round((grandTotalBase + sellingTotalBase) * 100) / 100;
-      grandTotalWithGst     = Math.round((grandTotalWithGst + sellingTotalWithGst) * 100) / 100;
-      grandTotalGstAmount   = Math.round((grandTotalGstAmount + gstAmountTotal) * 100) / 100;
+      grandTotalBase = Math.round((grandTotalBase + sellingTotalBase) * 100) / 100;
+      grandTotalWithGst = Math.round((grandTotalWithGst + sellingTotalWithGst) * 100) / 100;
+      grandTotalGstAmount = Math.round((grandTotalGstAmount + gstAmountTotal) * 100) / 100;
 
       machineEntries.push({
-        machineId:              machine._id,
-        machineName:            machine.name,
-        modelNumber:            machine.modelNumber || "",
-        partCode:               machine.partCode || "",
-        hsnCode:                machine.hsnCode || "",
-        categoryId:             machine.category?._id || null,
-        category:               machine.category?.name || "",
-        divisionId:             machine.division?._id || null,
-        division:               machine.division?.name || "",
+        machineId: machine._id,
+        machineName: machine.name,
+        modelNumber: machine.modelNumber || "",
+        partCode: machine.partCode || "",
+        hsnCode: machine.hsnCode || "",
+        categoryId: machine.category?._id || null,
+        category: machine.category?.name || "",
+        divisionId: machine.division?._id || null,
+        division: machine.division?.name || "",
         quantity,
         sellingPriceWithGst,
         sellingPriceBase,
         gstAmountPerUnit,
-        discount:               { percentage: discountPct, amount: discountAmountWithGst },
+        discount: { percentage: discountPct, amount: discountAmountWithGst },
         netSellingPriceBase,
         netSellingPriceWithGst,
         netGstAmountPerUnit,
@@ -2441,13 +2441,13 @@ const importSales = async (req, res) => {
         sellingTotalWithGst,
         gstAmountTotal,
         isProduct,
-        serialNumber:           isProduct ? serialNumber : null,
-        contractTypeDoc:        contractTypeDoc || null,
-        validFrom:              validFromRaw ? parseImportDate(validFromRaw) : null,
-        validTo:                validToRaw   ? parseImportDate(validToRaw)   : null,
+        serialNumber: isProduct ? serialNumber : null,
+        contractTypeDoc: contractTypeDoc || null,
+        validFrom: validFromRaw ? parseImportDate(validFromRaw) : null,
+        validTo: validToRaw ? parseImportDate(validToRaw) : null,
         resolvedMinCopies,
         resolvedPagesCategories,
-        lowStockThreshold:      machine.lowStockThreshold ?? -1,
+        lowStockThreshold: machine.lowStockThreshold ?? -1,
       });
     }
 
@@ -2471,11 +2471,11 @@ const importSales = async (req, res) => {
       grandTotalGstAmount,
       cogsTotalBase,
       paymentStatus,
-      paidAmount:    paymentStatus === "Paid"          ? grandTotalWithGst
-                   : paymentStatus === "Partial-Paid"  ? Math.round(Number(paidAmountRaw) * 100) / 100
-                   : 0,
+      paidAmount: paymentStatus === "Paid" ? grandTotalWithGst
+        : paymentStatus === "Partial-Paid" ? Math.round(Number(paidAmountRaw) * 100) / 100
+          : 0,
       paymentMethod: paymentMethod || null,
-      paymentDate:   paymentDateRaw ? parseImportDate(paymentDateRaw) : null,
+      paymentDate: paymentDateRaw ? parseImportDate(paymentDateRaw) : null,
     });
   }
 
@@ -2497,15 +2497,15 @@ const importSales = async (req, res) => {
       const remainingAmount = Math.round((grandTotalWithGst - paidAmount) * 100) / 100;
 
       const customerInfo = {
-        customerId:       customer._id,
+        customerId: customer._id,
         customerUniqueId: customer.customerId || "",
-        name:             customer.name,
-        phone:            customer.phone,
-        email:            customer.email || "",
-        address:          customer.userLocation?.address || "",
-        zone:             customer.zone?.name || customer.zone || "",
-        gstNumber:        customer.gstNumber || "",
-        customerPORef:    "",
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email || "",
+        address: customer.userLocation?.address || "",
+        zone: customer.zone?.name || customer.zone || "",
+        gstNumber: customer.gstNumber || "",
+        customerPORef: "",
       };
 
       // Build final machineEntries for the SoldMachine document
@@ -2515,26 +2515,26 @@ const importSales = async (req, res) => {
 
       for (const entry of machineEntries) {
         const entryData = {
-          machineId:              entry.machineId,
-          machineName:            entry.machineName,
-          modelNumber:            entry.modelNumber,
-          partCode:               entry.partCode,
-          hsnCode:                entry.hsnCode,
-          categoryId:             entry.categoryId,
-          category:               entry.category,
-          divisionId:             entry.divisionId,
-          division:               entry.division,
-          quantity:               entry.quantity,
-          sellingPriceWithGst:    entry.sellingPriceWithGst,
-          sellingPriceBase:       entry.sellingPriceBase,
-          gstAmountPerUnit:       entry.gstAmountPerUnit,
-          discount:               entry.discount,
-          netSellingPriceBase:    entry.netSellingPriceBase,
+          machineId: entry.machineId,
+          machineName: entry.machineName,
+          modelNumber: entry.modelNumber,
+          partCode: entry.partCode,
+          hsnCode: entry.hsnCode,
+          categoryId: entry.categoryId,
+          category: entry.category,
+          divisionId: entry.divisionId,
+          division: entry.division,
+          quantity: entry.quantity,
+          sellingPriceWithGst: entry.sellingPriceWithGst,
+          sellingPriceBase: entry.sellingPriceBase,
+          gstAmountPerUnit: entry.gstAmountPerUnit,
+          discount: entry.discount,
+          netSellingPriceBase: entry.netSellingPriceBase,
           netSellingPriceWithGst: entry.netSellingPriceWithGst,
-          netGstAmountPerUnit:    entry.netGstAmountPerUnit,
-          sellingTotalBase:       entry.sellingTotalBase,
-          sellingTotalWithGst:    entry.sellingTotalWithGst,
-          gstAmountTotal:         entry.gstAmountTotal,
+          netGstAmountPerUnit: entry.netGstAmountPerUnit,
+          sellingTotalBase: entry.sellingTotalBase,
+          sellingTotalWithGst: entry.sellingTotalWithGst,
+          gstAmountTotal: entry.gstAmountTotal,
         };
 
         if (entry.isProduct) {
@@ -2559,19 +2559,19 @@ const importSales = async (req, res) => {
           if (entry.contractTypeDoc) {
             contractType = {
               contractTypeId: entry.contractTypeDoc._id,
-              name:           entry.contractTypeDoc.name,
-              code:           entry.contractTypeDoc.code,
-              freeService:    entry.contractTypeDoc.freeService,
-              freeParts:      entry.contractTypeDoc.freeParts,
-              validFrom:      entry.validFrom,
-              validTo:        entry.validTo,
+              name: entry.contractTypeDoc.name,
+              code: entry.contractTypeDoc.code,
+              freeService: entry.contractTypeDoc.freeService,
+              freeParts: entry.contractTypeDoc.freeParts,
+              validFrom: entry.validFrom,
+              validTo: entry.validTo,
             };
           }
 
           entryData.serialNumbers = [{
-            serialNumber:    entry.serialNumber,
+            serialNumber: entry.serialNumber,
             buyingPriceBase,
-            minCopies:       entry.resolvedMinCopies || 0,
+            minCopies: entry.resolvedMinCopies || 0,
             contractType,
             pagesCategories: entry.resolvedPagesCategories || [],
           }];
@@ -2582,16 +2582,16 @@ const importSales = async (req, res) => {
             { "machines": 1, "createdAt": 1 }
           ).sort({ createdAt: 1 }).session(session).lean();
 
-          let chosenPurchaseDocId  = null;
+          let chosenPurchaseDocId = null;
           let chosenBuyingPriceBase = 0;
-          let chosenPartCode       = "";
+          let chosenPartCode = "";
 
           for (const doc of purchaseDocs) {
             const me = (doc.machines || []).find((m) => m.machineId?.toString() === entry.machineId.toString());
             if (me && (me.availableParts || 0) >= entry.quantity) {
-              chosenPurchaseDocId   = doc._id;
+              chosenPurchaseDocId = doc._id;
               chosenBuyingPriceBase = me.buyingPriceBase ?? 0;
-              chosenPartCode        = me.partCode || "";
+              chosenPartCode = me.partCode || "";
               break;
             }
           }
@@ -2613,7 +2613,7 @@ const importSales = async (req, res) => {
         [{
           invoiceNumber,
           customerInfo,
-          machines:             finalMachineEntries,
+          machines: finalMachineEntries,
           grandTotalBase,
           grandTotalWithGst,
           grandTotalGstAmount,
@@ -2621,7 +2621,7 @@ const importSales = async (req, res) => {
           currentPaymentStatus: paymentStatus,
           paidAmount,
           remainingAmount,
-          processedBy:          [],
+          processedBy: [],
         }],
         { session }
       );
@@ -2665,16 +2665,16 @@ const importSales = async (req, res) => {
       const logMachines = finalMachineEntries.map((e) => {
         const { _chosenPurchaseDocId, ...rest } = e;
         return {
-          machineId:     rest.machineId,
-          machineName:   rest.machineName,
-          modelNumber:   rest.modelNumber,
-          categoryId:    rest.categoryId,
-          category:      rest.category,
-          divisionId:    rest.divisionId,
-          division:      rest.division,
-          quantity:      rest.quantity,
+          machineId: rest.machineId,
+          machineName: rest.machineName,
+          modelNumber: rest.modelNumber,
+          categoryId: rest.categoryId,
+          category: rest.category,
+          divisionId: rest.divisionId,
+          division: rest.division,
+          quantity: rest.quantity,
           serialNumbers: (rest.serialNumbers || []).map((s) => s.serialNumber),
-          partCodes:     rest.partCodes ? [rest.partCodes.partCode] : [],
+          partCodes: rest.partCodes ? [rest.partCodes.partCode] : [],
         };
       });
 
@@ -2786,4 +2786,10 @@ const downloadSample = (req, res) => {
   res.send(buf);
 };
 
-module.exports = { getAll, getById, createSale, cancelSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers, downloadSample, importSales };
+const {
+  executeEditInvoice: editSale,
+  getInvoiceAuditLogsService: getInvoiceAuditLogs,
+  getEditSaleDataService: getEditSaleData,
+} = require("./admin.editInvoice.service");
+
+module.exports = { getAll, getById, createSale, cancelSale, renewContract, addContract, exportToExcel, verifySerialNumbers, verifyPartCodes, getAvailableCodes, getAvailableMachines, generateInvoice, sendContractExpiryAlerts, getContractExpiryStatus, addPayment, customerOutstandingDue, customerPaymentReceipts, getSystemUsers, downloadSample, importSales, editSale, getInvoiceAuditLogs, getEditSaleData };
